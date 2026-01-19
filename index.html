@@ -94,18 +94,27 @@
             document.getElementById('app-container').classList.add('hidden');
         }
 
-        async function checkID() {
-            const id = document.getElementById('inp-id').value.trim();
-            if (!id) return;
-            const data = await apiCall('checkID', { id: id });
-            if (data && data.length > 0) {
-                user = data[0];
-                localStorage.setItem('zpms_uid', user.id);
-                launchApp();
-            } else {
-                document.getElementById('err-id').style.display = 'block';
-            }
-        }
+       async function checkID() {
+    const id = document.getElementById('inp-id').value.trim();
+    const btn = document.getElementById('btn-check');
+    if (!id) return;
+    btn.innerText = "Checking...";
+
+    const data = await apiCall('checkID', { id: id });
+
+    // If the ID isn't found, data will be null or have an error property
+    if (!data || data.error || data.length === 0) {
+        btn.innerText = "Continue";
+        const errEl = document.getElementById('err-id');
+        errEl.innerText = data && data.error ? data.error : "ID not found";
+        errEl.style.display = 'block';
+        return;
+    }
+
+    user = data[0];
+    document.getElementById('view-id').classList.add('hidden');
+    document.getElementById('view-pass').classList.remove('hidden');
+}
 
         async function restoreSession(id) {
             const data = await apiCall('checkID', { id: id });
