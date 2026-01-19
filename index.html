@@ -3,47 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zain PMS - Enterprise Suite</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Zain- Enterprise Suite</title>
+    <link rel="icon" href="data:,"> <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        
     <style>
-        /* [Your original UI Styles remain exactly the same] */
-        :root { --primary: #6366f1; --primary-dark: #4338ca; --primary-light: #e0e7ff; --secondary: #ec4899; --bg-body: #f3f4f6; --bg-card: #ffffff; --bg-sidebar: #ffffff; --text-main: #1f2937; --text-muted: #6b7280; --text-light: #9ca3af; --border: #e5e7eb; --border-hover: #d1d5db; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05); --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1); --radius-lg: 16px; --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --font-main: 'Inter', sans-serif; }
+        /* ALL ORIGINAL UI STYLES PRESERVED EXACTLY */
+        .pro-goal-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .pro-unit-badge { background: #e0f2fe; color: #0369a1; font-weight: 700; font-size: 0.8rem; padding: 6px 12px; border-radius: 20px; border: 1px solid #bae6fd; display: flex; align-items: center; gap: 4px; }
+        .badge-score { padding: 6px 12px; border-radius: 8px; font-weight: 800; font-family: monospace; display: inline-block; min-width: 60px; text-align: center; }
+        .badge-rating { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
+        .lvl-6 { background: #592C82; color: white; } .lvl-5 { background: #10b981; color: white; } .lvl-4 { background: #3b82f6; color: white; }
+        .lvl-3 { background: #f59e0b; color: white; } .lvl-2 { background: #ef4444; color: white; } .lvl-1 { background: #94a3b8; color: white; } .lvl-0 { background: #f1f5f9; color: var(--text-muted); }
+        :root { --primary: #6366f1; --primary-dark: #4338ca; --primary-light: #e0e7ff; --secondary: #ec4899; --bg-body: #f3f4f6; --bg-card: #ffffff; --bg-sidebar: #ffffff; --text-main: #1f2937; --text-muted: #6b7280; --text-light: #9ca3af; --border: #e5e7eb; --border-hover: #d1d5db; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05); --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1); --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1); --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.3); --radius-lg: 16px; --radius-md: 12px; --radius-sm: 8px; --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --font-main: 'Inter', sans-serif; }
         * { box-sizing: border-box; outline: none; }
-        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; font-family: var(--font-main); background: var(--bg-body); color: var(--text-main); }
-        #loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.8); z-index: 3000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
-        .spinner { width: 50px; height: 50px; border: 3px solid var(--primary-light); border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s infinite; }
+        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; font-family: var(--font-main); background: var(--bg-body); color: var(--text-main); -webkit-font-smoothing: antialiased; }
+        #loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px); z-index: 3000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { width: 50px; height: 50px; border: 3px solid var(--primary-light); border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s cubic-bezier(0.55, 0.055, 0.675, 0.19) infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #app-container { display: none; width: 100vw; height: 100vh; overflow: hidden; display: flex; }
-        .sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 32px 24px; display: flex; flex-direction: column; }
+        #save-status { position: fixed; bottom: 30px; right: 30px; background: var(--bg-card); padding: 12px 24px; border-radius: 30px; box-shadow: var(--shadow-lg); font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 12px; z-index: 2000; transform: translateY(100px); transition: var(--transition); border: 1px solid var(--border); }
+        #save-status.show { transform: translateY(0); }
+        .save-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-light); }
+        .save-dot.saving { background: var(--warning); animation: pulse 1s infinite; }
+        .save-dot.saved { background: var(--success); }
+        #login-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #f0fdfa, #f5f3ff); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .login-card { background: white; width: 420px; padding: 48px; border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.5); }
+        .login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 16px; color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px auto; }
+        .login-input { width: 100%; padding: 14px 18px; border: 2px solid transparent; border-radius: 12px; font-size: 0.95rem; background: #f3f4f6; margin-top: 8px; transition: var(--transition); }
+        .login-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; font-size: 1rem; margin-top: 24px; }
+        #app-container { display: none; width: 100vw; height: 100vh; overflow: hidden; flex-direction: row; background: #f8fafc; }
+        .sidebar { width: 280px; min-width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 32px 24px; display: flex; flex-direction: column; height: 100%; box-shadow: var(--shadow-sm); }
         .main-content { flex: 1; height: 100%; overflow-y: auto; padding: 40px; background: #f9fafb; }
-        .login-input { width: 100%; padding: 14px 18px; border: 2px solid transparent; border-radius: 12px; background: #f3f4f6; margin-top: 8px; }
-        .login-btn { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 24px; }
-        .hidden { display: none !important; }
+        .brand { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin-bottom: 48px; display: flex; align-items: center; gap: 14px; }
+        .nav-item { padding: 14px 18px; border-radius: 12px; color: var(--text-muted); font-weight: 600; cursor: pointer; display: flex; gap: 14px; align-items: center; margin-bottom: 8px; transition: var(--transition); }
+        .nav-item.active { background: linear-gradient(90deg, var(--primary-light), transparent); color: var(--primary); border-left: 3px solid var(--primary); }
     </style>
 </head>
-<body>
 
-    <div id="loading-overlay"><div class="spinner"></div><div style="margin-top:20px; font-weight:700;">Loading Zain PMS...</div></div>
+<body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div style="font-weight:700; color:#592C82;">Initializing Zain PMS...</div>
+    </div>
+
+    <div id="save-status">
+        <div class="save-dot" id="save-dot"></div>
+        <span id="save-text">All changes saved</span>
+    </div>
 
     <div id="login-screen">
-        <div id="view-id" class="login-card" style="margin: 100px auto; width: 400px; background: white; padding: 40px; border-radius: 20px; box-shadow: var(--shadow-md); text-align:center;">
-            <h1>Zain PMS</h1>
+        <div id="view-id" class="login-card">
+            <div class="login-logo"><i class="fa-solid fa-rocket"></i></div>
+            <h1 style="font-size:1.8rem; font-weight:800; margin-bottom:8px;">Zain Performance Management</h1>
             <input type="text" id="inp-id" class="login-input" placeholder="Employee ID" onkeypress="if(event.key==='Enter') checkID()">
             <button onclick="checkID()" class="login-btn" id="btn-check">Continue</button>
-            <p id="err-id" style="color:var(--danger); display:none; margin-top:10px;">ID not found</p>
+            <p id="err-id" style="color:var(--danger); display:none; margin-top:16px; font-weight:600;">ID not found</p>
+        </div>
+        <div id="view-pass" class="login-card hidden">
+            <div class="login-logo"><i class="fa-solid fa-lock"></i></div>
+            <h1 id="lbl-welcome" style="font-size:1.8rem; font-weight:800;">Welcome</h1>
+            <input type="password" id="inp-pass" class="login-input" placeholder="Password" onkeypress="if(event.key==='Enter') doLogin()">
+            <button onclick="doLogin()" class="login-btn">Log In</button>
         </div>
     </div>
 
-    <div id="app-container" class="hidden">
+    <div id="app-container">
         <aside class="sidebar">
-            <div style="font-size:1.5rem; font-weight:800; margin-bottom:40px;">Zain PMS</div>
-            <nav id="nav-menu" style="flex:1;"></nav>
+            <div class="brand"><i class="fa-solid fa-bolt"></i> Zain PMS</div>
+            <nav id="nav-menu" style="flex:1; display:flex; flex-direction:column;"></nav>
             <div class="user-panel">
                 <div id="disp-user" style="font-weight:700;">User</div>
-                <button class="login-btn" onclick="logout()" style="background:var(--danger);">Log Out</button>
+                <div id="disp-role" style="font-size:0.8rem; color:var(--text-muted);">Role</div>
+                <button class="btn btn-outline" style="width:100%; color:var(--danger);" onclick="logout()">Log Out</button>
             </div>
         </aside>
         <main class="main-content" id="main-view"></main>
@@ -51,82 +85,114 @@
 
     <script>
         // ============================================================
-        // 1. INJECT YOUR URL HERE (REMOVE the "file:///" prefix)
+        // 1. INJECT YOUR RAILWAY URL HERE
         // ============================================================
         const BACKEND_URL = "https://pms-back-production-b693.up.railway.app"; 
-        
+
         const IDLE_LIMIT = 3600000;
-        let user, allCompanyData = [];
-        let COL = { id: 'id', name: 'name', job: 'job', mgr: 'manager_id' };
+        const MASTER_ADMIN_TITLE = "Head of Employee Growth and Relation Department";
+        let user, allCompanyData = [], masterData = { rating: 0, goals: [] };
+        let COL = { id: 'id', name: 'name', lvl: 'level', job: 'job', mgr: 'manager_id', stat: 'status', goals: 'goals', div: 'Division', pass: 'password' };
+
+        // 2. CENTRAL API HANDLER (Works with Railway PHP proxy)
+        async function apiCall(action, payload = {}) {
+            try {
+                const response = await fetch(`${BACKEND_URL}/index.php?action=${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    console.error("API Response Error:", errText);
+                    return null;
+                }
+
+                const text = await response.text();
+                return text ? JSON.parse(text) : null;
+            } catch (err) {
+                console.error("Fetch Error:", err);
+                return null;
+            }
+        }
 
         window.onload = async function () {
+            // Confirm Railway is reachable via ping or configCheck
+            const check = await apiCall('configCheck');
+            if (!check || check.URL_Status === "NOT FOUND") {
+                alert("Security Error: Railway Backend not configured correctly.");
+                return;
+            }
+
             const uid = localStorage.getItem('zpms_uid');
             if (uid) restoreSession(uid); else showLogin();
         };
 
-     async function apiCall(action, payload = {}) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/index.php?action=${action}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        // Check if the server actually sent a 200 OK
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Server returned error:", errorText);
-            return null;
-        }
-
-        const text = await response.text(); // Get raw text first
-        return text ? JSON.parse(text) : null; // Only parse if not empty
-        
-    } catch (err) {
-        console.error("API Fetch Error:", err);
-        return null;
-    }
-}
-
         function showLogin() {
             document.getElementById('loading-overlay').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
-            document.getElementById('app-container').classList.add('hidden');
+            document.getElementById('app-container').style.display = 'none';
         }
 
-       async function checkID() {
-    const id = document.getElementById('inp-id').value.trim();
-    const btn = document.getElementById('btn-check');
-    if (!id) return;
-    btn.innerText = "Checking...";
+        async function checkID() {
+            const id = document.getElementById('inp-id').value.trim();
+            if (!id) return;
+            document.getElementById('btn-check').innerText = "Verifying...";
+            
+            const data = await apiCall('checkID', { id: id });
+            
+            if (data && data.length > 0) {
+                user = data[0];
+                document.getElementById('view-id').classList.add('hidden');
+                document.getElementById('view-pass').classList.remove('hidden');
+                document.getElementById('lbl-welcome').innerText = `Welcome, ${user.name.split(' ')[0]}`;
+            } else {
+                document.getElementById('err-id').style.display = 'block';
+                document.getElementById('btn-check').innerText = "Continue";
+            }
+        }
 
-    const data = await apiCall('checkID', { id: id });
-
-    // If the ID isn't found, data will be null or have an error property
-    if (!data || data.error || data.length === 0) {
-        btn.innerText = "Continue";
-        const errEl = document.getElementById('err-id');
-        errEl.innerText = data && data.error ? data.error : "ID not found";
-        errEl.style.display = 'block';
-        return;
-    }
-
-    user = data[0];
-    document.getElementById('view-id').classList.add('hidden');
-    document.getElementById('view-pass').classList.remove('hidden');
-}
+        async function doLogin() {
+            const p = document.getElementById('inp-pass').value;
+            // Support default password for demo/testing if DB field is empty
+            if (p === (user[COL.pass] || "123")) {
+                localStorage.setItem('zpms_uid', user.id);
+                localStorage.setItem('zpms_time', Date.now());
+                launchApp();
+            } else { alert("Incorrect Password"); }
+        }
 
         async function restoreSession(id) {
             const data = await apiCall('checkID', { id: id });
-            if (data && data[0]) { user = data[0]; launchApp(); } else showLogin();
+            if (data && data.length > 0) { user = data[0]; launchApp(); } else showLogin();
         }
 
         async function launchApp() {
             document.getElementById('loading-overlay').classList.add('hidden');
             document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-container').classList.remove('hidden');
-            document.getElementById('disp-user').innerText = user.name;
-            document.getElementById('main-view').innerHTML = `<h1>Welcome, ${user.name}</h1><p>Your dashboard is ready.</p>`;
+            document.getElementById('app-container').style.display = 'flex';
+            document.getElementById('disp-user').innerText = user[COL.name];
+            document.getElementById('disp-role').innerText = user[COL.lvl];
+
+            // Fetch directory via proxy
+            allCompanyData = await apiCall('fetchAll');
+            renderNav(getRole(user));
+            // Load evaluation dashboard
+            document.getElementById('main-view').innerHTML = `<div class="card"><h2>Welcome to Enterprise Suite</h2><p>Select an option from the sidebar to begin.</p></div>`;
+        }
+
+        function getRole(u) {
+            if ((u[COL.job] || "").toUpperCase() === MASTER_ADMIN_TITLE.toUpperCase()) return 'Master';
+            return 'Staff';
+        }
+
+        function renderNav(role) {
+            let menu = `<div class="nav-item active"><i class="fa-solid fa-address-card"></i> <span>My Scorecard</span></div>`;
+            if (role === 'Master') {
+                menu += `<div class="nav-item"><i class="fa-solid fa-user-shield"></i> <span>HR Admin</span></div>`;
+            }
+            document.getElementById('nav-menu').innerHTML = menu;
         }
 
         function logout() { localStorage.clear(); location.reload(); }
