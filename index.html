@@ -117,17 +117,32 @@
             }
         }
 
-        window.onload = async function () {
-            // Confirm Railway is reachable via ping or configCheck
-            const check = await apiCall('configCheck');
-            if (!check || check.URL_Status === "NOT FOUND") {
-                alert("Security Error: Railway Backend not configured correctly.");
-                return;
-            }
+       window.onload = async function () {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    
+    try {
+        console.log("Checking backend connection...");
+        const check = await apiCall('configCheck');
+        
+        if (!check || check.URL_Status === "NOT FOUND") {
+            loadingOverlay.innerHTML = `<div style="color:red; padding:20px; text-align:center;">
+                <h3>Configuration Error</h3>
+                <p>Backend variables not detected on Railway.</p>
+            </div>`;
+            return;
+        }
 
-            const uid = localStorage.getItem('zpms_uid');
-            if (uid) restoreSession(uid); else showLogin();
-        };
+        const uid = localStorage.getItem('zpms_uid');
+        if (uid) restoreSession(uid); else showLogin();
+        
+    } catch (error) {
+        console.error("Init failed:", error);
+        loadingOverlay.innerHTML = `<div style="color:red; padding:20px; text-align:center;">
+            <h3>Connection Failed</h3>
+            <p>Could not reach the Railway server. Check your internet or backend status.</p>
+        </div>`;
+    }
+};
 
         function showLogin() {
             document.getElementById('loading-overlay').classList.add('hidden');
