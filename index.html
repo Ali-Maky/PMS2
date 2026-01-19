@@ -95,27 +95,22 @@
         let COL = { id: 'id', name: 'name', lvl: 'level', job: 'job', mgr: 'manager_id', stat: 'status', goals: 'goals', div: 'Division', pass: 'password' };
 
         // 2. CENTRAL API HANDLER (Works with Railway PHP proxy)
-        async function apiCall(action, payload = {}) {
-            try {
-                const response = await fetch(`${BACKEND_URL}/index.php?action=${action}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+      async function apiCall(action, payload = {}) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/index.php?action=${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-                if (!response.ok) {
-                    const errText = await response.text();
-                    console.error("API Response Error:", errText);
-                    return null;
-                }
-
-                const text = await response.text();
-                return text ? JSON.parse(text) : null;
-            } catch (err) {
-                console.error("Fetch Error:", err);
-                return null;
-            }
-        }
+        const text = await response.text();
+        console.log("Raw Backend Response:", text); // ADD THIS LINE
+        return text ? JSON.parse(text) : null;
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        return null;
+    }
+}
 
        window.onload = async function () {
     const loadingOverlay = document.getElementById('loading-overlay');
