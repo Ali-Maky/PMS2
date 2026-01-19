@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zain PMS - Enterprise Suite</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* [Your original UI Styles remain exactly the same] */
+        :root { --primary: #6366f1; --primary-dark: #4338ca; --primary-light: #e0e7ff; --secondary: #ec4899; --bg-body: #f3f4f6; --bg-card: #ffffff; --bg-sidebar: #ffffff; --text-main: #1f2937; --text-muted: #6b7280; --text-light: #9ca3af; --border: #e5e7eb; --border-hover: #d1d5db; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05); --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1); --radius-lg: 16px; --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --font-main: 'Inter', sans-serif; }
+        * { box-sizing: border-box; outline: none; }
+        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; font-family: var(--font-main); background: var(--bg-body); color: var(--text-main); }
+        #loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.8); z-index: 3000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { width: 50px; height: 50px; border: 3px solid var(--primary-light); border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #app-container { display: none; width: 100vw; height: 100vh; overflow: hidden; display: flex; }
+        .sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 32px 24px; display: flex; flex-direction: column; }
+        .main-content { flex: 1; height: 100%; overflow-y: auto; padding: 40px; background: #f9fafb; }
+        .login-input { width: 100%; padding: 14px 18px; border: 2px solid transparent; border-radius: 12px; background: #f3f4f6; margin-top: 8px; }
+        .login-btn { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 24px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay"><div class="spinner"></div><div style="margin-top:20px; font-weight:700;">Loading Zain PMS...</div></div>
+
+    <div id="login-screen">
+        <div id="view-id" class="login-card" style="margin: 100px auto; width: 400px; background: white; padding: 40px; border-radius: 20px; box-shadow: var(--shadow-md); text-align:center;">
+            <h1>Zain PMS</h1>
+            <input type="text" id="inp-id" class="login-input" placeholder="Employee ID" onkeypress="if(event.key==='Enter') checkID()">
+            <button onclick="checkID()" class="login-btn" id="btn-check">Continue</button>
+            <p id="err-id" style="color:var(--danger); display:none; margin-top:10px;">ID not found</p>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <aside class="sidebar">
+            <div style="font-size:1.5rem; font-weight:800; margin-bottom:40px;">Zain PMS</div>
+            <nav id="nav-menu" style="flex:1;"></nav>
+            <div class="user-panel">
+                <div id="disp-user" style="font-weight:700;">User</div>
+                <button class="login-btn" onclick="logout()" style="background:var(--danger);">Log Out</button>
+            </div>
+        </aside>
+        <main class="main-content" id="main-view"></main>
+    </div>
+
+    <script>
+        // ============================================================
+        // 1. INJECT YOUR URL HERE (REMOVE the "file:///" prefix)
+        // ============================================================
+        const BACKEND_URL = "https://pms-back-production-b693.up.railway.app"; 
+        
+        const IDLE_LIMIT = 3600000;
+        let user, allCompanyData = [];
+        let COL = { id: 'id', name: 'name', job: 'job', mgr: 'manager_id' };
+
+        window.onload = async function () {
+            const uid = localStorage.getItem('zpms_uid');
+            if (uid) restoreSession(uid); else showLogin();
+        };
+
+        async function apiCall(action, payload = {}) {
+            try {
+                const response = await fetch(`${BACKEND_URL}/index.php?action=${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (err) {
+                console.error("API Error:", err);
+                return null;
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('app-container').classList.add('hidden');
+        }
+
+        async function checkID() {
+            const id = document.getElementById('inp-id').value.trim();
+            if (!id) return;
+            const data = await apiCall('checkID', { id: id });
+            if (data && data.length > 0) {
+                user = data[0];
+                localStorage.setItem('zpms_uid', user.id);
+                launchApp();
+            } else {
+                document.getElementById('err-id').style.display = 'block';
+            }
+        }
+
+        async function restoreSession(id) {
+            const data = await apiCall('checkID', { id: id });
+            if (data && data[0]) { user = data[0]; launchApp(); } else showLogin();
+        }
+
+        async function launchApp() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
+            document.getElementById('disp-user').innerText = user.name;
+            document.getElementById('main-view').innerHTML = `<h1>Welcome, ${user.name}</h1><p>Your dashboard is ready.</p>`;
+        }
+
+        function logout() { localStorage.clear(); location.reload(); }
+    </script>
+</body>
+</html>
