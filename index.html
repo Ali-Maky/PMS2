@@ -1953,23 +1953,32 @@ async function loadHRApprovals() {
         contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`; 
     }
 }
-        async function restoreSession(id) {
-    const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
-    if (data) { 
-        user = data; 
-        
-        // --- FETCH DATA HERE, AFTER WE HAVE A USER ---
-        await mapColumns();
-        const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
-        if (sg && sg.data) masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
-        // ---------------------------------------------
+  async function restoreSession(id) {
+            // Now we can fetch because we assume the token is valid
+            const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
+            
+            if (data) { 
+                user = data; 
+                
+                // --- SAFE TO LOAD DATA NOW ---
+                await mapColumns();
+                
+                // Load Shared Goals
+                const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+                if (sg && sg.data) {
+                    masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
+                } else {
+                    masterData = { rating: 0, goals: [] };
+                }
+                // -----------------------------
 
-        startIdleTimer(); 
-        launchApp(); 
-    } else { 
-        showLogin(); 
-    }
-}
+                startIdleTimer(); 
+                launchApp(); 
+            } else { 
+                // Token invalid or user deleted? Back to login.
+                showLogin(); 
+            }
+        }
 
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
