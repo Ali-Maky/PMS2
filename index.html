@@ -4004,8 +4004,9 @@ async function loadEval(tid, isSearchMode = false) {
             <div class="header-bar">
                 <div>
                     <h2 class="page-title">${isManager ? 'Evaluation Portal' : 'My Scorecard'}</h2>
-                    <p class="page-sub">
-                        <span style="font-weight:700; color:var(--text-main);">${data[COL.name].split('(')[0]}</span>
+                   <span style="font-weight:700; color:var(--text-main);">
+        ${(data[COL.name] || data['Name'] || data['Full Name'] || "Employee").toString().split('(')[0]}
+    </span>
                         <span style="margin:0 8px; color:var(--text-light);">•</span>
                         <span class="status-badge ${stat === 'Approved' || stat === 'Published' ? 'approved' : 'submitted'}">${stat}</span>
                     </p>
