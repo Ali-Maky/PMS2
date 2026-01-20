@@ -1792,30 +1792,28 @@ async function loadHRApprovals() {
         contentDiv.innerHTML = `
         <div style="padding:40px; text-align:center; color:var(--text-muted);">
             <div class="spinner" style="width:30px; height:30px; border-width:3px; margin-bottom:10px;"></div>
-            <div>Loading pending requests...</div>
+            <div>Scanning employee records...</div>
         </div>`;
     }
 
-    // 2. Fetch Data (Status = 'Submitted to HR')
     try {
-        const { data, error } = await db.from('active_list')
-            .select('*')
-            .eq(COL.stat, 'Submitted to HR');
-
-        if (error) {
-            if (contentDiv) {
-                contentDiv.innerHTML = `
-                <div class="card" style="padding:40px; text-align:center; color:var(--danger);">
-                    <i class="fa-solid fa-circle-exclamation" style="font-size:2rem; margin-bottom:10px;"></i>
-                    <div>Error loading data: ${error.message}</div>
-                </div>`;
-            }
-            return;
+        // --- FIX START ---
+        // The .eq() method relies on 'checkID' which only searches by Employee ID.
+        // We must fetch all data (or use the cached copy) and filter client-side.
+        
+        if (allCompanyData.length === 0) {
+            allCompanyData = await fetchAllData();
         }
+
+        // Filter the full list for 'Submitted to HR'
+        const data = allCompanyData.filter(u => (u[COL.stat] || '').trim() === 'Submitted to HR');
+        // --- FIX END ---
 
         // 3. Update Global Cache & Calculate Metadata
         adminCache = data || [];
         const pendingCount = adminCache.length;
+        
+        // Get unique Divisions for dropdown
         const divs = [...new Set(adminCache.map(i => i[COL.div] || 'Other'))].sort();
 
         // 4. Render the UI Shell
@@ -1860,8 +1858,7 @@ async function loadHRApprovals() {
                                     <th style="padding: 12px 24px; text-align: right; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">ACTION</th>
                                 </tr>
                             </thead>
-                            <tbody id="admin-tbody">
-                                </tbody>
+                            <tbody id="admin-tbody"></tbody>
                         </table>
                     </div>
 
@@ -1869,7 +1866,7 @@ async function loadHRApprovals() {
             </div>`;
         }
 
-        // 5. Populate Rows
+        // 5. Render Rows
         filterAdminTable();
 
     } catch (e) {
