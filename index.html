@@ -1574,7 +1574,9 @@
     </div>
 
     <script>
-        
+        // ... existing variables ...
+let user, targetUser; 
+let tempToken = null; // <--- ADD THIS LINE HERE
 // --- 1. SECURE CONFIGURATION ---
 // --- 1. SECURE CONFIGURATION ---
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
@@ -1590,11 +1592,16 @@ const db = {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
                             try {
-                                const res = await fetch(`${API_URL}?action=${action}`, {
-                                    method: 'POST', 
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ id: val }) 
-                                });
+                              const token = localStorage.getItem('zpms_token');
+
+const res = await fetch(`${API_URL}?action=${action}`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` // <--- CRITICAL SECURITY ADDITION
+    },
+    body: JSON.stringify(payload)
+});
                                 if (!res.ok) return { data: null, error: { message: "Server Error" } };
                                 return { data: await res.json(), error: null };
                             } catch (e) { return { data: null, error: e }; }
@@ -1995,35 +2002,60 @@ const { data, error } = await db.from('active_list')
         document.getElementById('btn-login').innerText = "Create & Login";
     }
 }
-   async function doLogin() {
-    const p1 = document.getElementById('inp-pass').value;
-    const storedPass = (user[COL.pass] || user['password'] || "").toString().trim();
+async function doLogin() {
+    const id = document.getElementById('inp-id').value.trim(); // Get ID
+    const pass = document.getElementById('inp-pass').value;    // Get Password
+    const btn = document.getElementById('btn-login');
 
-    if (isRegistering) {
-        if (p1 !== document.getElementById('inp-confirm').value) { 
-            alert("Passwords match error"); 
-            return; 
-        }
-        const { error } = await db.from('active_list').update({ password: p1 }).eq(COL.id, user[COL.id]);
-        if (error) { alert("Save error: " + error.message); return; }
-        
-        // Registration successful, proceed immediately
-        completeLoginProcess(); 
-    } else {
-        if (p1 !== storedPass) { 
+    if (!pass) return;
+
+    btn.innerText = "Verifying...";
+    
+    try {
+        // 1. Call your new Secure PHP Backend
+        const res = await fetch(`${API_URL}?action=login`, {
+            method: 'POST',
+            // No token needed here because we are logging in
+            body: JSON.stringify({ id: id, password: pass }) 
+        });
+
+        const response = await res.json();
+
+        if (response.error) {
+            // Login Failed
+            document.getElementById('err-pass').innerText = response.error;
             document.getElementById('err-pass').style.display = 'block';
-            return; 
+            btn.innerText = "Log In";
+            return;
         }
+
+        // 2. Login Success! 
+        // We catch the token here, but we don't save it to localStorage yet
+        // because we still want to force the OTP check.
+        tempToken = response.access_token; 
         
-        // --- OTP INTERCEPTION ---
-        // Password is correct. Now trigger OTP instead of logging in directly.
-        triggerOTP();
+        // Update the 'user' object with the data returned from PHP
+        user = response.user; 
+
+        // 3. Proceed to OTP
+        triggerOTP(); 
+
+    } catch (e) {
+        console.error(e);
+        alert("Server Connection Error");
+    } finally {
+        btn.innerText = "Log In";
     }
 }
 
 // Separate function for the final step
 function completeLoginProcess() {
-    localStorage.setItem('zpms_uid', user[COL.id]); 
+    // 1. SAVE THE TOKEN
+    if (tempToken) {
+        localStorage.setItem('zpms_token', tempToken); // <--- THIS IS WHERE IT GOES
+    }
+
+    localStorage.setItem('zpms_uid', user['id'] || user['Employee Number']); 
     localStorage.setItem('zpms_time', Date.now());
     
     document.getElementById('loading-overlay').classList.remove('hidden');
