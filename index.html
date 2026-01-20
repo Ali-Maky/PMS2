@@ -1569,74 +1569,82 @@ const db = {
         return {
             select: (cols) => {
                 return {
-                    // .eq(col, val) -> Handles Login, Profile, and Settings
+                    // 1. Exact Match (Login, Profile)
                     eq: (col, val) => {
-                        // Define the execution logic
                         const execute = async () => {
-                            // Switch action based on the table being accessed
-                            let action = 'checkID'; 
-                            if (table === 'company_settings') action = 'getSettings';
-                            
-                            // Send POST request (so PHP can read the JSON body)
+                            let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
                             try {
                                 const res = await fetch(`${API_URL}?action=${action}`, {
                                     method: 'POST', 
                                     headers: {'Content-Type': 'application/json'},
                                     body: JSON.stringify({ id: val }) 
                                 });
-                                
                                 if (!res.ok) return { data: null, error: { message: "Server Error" } };
-                                const json = await res.json();
-                                return { data: json, error: null };
-                            } catch (e) {
-                                return { data: null, error: e };
-                            }
+                                return { data: await res.json(), error: null };
+                            } catch (e) { return { data: null, error: e }; }
                         };
-
-                        // Return an object that allows both 'await' and chaining '.single()'
                         return {
-                            // If code uses: await db...eq()
                             then: (resolve, reject) => execute().then(resolve, reject),
-                            
-                            // If code uses: await db...eq().single()
                             single: async () => {
-                                const result = await execute();
-                                // If array, extract first item
-                                if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-                                    result.data = result.data[0];
-                                }
-                                return result; 
+                                const r = await execute();
+                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
+                                return r; 
                             },
-                            
-                            // If code uses: await db...eq().maybeSingle()
                             maybeSingle: async () => {
-                                const result = await execute();
-                                if (result.data && Array.isArray(result.data)) {
-                                    result.data = result.data.length > 0 ? result.data[0] : null;
-                                }
-                                return result;
+                                const r = await execute();
+                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
+                                return r;
                             }
                         };
                     },
                     
-                    // .range(from, to) -> Directory Sync
+                    // 2. Range (Directory)
                     range: async (from, to) => {
                         try {
-                            // Using POST to be safe, though GET worked for this one
                             const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`);
-                            const json = await res.json();
-                            return { data: json, error: null };
+                            return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
-                    // .limit(1) -> Column Mapping
+
+                    // 3. Limit (Column Mapping)
                     limit: async (n) => {
                         const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`);
                         return { data: await res.json(), error: null };
+                    },
+
+                    // 4. OR Filter (Team Loading)
+                    or: async (filterStr) => {
+                        try {
+                            // Fetch a large batch of users to filter locally
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=2000`);
+                            const allRows = await res.json();
+                            
+                            if (!Array.isArray(allRows)) return { data: [], error: "Data error" };
+
+                            // Parse the "col.ilike.%val%,col.ilike.%val%" string
+                            const conditions = filterStr.split(',');
+                            
+                            const filtered = allRows.filter(row => {
+                                return conditions.some(cond => {
+                                    // Extract parts: "manager_id" "ilike" "%123%"
+                                    const parts = cond.split('.');
+                                    if(parts.length < 3) return false;
+                                    
+                                    const col = parts[0]; 
+                                    const val = parts[2].replace(/%/g, '').toLowerCase(); // Remove % and lowercase
+                                    const rowVal = (row[col] || '').toString().toLowerCase();
+                                    
+                                    return rowVal.includes(val);
+                                });
+                            });
+                            
+                            return { data: filtered, error: null };
+                        } catch (e) { return { data: [], error: e }; }
                     }
                 };
             },
             
-            // Handle Inserts/Upserts
+            // Handle Writes
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
@@ -1647,7 +1655,6 @@ const db = {
                 return { error: res.ok ? null : { message: "Save failed" } };
             },
 
-            // Handle Updates
             update: (payload) => {
                 return {
                     eq: async (col, val) => {
@@ -1671,7 +1678,6 @@ const db = {
                 };
             },
 
-            // Handle Deletes
             delete: () => {
                 return {
                     eq: async (col, val) => {
@@ -1686,7 +1692,6 @@ const db = {
             }
         };
     },
-    // Handle RPC
     rpc: async (name, params) => {
         if (name === 'publish_goals') {
              const res = await fetch(`${API_URL}?action=rpcPublish`, {
