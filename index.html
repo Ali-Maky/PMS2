@@ -4324,6 +4324,44 @@ async function submitFinal() {
             if ((levelStr.includes('3') || levelStr.includes('4')) && (job.includes('manager') || job.includes('head') || job.includes('senior'))) { return { s: 10, i: 90 }; }
             return { s: 5, i: 95 };
         }
+		// --- HELPER: Recursive Downstream Lookup ---
+function getDownstream(managerId, allData) {
+    if (!managerId) return [];
+    
+    const targetId = managerId.toString().toLowerCase().trim();
+    
+    // 1. Find Direct Reports
+    const directReports = allData.filter(u => {
+        const mRaw = u[COL.mgr] || "";
+        const m = mRaw.toString().toLowerCase();
+        // Matches if the column contains the ID (handles "Name (ID)" format)
+        return m.includes(targetId);
+    });
+
+    let totalTeam = [...directReports];
+
+    // 2. Recursively find reports for each direct report
+    directReports.forEach(sub => {
+        const subId = (sub[COL.id] || "").toString();
+        
+        // Prevent infinite loops (e.g. if someone accidentally reports to themselves)
+        if (subId.toLowerCase() !== targetId) {
+            const deepReports = getDownstream(subId, allData);
+            totalTeam = totalTeam.concat(deepReports);
+        }
+    });
+
+    // 3. Remove duplicates (unique by ID)
+    const uniqueIds = new Set();
+    return totalTeam.filter(item => {
+        const id = item[COL.id];
+        if (!uniqueIds.has(id)) {
+            uniqueIds.add(id);
+            return true;
+        }
+        return false;
+    });
+}
     </script>
 
     <!-- GLOBAL UI CONTAINERS -->
