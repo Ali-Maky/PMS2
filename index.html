@@ -1613,48 +1613,56 @@ const db = {
                     },
 
                     // 4. OR Filter (Team Loading)
-                   // 4. OR Filter (Optimized Server-Side Search)
-                    // 4. OR Filter (Server-Side Search + Auto-Pagination)
-                    // 4. OR Filter (Server-Side Search + Auto-Pagination Loop)
+                   // 4. OR Filter (Team Loading) - UPDATED WITH PAGINATION LOOP
                     or: async (filterStr) => {
                         try {
-                            let allResults = [];
+                            let allRows = [];
                             let from = 0;
-                            const step = 1000;
+                            const step = 1000; // Supabase default limit
                             let more = true;
 
-                            // Loop ONLY through search results (Fast & Complete)
+                            // LOOP: Keep fetching pages until we run out of data
                             while (more) {
-                                const res = await fetch(`${API_URL}?action=searchUsers`, {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ 
-                                        filter: filterStr,
-                                        from: from,
-                                        to: from + step - 1
-                                    })
-                                });
-                                
+                                // Fetch the next page
+                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
                                 if (!res.ok) break;
+
                                 const chunk = await res.json();
                                 
-                                // Stop if no data returned
                                 if (!Array.isArray(chunk) || chunk.length === 0) {
-                                    break; 
+                                    break; // Stop if no data returned
                                 }
 
-                                allResults = allResults.concat(chunk);
+                                allRows = allRows.concat(chunk);
 
-                                // If we got less than a full page, we have everyone. Stop.
+                                // If we got less than a full page, we are at the end
                                 if (chunk.length < step) {
                                     more = false;
                                 } else {
-                                    // Otherwise, ask for the next page
+                                    // Prepare for next page
                                     from += step;
                                 }
                             }
                             
-                            return { data: allResults, error: null };
+                            // Now 'allRows' contains EVERYONE (e.g., 2500+ users)
+                            
+                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
+                            const conditions = filterStr.split(',');
+                            
+                            const filtered = allRows.filter(row => {
+                                return conditions.some(cond => {
+                                    const parts = cond.split('.');
+                                    if(parts.length < 3) return false;
+                                    
+                                    const col = parts[0]; 
+                                    const val = parts[2].replace(/%/g, '').toLowerCase(); 
+                                    const rowVal = (row[col] || '').toString().toLowerCase();
+                                    
+                                    return rowVal.includes(val);
+                                });
+                            });
+                            
+                            return { data: filtered, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
@@ -3425,22 +3433,16 @@ function updateOrgChart() {
     chartOrg.data.datasets[0].data = dist;
     chartOrg.update();
 }
-     async function loadTeam() {
+      async function loadTeam() {
     const myId = user[COL.id];
     const myName = user[COL.name];
     
-    // 1. Prepare Filter
-    // FIX: We add 'encodeURIComponent' to handle spaces and Arabic names safely
-    let filter = `${COL.mgr}.ilike.%${encodeURIComponent(myId)}%`;
-    if (myName) {
-        filter += `,${COL.mgr}.ilike.%${encodeURIComponent(myName)}%`;
-    }
+    // Fetch my direct reports
+    let filter = `${COL.mgr}.ilike.%${myId}%`;
+    if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
     
-    // 2. Fetch Data using the Bridge
-    // The .or() function will now use the fast Server-Side Search
     const { data } = await db.from('active_list').select('*').or(filter);
 
-    // 3. Render Header
     let h = `
     <div class="animate-in">
         <div class="header-bar">
@@ -3460,7 +3462,6 @@ function updateOrgChart() {
         
         <div class="team-grid" id="team-grid-container">`;
 
-    // 4. Render Cards
     if (data && data.length > 0) {
         data.forEach(e => {
             let isSub = e[COL.stat] === 'Submitted to Manager';
@@ -3469,8 +3470,10 @@ function updateOrgChart() {
             if (isSub) statClass = 'submitted';
             if (isApp) statClass = 'approved';
 
+            // Calculate Company for filtering
             const comp = getCompany(e[COL.id]);
 
+            // Add 'data-comp' attribute to the card for filtering
             h += `
             <div class="premium-team-card team-card-item" data-comp="${comp}" onclick="loadEval('${e[COL.id]}')">
                 <div class="pt-status status-badge ${statClass}">${e[COL.stat] || 'Draft'}</div>
@@ -3487,14 +3490,12 @@ function updateOrgChart() {
             </div>`;
         });
     } else {
-        h += `<div class="empty-state-message" style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);">
-            No direct reports found matching ID: <strong>${myId}</strong>
-        </div>`;
+        h += `<div class="empty-state-message">No direct reports found.</div>`;
     }
     h += `</div></div>`;
-    
     render(h);
 }
+
 // Helper function to filter the grid immediately
 function filterTeamGrid() {
     const filter = document.getElementById('team-comp-filter').value;
