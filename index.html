@@ -3535,7 +3535,7 @@ async function loadEval(tid, isSearchMode = false) {
 
         isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()) || (myName.length > 3 && mgrStr.includes(myName)));
         
-        // AMENDED: Admin only acts as a Manager if NOT looking at themselves
+        // Admin only acts as a Manager if NOT looking at themselves
         isManager = !viewingSelf && (isDirectSupervisor || (uRole === 'Admin' || uRole === 'Master'));
 
         // Process weighting configuration
@@ -3549,7 +3549,7 @@ async function loadEval(tid, isSearchMode = false) {
 
         const stat = data[COL.stat] || 'Draft';
 
-        // Permissions logic: If viewing self, follow normal employee rules regardless of role
+        // Permissions logic
         let canEdit = false;
         if (viewingSelf) {
             canEdit = (stat === 'Draft' || stat === 'Returned');
@@ -3557,9 +3557,6 @@ async function loadEval(tid, isSearchMode = false) {
             canEdit = (stat === 'Submitted to Manager');
         }
         
-        // AMENDED: Final Approval logic only active when Admin is looking at SOMEONE ELSE'S submitted card
-        const isHRReady = (uRole === 'Admin' || uRole === 'Master') && stat === 'Submitted to HR' && !viewingSelf;
-
         if (isSearchMode) canEdit = false;
 
         // MANAGER DATA EXTRACTION
@@ -3661,7 +3658,7 @@ async function loadEval(tid, isSearchMode = false) {
                     <p style="color:var(--text-muted); font-size:1.1rem; max-width:500px; margin:0 auto;">The employee has not submitted their scorecard yet.</p>
                 </div>`;
         } else {
-            // SHARED GOALS (TARGETED & WEIGHTED)
+            // SHARED GOALS
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
@@ -3698,7 +3695,7 @@ async function loadEval(tid, isSearchMode = false) {
                 </div>`;
             }
 
-            // INDIVIDUAL GOALS SECTION
+            // INDIVIDUAL GOALS
             if (w.i > 0) {
                 h += `
                 <div class="animate-in" style="animation-delay: 0.2s;">
@@ -3716,7 +3713,7 @@ async function loadEval(tid, isSearchMode = false) {
             }
         }
 
-        // AMENDED FOOTER LOGIC
+        // FOOTER ACTIONS
         h += `<div style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px;">`;
 
         if (canEdit) {
@@ -3728,12 +3725,8 @@ async function loadEval(tid, isSearchMode = false) {
         if (isDirectSupervisor && stat === 'Submitted to Manager') {
             h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectCard()"><i class="fa-solid fa-ban"></i> &nbsp; Reject / Request Changes</button>`;
         }
-
-        // Final Approve buttons ONLY show if this is NOT the current Admin's own scorecard
-        if (isHRReady) {
-            h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectToManager('${targetUser[COL.id]}')"><i class="fa-solid fa-rotate-left"></i> &nbsp; Reject to Manager</button>`;
-            h += `<button class="btn btn-primary" style="background:var(--success); border:none;" onclick="submitFinal()"><i class="fa-solid fa-check"></i> &nbsp; Final Approve (HR)</button>`;
-        }
+        
+        // REMOVED: isHRReady logic to enforce Admin Panel usage for final approvals
 
         h += `</div></div>`;
 
