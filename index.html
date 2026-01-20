@@ -1574,35 +1574,25 @@
     </div>
 
     <script>
-        // ... existing variables ...
-
+        
 // --- 1. SECURE CONFIGURATION ---
 // --- 1. SECURE CONFIGURATION ---
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
 
-// --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
-// --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
+// --- 2. THE BRIDGE (Connects Frontend to PHP) ---
 const db = {
     from: (table) => {
-        const getHeaders = () => {
-            const token = localStorage.getItem('zpms_token');
-            return {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
-            };
-        };
-
         return {
-            // 1. SELECT OPERATIONS
             select: (cols) => {
                 return {
+                    // 1. Exact Match (Login, Profile)
                     eq: (col, val) => {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
                             try {
                                 const res = await fetch(`${API_URL}?action=${action}`, {
-                                    method: 'POST',
-                                    headers: getHeaders(),
+                                    method: 'POST', 
+                                    headers: {'Content-Type': 'application/json'},
                                     body: JSON.stringify({ id: val }) 
                                 });
                                 if (!res.ok) return { data: null, error: { message: "Server Error" } };
@@ -1611,57 +1601,95 @@ const db = {
                         };
                         return {
                             then: (resolve, reject) => execute().then(resolve, reject),
-                            single: async () => { const r = await execute(); if (r.data && Array.isArray(r.data)) r.data = r.data[0]; return r; },
-                            maybeSingle: async () => { const r = await execute(); if (r.data && Array.isArray(r.data)) r.data = r.data[0]; return r; }
+                            single: async () => {
+                                const r = await execute();
+                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
+                                return r; 
+                            },
+                            maybeSingle: async () => {
+                                const r = await execute();
+                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
+                                return r;
+                            }
                         };
                     },
+                    
+                    // 2. Range (Directory)
                     range: async (from, to) => {
                         try {
-                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, { headers: getHeaders() });
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`);
                             return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
+
+                    // 3. Limit (Column Mapping)
                     limit: async (n) => {
-                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, { headers: getHeaders() });
+                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`);
                         return { data: await res.json(), error: null };
                     },
+
+                    // 4. OR Filter (Team Loading)
+                   // 4. OR Filter (Team Loading) - UPDATED WITH PAGINATION LOOP
                     or: async (filterStr) => {
                         try {
                             let allRows = [];
                             let from = 0;
-                            const step = 1000;
+                            const step = 1000; // Supabase default limit
                             let more = true;
+
+                            // LOOP: Keep fetching pages until we run out of data
                             while (more) {
-                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`, { headers: getHeaders() });
+                                // Fetch the next page
+                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
                                 if (!res.ok) break;
+
                                 const chunk = await res.json();
-                                if (!Array.isArray(chunk) || chunk.length === 0) break;
+                                
+                                if (!Array.isArray(chunk) || chunk.length === 0) {
+                                    break; // Stop if no data returned
+                                }
+
                                 allRows = allRows.concat(chunk);
-                                if (chunk.length < step) more = false; else from += step;
+
+                                // If we got less than a full page, we are at the end
+                                if (chunk.length < step) {
+                                    more = false;
+                                } else {
+                                    // Prepare for next page
+                                    from += step;
+                                }
                             }
+                            
+                            // Now 'allRows' contains EVERYONE (e.g., 2500+ users)
+                            
+                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
                             const conditions = filterStr.split(',');
+                            
                             const filtered = allRows.filter(row => {
                                 return conditions.some(cond => {
                                     const parts = cond.split('.');
                                     if(parts.length < 3) return false;
+                                    
                                     const col = parts[0]; 
                                     const val = parts[2].replace(/%/g, '').toLowerCase(); 
                                     const rowVal = (row[col] || '').toString().toLowerCase();
+                                    
                                     return rowVal.includes(val);
                                 });
                             });
+                            
                             return { data: filtered, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
-            }, 
-
-            // 2. WRITE OPERATIONS (NOW INSIDE THE RETURN OBJECT)
+            },
+            
+            // Handle Writes
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
                     method: 'POST',
-                    headers: getHeaders(),
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ payload: payload }) 
                 });
                 return { error: res.ok ? null : { message: "Save failed" } };
@@ -1672,7 +1700,7 @@ const db = {
                     eq: async (col, val) => {
                         const res = await fetch(`${API_URL}?action=saveUser`, {
                             method: 'POST',
-                            headers: getHeaders(),
+                            headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({ id: val, payload: payload })
                         });
                         return { error: res.ok ? null : { message: "Update failed" } };
@@ -1681,7 +1709,7 @@ const db = {
                          for (const id of valArray) {
                              await fetch(`${API_URL}?action=saveUser`, {
                                 method: 'POST',
-                                headers: getHeaders(),
+                                headers: {'Content-Type': 'application/json'},
                                 body: JSON.stringify({ id: id, payload: payload })
                             });
                          }
@@ -1695,25 +1723,20 @@ const db = {
                     eq: async (col, val) => {
                         const res = await fetch(`${API_URL}?action=deleteUser`, {
                             method: 'POST',
-                            headers: getHeaders(),
+                            headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({ id: val })
                         });
                         return { error: res.ok ? null : { message: "Delete failed" } };
                     }
                 };
             }
-        }; // <--- THIS CLOSES THE RETURN
-    }, // <--- THIS CLOSES THE FROM
-
-    // 3. RPC OPERATIONS
+        };
+    },
     rpc: async (name, params) => {
         if (name === 'publish_goals') {
              const res = await fetch(`${API_URL}?action=rpcPublish`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}`
-                },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ payload: params })
             });
             return { error: res.ok ? null : { message: "RPC failed" } };
@@ -1801,41 +1824,24 @@ function resendOTP() {
         let hasDraft = false;
         let saveTimer;
         let chart1, chartAdmin, chartOrg;
-      // Recommended COL mapping for Excel-imported data
-let COL = { 
-    id: 'id', 
-    name: 'Name', 
-    lvl: 'Level', 
-    job: 'Job', 
-    mgr: 'Manager', 
-    stat: 'status', 
-    goals: 'goals', 
-    div: 'Division', 
-    dept: 'Department', 
-    pass: 'password', 
-    role: 'access_role', 
-    phone: 'phone_number', 
-    email: 'email' 
-};
+        let COL = { id: 'id', name: 'Name', lvl: 'Level', job: 'Job', mgr: 'manager_id', stat: 'status', goals: 'goals', div: 'Division', dept: 'Department', pass: 'password', role: 'access_role', phone: 'phone_number', email: 'Email' };
         let adminCache = [];
         let allCompanyData = [];
         let globalReports = [];
-		let tempToken = null;
 
         // --- 2. INIT ---
-      window.onload = async function () {
-    // 1. Check if we have a saved user ID (BUT DO NOT FETCH DATA YET)
-    const uid = localStorage.getItem('zpms_uid');
-    const lastActive = localStorage.getItem('zpms_time');
-    
-    if (uid && lastActive && (Date.now() - lastActive < IDLE_LIMIT)) {
-        // 2. Session looks valid, now we attempt to restore it
-        restoreSession(uid);
-    } else {
-        // 3. No session or expired? Show login screen
-        showLogin();
-    }
-};
+        window.onload = async function () {
+
+            await mapColumns();
+            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+            if (sg && sg.data) {
+                if (Array.isArray(sg.data)) masterData = { rating: 0, goals: sg.data }; else masterData = sg.data;
+            } else { masterData = { rating: 0, goals: [] }; }
+
+            const uid = localStorage.getItem('zpms_uid');
+            if (uid && (Date.now() - localStorage.getItem('zpms_time') < IDLE_LIMIT)) restoreSession(uid);
+            else showLogin();
+        }
 
         async function mapColumns() {
             const { data } = await db.from('active_list').select('*').limit(1);
@@ -1948,55 +1954,11 @@ async function loadHRApprovals() {
         contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`; 
     }
 }
-async function restoreSession(id) {
-    // 1. Check local storage
-    const token = localStorage.getItem('zpms_token');
-    if (!token) { logout(); return; }
-
-    // 2. Fetch User Identity (Uses Service Key - Usually works)
-    const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
-    
-    if (data) { 
-        user = data; 
-        
-        // 3. CRITICAL TEST: Validate Token against Backend
-        // If this fails (401), we MUST logout immediately.
-        try {
-            const testReq = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (testReq.status === 401) {
-                console.warn("Session Token Expired. Logging out...");
-                localStorage.clear(); // Wipe bad data
-                location.reload();    // Reload to Login screen
-                return;
-            }
-
-            // 4. Token is valid! Proceed safely.
-            await mapColumns();
-            
-            // Load Shared Goals
-            try {
-                const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
-                masterData = (sg && sg.data) ? (Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data) : { rating: 0, goals: [] };
-            } catch (e) {
-                masterData = { rating: 0, goals: [] };
-            }
-
-            startIdleTimer(); 
-            launchApp(); 
-
-        } catch (e) {
-            console.error("Network Error during restore:", e);
+        async function restoreSession(id) {
+            const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
+            if (data) { user = data; startIdleTimer(); launchApp(); } else showLogin();
         }
-    } else { 
-        logout(); 
-    }
-}
+
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
         function logout() { localStorage.clear(); location.reload(); }
@@ -2033,80 +1995,39 @@ const { data, error } = await db.from('active_list')
         document.getElementById('btn-login').innerText = "Create & Login";
     }
 }
-async function doLogin() {
-    const id = document.getElementById('inp-id').value.trim(); // Get ID
-    const pass = document.getElementById('inp-pass').value;    // Get Password
-    const btn = document.getElementById('btn-login');
+   async function doLogin() {
+    const p1 = document.getElementById('inp-pass').value;
+    const storedPass = (user[COL.pass] || user['password'] || "").toString().trim();
 
-    if (!pass) return;
-
-    btn.innerText = "Verifying...";
-    
-    try {
-        // 1. Call your new Secure PHP Backend
-        const res = await fetch(`${API_URL}?action=login`, {
-            method: 'POST',
-            // No token needed here because we are logging in
-            body: JSON.stringify({ id: id, password: pass }) 
-        });
-
-        const response = await res.json();
-
-        if (response.error) {
-            // Login Failed
-            document.getElementById('err-pass').innerText = response.error;
-            document.getElementById('err-pass').style.display = 'block';
-            btn.innerText = "Log In";
-            return;
+    if (isRegistering) {
+        if (p1 !== document.getElementById('inp-confirm').value) { 
+            alert("Passwords match error"); 
+            return; 
         }
-
-        // 2. Login Success! 
-        // We catch the token here, but we don't save it to localStorage yet
-        // because we still want to force the OTP check.
-        tempToken = response.access_token; 
+        const { error } = await db.from('active_list').update({ password: p1 }).eq(COL.id, user[COL.id]);
+        if (error) { alert("Save error: " + error.message); return; }
         
-        // Update the 'user' object with the data returned from PHP
-        user = response.user; 
-
-        // 3. Proceed to OTP
-        triggerOTP(); 
-
-    } catch (e) {
-        console.error(e);
-        alert("Server Connection Error");
-    } finally {
-        btn.innerText = "Log In";
+        // Registration successful, proceed immediately
+        completeLoginProcess(); 
+    } else {
+        if (p1 !== storedPass) { 
+            document.getElementById('err-pass').style.display = 'block';
+            return; 
+        }
+        
+        // --- OTP INTERCEPTION ---
+        // Password is correct. Now trigger OTP instead of logging in directly.
+        triggerOTP();
     }
 }
 
 // Separate function for the final step
 function completeLoginProcess() {
-    // 1. Debugging: Check if we have the token
-    if (!tempToken) {
-        console.error("Login Error: No access token found.");
-        alert("Login failed: System did not receive a security token.");
-        location.reload();
-        return;
-    }
-
-    // 2. Save Token and User ID
-    localStorage.setItem('zpms_token', tempToken);
+    localStorage.setItem('zpms_uid', user[COL.id]); 
+    localStorage.setItem('zpms_time', Date.now());
     
-    // Ensure we have a valid User ID
-    const uid = user && (user[COL.id] || user.id || user['Employee Number']);
-    if (uid) {
-        localStorage.setItem('zpms_uid', uid);
-        localStorage.setItem('zpms_time', Date.now());
-        
-        // 3. Visual Feedback
-        document.getElementById('loading-overlay').classList.remove('hidden');
-        
-        // 4. Reload after a short delay to ensure storage commits
-        setTimeout(() => location.reload(), 200);
-    } else {
-        console.error("Login Error: User object missing ID", user);
-        alert("Login failed: Could not identify user.");
-    }
+    document.getElementById('loading-overlay').classList.remove('hidden');
+    location.reload(); 
 }
         // --- BATCHED FETCH HELPER ---
 async function fetchAllData() {
@@ -2114,37 +2035,70 @@ async function fetchAllData() {
     let from = 0;
     const step = 1000;
     const timestamp = Date.now();
-    const token = localStorage.getItem('zpms_token');
+    let retries = 0;
+    const maxRetries = 3;
 
-    if (!token) return [];
+    // Grab UI elements to show progress
+    const loaderText = document.querySelector('#loading-overlay div:last-child');
+    const saveText = document.getElementById('save-text');
 
     while (true) {
         try {
-            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            // Update UI with progress
+            const msg = `Syncing Directory... (${allRows.length} loaded)`;
+            if (loaderText) loaderText.innerText = msg;
+            if (saveText) saveText.innerText = msg;
+
+            // Fetch with Cache Buster
+            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`);
             
             if (!res.ok) {
-                if (res.status === 401) return []; // Stop quietly on auth error
+                throw new Error(`Server status: ${res.status}`);
+            }
+
+            const chunk = await res.json();
+
+            // Validation
+            if (!Array.isArray(chunk)) {
+                console.warn("Invalid chunk received:", chunk);
                 break;
             }
-            
-            const chunk = await res.json();
-            if (!Array.isArray(chunk) || chunk.length === 0) break;
-            
+
+            if (chunk.length === 0) {
+                break; // Done
+            }
+
+            // Success: Reset retries and append data
+            retries = 0;
             allRows = allRows.concat(chunk);
+
+            // Optimization: If we got less than requested, we are at the end
             if (chunk.length < step) break;
+
+            // Prepare next page
             from += step;
+
         } catch (e) {
-            break; 
+            console.error(`Fetch error at offset ${from}:`, e);
+            
+            // Retry Logic
+            if (retries < maxRetries) {
+                retries++;
+                const delay = retries * 1000; // Exponential backoff: 1s, 2s, 3s
+                if (loaderText) loaderText.innerText = `Network blip. Retrying batch ${from}... (${retries}/${maxRetries})`;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue; // Retry the loop without incrementing 'from'
+            } else {
+                alert("Connection unstable. Loaded partial data. Please refresh.");
+                break; // Give up after 3 tries to prevent infinite loops
+            }
         }
     }
+
+    // Final UI Cleanup
+    if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
     return allRows;
 }
-
 function getCompany(id) {
     if (!id) return "Unknown";
     const clean = id.toString().toUpperCase().trim();
@@ -2166,48 +2120,38 @@ function getCompany(id) {
 
     return "Other";
 }
-     async function launchApp() {
-    document.getElementById('loading-overlay').classList.add('hidden');
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app-container').style.display = 'flex';
+        async function launchApp() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-container').style.display = 'flex';
+            document.getElementById('disp-user').innerText = user[COL.name];
+            document.getElementById('disp-role').innerText = user[COL.lvl];
 
-    // --- FIX START: Robust Data Finding ---
-    // This checks COL mapping, then Capitalized keys, then Lowercase keys
-    // ensuring it works for both "Login" mode and "Reload" mode.
-    
-    const safeName = user[COL.name] || user['Name'] || user['name'] || user['Full Name'] || 'Employee';
-    const safeRole = user[COL.lvl]  || user['Level'] || user['level'] || user['Lvl'] || 'Staff';
+            if (allCompanyData.length === 0) {
+                document.getElementById('save-text').innerText = "Syncing directory...";
+                document.getElementById('save-status').classList.add('show');
+                allCompanyData = await fetchAllData();
+                document.getElementById('save-status').classList.remove('show');
+            }
 
-    document.getElementById('disp-user').innerText = safeName;
-    document.getElementById('disp-role').innerText = safeRole;
-    // --- FIX END ---
+            let hasReports = false;
+            const myId = user[COL.id].toString().toLowerCase();
+            const myName = (user[COL.name] || "").toString().toLowerCase();
 
-    if (allCompanyData.length === 0) {
-        document.getElementById('save-text').innerText = "Syncing directory...";
-        document.getElementById('save-status').classList.add('show');
-        allCompanyData = await fetchAllData();
-        document.getElementById('save-status').classList.remove('show');
-    }
+            hasReports = allCompanyData.some(u => {
+                const m = (u[COL.mgr] || "").toString().toLowerCase();
+                return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+            });
 
-    let hasReports = false;
-    
-    // Handle ID safety (check both 'id' and 'Employee Number')
-    const myId = (user[COL.id] || user['id'] || user['Employee Number'] || '').toString().toLowerCase();
-    const myName = (safeName || "").toString().toLowerCase();
+            const role = getRole(user, hasReports);
+            renderNav(role);
 
-    hasReports = allCompanyData.some(u => {
-        const m = (u[COL.mgr] || u['Manager'] || "").toString().toLowerCase();
-        return m.includes(myId) || (myName.length > 3 && m.includes(myName));
-    });
+            if (role === 'Admin' || role === 'Master') loadHRAdmin();
+            else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
+            else if (role === 'Manager') loadTeam();
+            else loadEval(user[COL.id]);
+        }
 
-    const role = getRole(user, hasReports);
-    renderNav(role);
-
-    if (role === 'Admin' || role === 'Master') loadHRAdmin();
-    else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
-    else if (role === 'Manager') loadTeam();
-    else loadEval(user[COL.id] || user['id']);
-}
         function triggerImport() { document.getElementById('file-import').click(); }
 
         function processFile(inp) {
@@ -3941,70 +3885,81 @@ function filterTeamGrid() {
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
     try {
-        console.log("Loading scorecard for:", tid);
-
         // 1. Fetch Data
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
-        // 2. Safety Check (Stop if data missing)
         if (error || !data) {
             console.error("Load Error:", error);
-            if (error && error.message.includes("401")) {
-                localStorage.removeItem('zpms_token');
-                location.reload();
-                return;
-            }
-            document.getElementById('main-view').innerHTML = `<div style="padding:40px; text-align:center;">Could not load data.</div>`;
+            alert("Could not load employee data. Please refresh and try again.");
             return;
         }
 
-        // 3. Setup Variables
+        // 2. Setup Context Variables
         targetUser = data;
         const uRole = getRole(user);
         const myId = (user[COL.id] || '').toString();
         const targetId = (targetUser[COL.id] || '').toString();
         const viewingSelf = (myId === targetId);
 
-        // Determine Manager Status
+        // Manager Detection Logic
         const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
         const myName = (user[COL.name] || "").toString().toLowerCase();
         isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()) || (myName.length > 3 && mgrStr.includes(myName)));
-        isManager = !viewingSelf && (isDirectSupervisor || ['Admin', 'Master'].includes(uRole));
+        
+        // Admin acts as Manager only if not viewing themselves
+        isManager = !viewingSelf && (isDirectSupervisor || (uRole === 'Admin' || uRole === 'Master'));
 
-        // 4. Safe Name Logic (Fixes "Undefined")
-        // We try COL.name, then fallback to 'name', then 'Name', then 'Employee'
-        const rawName = data[COL.name] || data.name || data.Name || data['Full Name'] || 'Employee';
-        const safeName = rawName.toString().split('(')[0];
-
-        // 5. Goal & Weight Logic
+        // Weighting & Goals Setup
         const w = getW(data[COL.lvl], data[COL.job]);
         let userGoals = targetUser[COL.goals];
         if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
-        if (!userGoals || !Array.isArray(userGoals)) userGoals = JSON.parse(JSON.stringify(defaultIndivGoals));
+        if (!userGoals || !Array.isArray(userGoals) || userGoals.length === 0) {
+            userGoals = JSON.parse(JSON.stringify(defaultIndivGoals));
+        }
         targetUser[COL.goals] = userGoals;
 
         const stat = data[COL.stat] || 'Draft';
-        const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
-        
-        // 6. Permissions
+
+        // 3. Permissions Logic
         let canEdit = false;
-        if (viewingSelf) canEdit = (stat === 'Draft' || stat === 'Returned');
-        else if (isDirectSupervisor) canEdit = (stat === 'Submitted to Manager');
+        if (viewingSelf) {
+            canEdit = (stat === 'Draft' || stat === 'Returned');
+        } else if (isDirectSupervisor) {
+            canEdit = (stat === 'Submitted to Manager');
+        }
+        
         if (isSearchMode) canEdit = false;
 
-        // 7. Render HTML (Using Backticks ` )
+        // --- VISIBILITY RULE: Only show scores if 'Published' or if user is Reviewer ---
+        const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
+
+        // 4. UI Preparation (Manager Name, Company)
+        let mName = data[COL.mgr] || '-';
+        let managerOnlyID = '';
+        if (data[COL.mgr]) {
+            const match = data[COL.mgr].match(/\(([^)]+)\)/);
+            if (match) managerOnlyID = match[1];
+            else if (['ZIQ', 'AWO', 'NG'].some(x => data[COL.mgr].includes(x))) managerOnlyID = data[COL.mgr];
+        }
+        if (mName.includes('(')) mName = mName.split('(')[0].trim();
+        let comp = getCompany(data[COL.id]);
+
+        // 5. Construct HTML
         let h = `
         <div class="animate-in">
             <div class="header-bar">
                 <div>
                     <h2 class="page-title">${isManager ? 'Evaluation Portal' : 'My Scorecard'}</h2>
                     <p class="page-sub">
-                        <span style="font-weight:700; color:var(--text-main);">${safeName}</span>
+                        <span style="font-weight:700; color:var(--text-main);">${data[COL.name].split('(')[0]}</span>
                         <span style="margin:0 8px; color:var(--text-light);">•</span>
                         <span class="status-badge ${stat === 'Approved' || stat === 'Published' ? 'approved' : 'submitted'}">${stat}</span>
                     </p>
                 </div>
                 <div style="display:flex; gap:10px;">
+                    <button onclick="showHistory('${data[COL.id]}')" class="btn btn-outline">
+                        <i class="fa-solid fa-clock-rotate-left"></i> &nbsp; View History
+                    </button>
                     ${isManager ? `<button onclick="${isDirectSupervisor ? 'loadTeam()' : "loadHRAdmin(); switchAdminTab('app');"}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</button>` : ''}
                 </div>
             </div>
@@ -4020,18 +3975,24 @@ async function loadEval(tid, isSearchMode = false) {
                 </div>
                 <div class="metric-card">
                     <div class="metric-val">${w.s}%</div>
-                    <div class="metric-lbl">Shared Goals <span class="metric-sub-val" id="shared-contrib-val">0.00</span></div>
+                    <div class="metric-lbl">
+                        Shared Goals
+                        <span class="metric-sub-val" id="shared-contrib-val">0.00</span>
+                    </div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-val">${w.i}%</div>
-                    <div class="metric-lbl">Individual Goals <span class="metric-sub-val" id="indiv-contrib-val">0.00</span></div>
+                    <div class="metric-lbl">
+                        Individual Goals
+                        <span class="metric-sub-val" id="indiv-contrib-val">0.00</span>
+                    </div>
                 </div>
             </div>
 
             <div class="info-panel">
                 <div class="info-item">
                     <label>Employee Name</label>
-                    <div class="info-value">${safeName}</div>
+                    <div class="info-value">${data[COL.name]}</div>
                 </div>
                 <div class="info-item">
                     <label>Job Title</label>
@@ -4042,80 +4003,133 @@ async function loadEval(tid, isSearchMode = false) {
                     <div class="info-value">${data[COL.div] || '-'}</div>
                 </div>
                 <div class="info-item">
-                    <label>Manager</label>
-                    <div class="info-value">${(data[COL.mgr] || '-').split('(')[0]}</div>
+                    <label>Direct Manager</label>
+                    <div class="info-value">${mName}</div>
+                </div>
+                <div class="info-item">
+                    <label>Manager ID</label>
+                    <div class="info-value" style="font-family:monospace; background:#f3f4f6; padding:2px 6px; border-radius:4px; display:inline-block;">
+                        ${managerOnlyID || '-'}
+                    </div>
                 </div>
                 <div class="info-item">
                     <label>Company</label>
-                    <div class="info-value" style="color:var(--primary); font-weight:700;">${getCompany(data[COL.id])}</div>
+                    <div class="info-value" style="color:var(--primary); font-weight:700;">${comp}</div>
                 </div>
             </div>`;
 
-        // 8. Block Manager if not submitted
         const managerBlocked = (isDirectSupervisor && (stat === 'Draft' || stat === 'Returned'));
+
         if (managerBlocked && !['Admin', 'Master'].includes(uRole)) {
-            h += `<div class="card" style="text-align:center; padding:60px;">
-                    <div style="font-size:3rem; color:var(--primary-light); margin-bottom:20px;"><i class="fa-solid fa-hourglass-half"></i></div>
-                    <h3>Waiting for Submission</h3>
-                    <p>The employee has not submitted their scorecard yet.</p>
-                  </div>`;
+            h += `
+                <div class="card" style="text-align:center; padding:80px 40px;">
+                    <div style="font-size:4rem; color:var(--primary-light); margin-bottom:24px; animation:pulse 2s infinite;"><i class="fa-solid fa-hourglass-half"></i></div>
+                    <h3 style="color:var(--text-main); font-size:1.5rem; margin-bottom:12px;">Waiting for Submission</h3>
+                    <p style="color:var(--text-muted); font-size:1.1rem; max-width:500px; margin:0 auto;">The employee has not submitted their scorecard yet.</p>
+                </div>`;
         } else {
-            // Render Goals Container
-            h += `<div id="goal-container"></div>`;
-            // Note: We render goals dynamically after inserting HTML to keep this string clean
-        }
+            // SHARED GOALS SECTION
+            if (w.s > 0) {
+                const userDiv = (data[COL.div] || "").trim();
+                const userId = (data[COL.id] || "").trim();
+                const relevantShared = (masterData.goals || []).map(g => {
+                    const myAssign = (g.assignments || []).find(a => a.target === userDiv || a.target === userId);
+                    return myAssign ? { ...g, myWeight: myAssign.weight } : null;
+                }).filter(Boolean);
 
-        // 9. Footer Actions
-        h += `<div style="margin-top:40px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px;">`;
-        if (canEdit) {
-            h += `<button class="btn btn-outline" onclick="saveDraft()">Save Draft</button>`;
-            let btnText = viewingSelf ? "Submit to Manager" : "Approve & Submit to HR";
-            if (uRole === 'Admin' || uRole === 'Master') btnText = "Approve (Hold)";
-            h += `<button class="btn btn-primary" onclick="submitFinal()">${btnText}</button>`;
-        }
-        if ((isDirectSupervisor && stat === 'Submitted to Manager') || (['Admin', 'Master'].includes(uRole) && stat === 'Submitted to HR')) {
-            h += `<button class="btn btn-outline" style="color:red; border-color:pink;" onclick="rejectToManager('${targetId}')">Return to Manager</button>`;
-        }
-        if (['Admin', 'Master'].includes(uRole) && stat === 'Approved') {
-             h += `<button class="btn btn-primary" style="background:#10b981;" onclick="publishSingle('${targetId}')">Publish</button>`;
-        }
-        h += `</div></div>`;
+                h += `
+                <div style="margin-bottom:40px;">
+                    <h3 style="margin-bottom:20px; font-weight:800; display:flex; align-items:center; gap:12px;">
+                        <span style="background:var(--primary-light); color:var(--primary); padding:6px 12px; border-radius:8px; font-size:1rem;">${w.s}%</span> Shared Goals
+                    </h3>
+                    <div class="shared-grid">
+                        ${relevantShared.map(g => `
+                            <div class="shared-card">
+                                <div class="shared-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span>${g.title}</span>
+                                    <span class="pro-unit-badge" style="background:var(--primary-light); font-size:0.65rem;">Weight: ${(g.myWeight*100).toFixed(1)}%</span>
+                                </div>
+                                <div class="segment-bar">
+                                    ${[1, 2, 3, 4, 5, 6].map(n => {
+                                        const isAchieved = (n === g.rating);
+                                        return `<div class="segment ${n === 4 ? 'is-target' : ''} ${isAchieved ? 'active' : ''}">
+                                                    ${n === 4 ? '<div class="target-badge">TARGET</div>' : ''}
+                                                    <div class="seg-num">${n}</div>
+                                                    <div class="seg-val">${g.targets[n - 1] || '-'}</div>
+                                                </div>`;
+                                    }).join('')}
+                                </div>
+                            </div>`).join('')}
+                        ${relevantShared.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:20px;">No shared goals assigned to this division.</div>' : ''}
+                    </div>
+                </div>`;
+            }
 
-        // 10. Inject HTML and Run Logic
-        render(h);
-
-        // Inject Goals Content separately to handle the complexity
-        if (!managerBlocked) {
-            // We reuse the existing goal logic but target the new container
-            // Temporarily hijack goal-list ID logic or ensure renderGoals uses 'goal-container'
-            // For now, let's manually append the goals UI if you haven't changed renderGoals
-            const goalContainer = document.getElementById('goal-container');
-            if(goalContainer) {
-                // Re-create the structure renderGoals expects
-                goalContainer.innerHTML = `
-                ${w.s > 0 ? `<div style="margin-bottom:30px;"><h3>Shared Goals</h3><div class="shared-grid" id="shared-goals-area"></div></div>` : ''}
-                ${w.i > 0 ? `<div><div style="display:flex; justify-content:space-between;"><h3>Individual Goals</h3>
-                ${canEdit ? `<button class="btn btn-primary" onclick="openGoalModal()">+ Add</button>` : ''}</div><div id="goal-list"></div></div>` : ''}
-                `;
-                
-                // Now run the logic to fill those IDs
-                renderGoals(canEdit); 
-                
-                // Manually inject shared goals because they were complex in the template
-                // (Simplified for this fix to ensure it runs)
+            // INDIVIDUAL GOALS SECTION
+            if (w.i > 0) {
+                h += `
+                <div class="animate-in" style="animation-delay: 0.2s;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                        <h3 style="margin:0; color:var(--text-main); font-weight:800; font-size:1.4rem; display:flex; align-items:center; gap:12px;">
+                            <span style="background:var(--secondary); color:white; padding:6px 12px; border-radius:8px; font-size:1rem;">${w.i}%</span> Individual Goals
+                        </h3>
+                        ${canEdit ? `<div>
+                            <button class="btn btn-outline" style="margin-right:12px;" onclick="triggerImport()"><i class="fa-solid fa-file-excel"></i> &nbsp; Import Excel</button>
+                            <button class="btn btn-primary" onclick="openGoalModal()"><i class="fa-solid fa-plus"></i> &nbsp; Add Goal</button>
+                        </div>` : ''}
+                    </div>
+                    <div id="goal-list"></div>
+                </div>`;
             }
         }
-        
-        calc();
 
-        // Masking
-        if (!canSeeScore) {
-            if(document.getElementById('score')) document.getElementById('score').innerHTML = '<i class="fa-solid fa-lock"></i>';
-            if(document.getElementById('rating')) document.getElementById('rating').innerText = "Pending";
+        // 6. Footer & Actions Logic
+        h += `<div style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px;">`;
+
+        // Standard Edit Actions
+        if (canEdit) {
+            h += `<button class="btn btn-outline" onclick="saveDraft()"><i class="fa-regular fa-floppy-disk"></i> &nbsp; Save Draft</button>`;
+            
+            let btnText = viewingSelf ? "Submit to Manager" : "Approve & Submit to HR";
+            
+            // If Admin is editing, they move it to 'Approved' (Intermediate), NOT 'Published'
+            if (uRole === 'Admin' || uRole === 'Master') {
+                btnText = "Approve (Hold for Publish)";
+            }
+            
+            h += `<button id="btn-submit-final" class="btn btn-primary" style="padding:12px 32px; font-size:1rem;" onclick="submitFinal()"><i class="fa-solid fa-paper-plane"></i> &nbsp; ${btnText}</button>`;
         }
 
-    } catch (e) {
-        console.error("Runtime Error:", e);
+        // "Return to Manager" - Available to Manager (if submitted) AND Admin (at any stage)
+        const adminCanReturn = ['Admin', 'Master'].includes(uRole) && (stat === 'Submitted to HR' || stat === 'Approved');
+        if ((isDirectSupervisor && stat === 'Submitted to Manager') || adminCanReturn) {
+            h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectToManager('${targetId}')"><i class="fa-solid fa-ban"></i> &nbsp; Return to Manager</button>`;
+        }
+
+        // "Publish Score" - Only for Admin, Only when Approved
+        if (['Admin', 'Master'].includes(uRole) && stat === 'Approved') {
+             h += `<button class="btn btn-primary" style="background:#10b981; border-color:#10b981;" onclick="publishSingle('${targetId}')"><i class="fa-solid fa-check-double"></i> &nbsp; Publish Score</button>`;
+        }
+
+        h += `</div></div>`;
+
+        render(h);
+
+        // 7. Render Goals & Score Masking
+        if (w.i > 0 && !managerBlocked) renderGoals(canEdit);
+        calc();
+
+        // Enforce Visibility Masking
+        const scoreEl = document.getElementById('score');
+        const ratingEl = document.getElementById('rating');
+        if (!canSeeScore) {
+            if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
+            if (ratingEl) ratingEl.innerText = "Pending Publish";
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert("Unexpected error: " + err.message);
     }
 }
 async function rejectToManager(id) {
