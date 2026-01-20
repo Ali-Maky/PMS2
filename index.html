@@ -3844,14 +3844,17 @@ async function loadEval(tid, isSearchMode = false) {
             </div>
 
             <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Achievement Level</span>
-                ${ratingDisplay}
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Achievement Level</span>
+                    ${ratingDisplay}
+                </div>
+                
+                ${edit ? `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; padding:6px 12px; font-size:0.8rem;" onclick="delG(${i})"><i class="fa-solid fa-trash"></i></button>` : ''}
             </div>
             ${commentHtml}
         </div>`;
     }).join('');
 }
-
         // --- GOAL MODAL & LOGIC ---
         function openGoalModal(index = null) {
             try {
