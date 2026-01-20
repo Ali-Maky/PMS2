@@ -3265,60 +3265,82 @@ function filterAdminTable() {
             document.getElementById('search-results').innerHTML = results.map(r => `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);"><div><div style="font-weight:700;">${r[COL.name]}</div><div style="font-size:0.8rem; color:var(--text-muted);">${r[COL.id]} | ${r[COL.job] || 'Staff'}</div></div><button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px;" onclick="loadEval('${r[COL.id]}', true)">Open Scorecard</button></div>`).join('');
         }
 
-       async function approveSingle(id) {
-    showConfirm("Individual Approval", "Finalize this scorecard and move to history?", "Approve", "primary", async () => {
+ async function approveSingle(id) {
+    showSaving();
+    const { error } = await db.from('active_list').update({ [COL.stat]: 'Approved' }).eq(COL.id, id);
+    if (error) showToast(error.message, 'error');
+    else {
+        showToast("Approved (Ready to Publish)", 'success');
+        refreshLocalData(id, 'Approved');
+    }
+    showSaved();
+}
+    async function approveBulk() {
+    const ids = adminCache.filter(u => u[COL.stat] === 'Submitted to HR').map(u => u[COL.id]);
+    if(ids.length === 0) { showToast("No pending requests to approve.", "info"); return; }
+    
+    if(!confirm(`Approve ${ids.length} requests? They will move to the 'Ready to Publish' state.`)) return;
+    
+    showSaving();
+    const { error } = await db.from('active_list').update({ [COL.stat]: 'Approved' }).in(COL.id, ids);
+    if (error) showToast(error.message, 'error');
+    else {
+        showToast("Bulk Approved successfully", 'success');
+        // Update local cache manually to avoid full reload
+        adminCache.forEach(u => { if(ids.includes(u[COL.id])) u[COL.stat] = 'Approved'; });
+        filterAdminTable();
+    }
+    showSaved();
+}
+
+		async function publishSingle(id) {
+    showConfirm("Publish Scorecard", "This will make the score visible to the employee. Proceed?", "Publish", "success", async () => {
         showSaving();
         
-        const { error } = await db.from('active_list')
-            .update({ [COL.stat]: 'Approved' })
-            .eq(COL.id, id);
-
-        if (error) {
-            showToast("Error: " + error.message, 'error');
-        } else {
-            showToast("Scorecard finalized.", 'success');
-            
-            // Remove the approved individual from the local list and re-render
-            adminCache = adminCache.filter(x => x[COL.id].toString() !== id.toString());
+        // 1. Calculate final score for history
+        const userObj = allCompanyData.find(u => u[COL.id] == id);
+        let finalScore = 0;
+        let ratingLbl = "N/A";
+        // (You can perform a quick calc here or trust the backend/frontend view logic later)
+        // For simplicity, we just change status now. History archiving can be done by a trigger or separate call.
+        
+        const { error } = await db.from('active_list').update({ [COL.stat]: 'Published' }).eq(COL.id, id);
+        
+        if (error) showToast(error.message, 'error');
+        else {
+            showToast("Scorecard Published!", 'success');
+            // Remove from Admin View entirely as it is done
+            adminCache = adminCache.filter(u => u[COL.id] != id);
             filterAdminTable();
         }
         showSaved();
     });
 }
-     async function approveBulk() {
-    const f = document.getElementById('div-filter').value;
 
-    // 1. Get all visible records currently on the screen
-    const visibleRecords = adminCache.filter(r => f === 'ALL' || (r[COL.div] || 'Other') === f);
+async function publishBulk() {
+    const ids = adminCache.filter(u => u[COL.stat] === 'Approved').map(u => u[COL.id]);
+    if(ids.length === 0) { showToast("No approved items ready to publish.", "info"); return; }
 
-    // 2. AMENDED: Include EVERY ID in the visible list (No longer skipping your own ID)
-    const idsToApprove = visibleRecords.map(r => r[COL.id]);
+    if(!confirm(`Publish ${ids.length} scorecards? Scores will become visible to all employees immediately.`)) return;
 
-    if (idsToApprove.length === 0) {
-        showToast("No records found in this view.", "info");
-        return;
+    showSaving();
+    const { error } = await db.from('active_list').update({ [COL.stat]: 'Published' }).in(COL.id, ids);
+    
+    if (error) showToast(error.message, 'error');
+    else {
+        showToast("All selected scorecards published!", 'success');
+        // Remove processed items
+        adminCache = adminCache.filter(u => !ids.includes(u[COL.id]));
+        filterAdminTable();
     }
-
-    const msg = f === 'ALL' ? "ALL pending scorecards" : `all scorecards in the ${f} division`;
-
-    showConfirm("Bulk Approval", `Approve ${idsToApprove.length} records for ${msg}?`, "Confirm Bulk Approve", "primary", async () => {
-        showSaving();
-        
-        const { error } = await db.from('active_list')
-            .update({ [COL.stat]: 'Approved' })
-            .in(COL.id, idsToApprove);
-        
-        if (error) {
-            showToast("Bulk error: " + error.message, 'error');
-        } else {
-            showToast(`Successfully approved ${idsToApprove.length} records.`, 'success');
-            
-            // Refresh list
-            adminCache = adminCache.filter(r => !idsToApprove.includes(r[COL.id]));
-            filterAdminTable();
-        }
-        showSaved();
-    });
+    showSaved();
+}
+		function refreshLocalData(id, newStatus) {
+    const item = adminCache.find(x => x[COL.id] == id);
+    if (item) {
+        item[COL.stat] = newStatus;
+        filterAdminTable();
+    }
 }
         // --- 7. REPORTS ---
         // --- 7. REPORTS (UPDATED FOR REAL-TIME AUTO-CALCULATION) ---
@@ -3703,6 +3725,7 @@ function filterTeamGrid() {
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
     try {
+        // 1. Fetch Data
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
         if (error || !data) {
@@ -3711,9 +3734,9 @@ async function loadEval(tid, isSearchMode = false) {
             return;
         }
 
+        // 2. Setup Context Variables
         targetUser = data;
         const uRole = getRole(user);
-
         const myId = (user[COL.id] || '').toString();
         const targetId = (targetUser[COL.id] || '').toString();
         const viewingSelf = (myId === targetId);
@@ -3721,13 +3744,12 @@ async function loadEval(tid, isSearchMode = false) {
         // Manager Detection Logic
         const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
         const myName = (user[COL.name] || "").toString().toLowerCase();
-
         isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()) || (myName.length > 3 && mgrStr.includes(myName)));
         
-        // Admin only acts as a Manager if NOT looking at themselves
+        // Admin acts as Manager only if not viewing themselves
         isManager = !viewingSelf && (isDirectSupervisor || (uRole === 'Admin' || uRole === 'Master'));
 
-        // Process weighting configuration
+        // Weighting & Goals Setup
         const w = getW(data[COL.lvl], data[COL.job]);
         let userGoals = targetUser[COL.goals];
         if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
@@ -3738,7 +3760,7 @@ async function loadEval(tid, isSearchMode = false) {
 
         const stat = data[COL.stat] || 'Draft';
 
-        // Permissions logic
+        // 3. Permissions Logic
         let canEdit = false;
         if (viewingSelf) {
             canEdit = (stat === 'Draft' || stat === 'Returned');
@@ -3748,22 +3770,21 @@ async function loadEval(tid, isSearchMode = false) {
         
         if (isSearchMode) canEdit = false;
 
-        // MANAGER DATA EXTRACTION
+        // --- VISIBILITY RULE: Only show scores if 'Published' or if user is Reviewer ---
+        const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
+
+        // 4. UI Preparation (Manager Name, Company)
         let mName = data[COL.mgr] || '-';
         let managerOnlyID = '';
         if (data[COL.mgr]) {
             const match = data[COL.mgr].match(/\(([^)]+)\)/);
-            if (match) {
-                managerOnlyID = match[1];
-            } else if (data[COL.mgr].includes('ZIQ') || data[COL.mgr].includes('AWO') || data[COL.mgr].includes('NG')) {
-                managerOnlyID = data[COL.mgr];
-            }
+            if (match) managerOnlyID = match[1];
+            else if (['ZIQ', 'AWO', 'NG'].some(x => data[COL.mgr].includes(x))) managerOnlyID = data[COL.mgr];
         }
         if (mName.includes('(')) mName = mName.split('(')[0].trim();
-        
         let comp = getCompany(data[COL.id]);
 
-        // START HTML CONSTRUCTION
+        // 5. Construct HTML
         let h = `
         <div class="animate-in">
             <div class="header-bar">
@@ -3772,14 +3793,14 @@ async function loadEval(tid, isSearchMode = false) {
                     <p class="page-sub">
                         <span style="font-weight:700; color:var(--text-main);">${data[COL.name].split('(')[0]}</span>
                         <span style="margin:0 8px; color:var(--text-light);">•</span>
-                        <span class="status-badge ${stat === 'Approved' || stat.includes('HR') ? 'approved' : 'submitted'}">${stat}</span>
+                        <span class="status-badge ${stat === 'Approved' || stat === 'Published' ? 'approved' : 'submitted'}">${stat}</span>
                     </p>
                 </div>
                 <div style="display:flex; gap:10px;">
                     <button onclick="showHistory('${data[COL.id]}')" class="btn btn-outline">
                         <i class="fa-solid fa-clock-rotate-left"></i> &nbsp; View History
                     </button>
-                    ${isManager ? `<button onclick="${isDirectSupervisor ? 'loadTeam()' : "loadHRAdmin(); switchAdminTab('search');"}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</button>` : ''}
+                    ${isManager ? `<button onclick="${isDirectSupervisor ? 'loadTeam()' : "loadHRAdmin(); switchAdminTab('app');"}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</button>` : ''}
                 </div>
             </div>
             
@@ -3847,7 +3868,7 @@ async function loadEval(tid, isSearchMode = false) {
                     <p style="color:var(--text-muted); font-size:1.1rem; max-width:500px; margin:0 auto;">The employee has not submitted their scorecard yet.</p>
                 </div>`;
         } else {
-            // SHARED GOALS
+            // SHARED GOALS SECTION
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
@@ -3884,7 +3905,7 @@ async function loadEval(tid, isSearchMode = false) {
                 </div>`;
             }
 
-            // INDIVIDUAL GOALS
+            // INDIVIDUAL GOALS SECTION
             if (w.i > 0) {
                 h += `
                 <div class="animate-in" style="animation-delay: 0.2s;">
@@ -3902,26 +3923,49 @@ async function loadEval(tid, isSearchMode = false) {
             }
         }
 
-        // FOOTER ACTIONS
+        // 6. Footer & Actions Logic
         h += `<div style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px;">`;
 
+        // Standard Edit Actions
         if (canEdit) {
             h += `<button class="btn btn-outline" onclick="saveDraft()"><i class="fa-regular fa-floppy-disk"></i> &nbsp; Save Draft</button>`;
+            
             let btnText = viewingSelf ? "Submit to Manager" : "Approve & Submit to HR";
+            
+            // If Admin is editing, they move it to 'Approved' (Intermediate), NOT 'Published'
+            if (uRole === 'Admin' || uRole === 'Master') {
+                btnText = "Approve (Hold for Publish)";
+            }
+            
             h += `<button id="btn-submit-final" class="btn btn-primary" style="padding:12px 32px; font-size:1rem;" onclick="submitFinal()"><i class="fa-solid fa-paper-plane"></i> &nbsp; ${btnText}</button>`;
         }
 
-        if (isDirectSupervisor && stat === 'Submitted to Manager') {
-            h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectCard()"><i class="fa-solid fa-ban"></i> &nbsp; Reject / Request Changes</button>`;
+        // "Return to Manager" - Available to Manager (if submitted) AND Admin (at any stage)
+        const adminCanReturn = ['Admin', 'Master'].includes(uRole) && (stat === 'Submitted to HR' || stat === 'Approved');
+        if ((isDirectSupervisor && stat === 'Submitted to Manager') || adminCanReturn) {
+            h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectToManager('${targetId}')"><i class="fa-solid fa-ban"></i> &nbsp; Return to Manager</button>`;
         }
-        
-        // REMOVED: isHRReady logic to enforce Admin Panel usage for final approvals
+
+        // "Publish Score" - Only for Admin, Only when Approved
+        if (['Admin', 'Master'].includes(uRole) && stat === 'Approved') {
+             h += `<button class="btn btn-primary" style="background:#10b981; border-color:#10b981;" onclick="publishSingle('${targetId}')"><i class="fa-solid fa-check-double"></i> &nbsp; Publish Score</button>`;
+        }
 
         h += `</div></div>`;
 
         render(h);
+
+        // 7. Render Goals & Score Masking
         if (w.i > 0 && !managerBlocked) renderGoals(canEdit);
         calc();
+
+        // Enforce Visibility Masking
+        const scoreEl = document.getElementById('score');
+        const ratingEl = document.getElementById('rating');
+        if (!canSeeScore) {
+            if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
+            if (ratingEl) ratingEl.innerText = "Pending Publish";
+        }
 
     } catch (err) {
         console.error(err);
