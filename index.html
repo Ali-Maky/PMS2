@@ -3906,20 +3906,23 @@ function filterTeamGrid() {
 
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
-try {
+    try {
+        // 1. Fetch Data
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
-        // --- ADD THIS SAFETY CHECK ---
+        // --- SAFETY CHECK (Prevents the crash) ---
         if (error || !data) {
-            console.error("Load failed:", error);
-            // Prevent crash if token is invalid
+            console.error("Critical Load Error:", error);
+            
+            // If the error is 401 (Unauthorized), force logout
             if (error && error.message && error.message.includes("401")) {
-                localStorage.removeItem('zpms_token');
+                alert("Session expired or invalid. Please log in again.");
+                localStorage.removeItem('zpms_token'); // Clear bad token
                 location.reload();
+                return;
             }
-            return; // Stop execution so it doesn't hit the 'split' error
-        }
-			document.getElementById('main-view').innerHTML = `
+
+            document.getElementById('main-view').innerHTML = `
                 <div style="text-align:center; padding:60px; color:var(--text-muted);">
                     <div style="font-size:3rem; margin-bottom:20px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i></div>
                     <h3>Connection Failed</h3>
@@ -3928,14 +3931,15 @@ try {
                 </div>`;
             return;
         }
-	 
+        // ----------------------------------------
+
         // 2. Setup Context Variables
-       targetUser = data;
+        targetUser = data;
         const uRole = getRole(user);
         const myId = (user[COL.id] || '').toString();
         const targetId = (targetUser[COL.id] || '').toString();
         const viewingSelf = (myId === targetId);
-	 
+
         // Manager Detection Logic
         const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
         const myName = (user[COL.name] || "").toString().toLowerCase();
@@ -3947,7 +3951,12 @@ try {
         // Weighting & Goals Setup
         const w = getW(data[COL.lvl], data[COL.job]);
         let userGoals = targetUser[COL.goals];
-        if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
+        
+        // Robust JSON parsing for goals
+        if (typeof userGoals === 'string') { 
+            try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } 
+        }
+        
         if (!userGoals || !Array.isArray(userGoals) || userGoals.length === 0) {
             userGoals = JSON.parse(JSON.stringify(defaultIndivGoals));
         }
@@ -3992,9 +4001,6 @@ try {
                     </p>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button onclick="showHistory('${data[COL.id]}')" class="btn btn-outline">
-                        <i class="fa-solid fa-clock-rotate-left"></i> &nbsp; View History
-                    </button>
                     ${isManager ? `<button onclick="${isDirectSupervisor ? 'loadTeam()' : "loadHRAdmin(); switchAdminTab('app');"}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</button>` : ''}
                 </div>
             </div>
@@ -4121,27 +4127,20 @@ try {
         // 6. Footer & Actions Logic
         h += `<div style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px;">`;
 
-        // Standard Edit Actions
         if (canEdit) {
             h += `<button class="btn btn-outline" onclick="saveDraft()"><i class="fa-regular fa-floppy-disk"></i> &nbsp; Save Draft</button>`;
-            
             let btnText = viewingSelf ? "Submit to Manager" : "Approve & Submit to HR";
-            
-            // If Admin is editing, they move it to 'Approved' (Intermediate), NOT 'Published'
             if (uRole === 'Admin' || uRole === 'Master') {
                 btnText = "Approve (Hold for Publish)";
             }
-            
             h += `<button id="btn-submit-final" class="btn btn-primary" style="padding:12px 32px; font-size:1rem;" onclick="submitFinal()"><i class="fa-solid fa-paper-plane"></i> &nbsp; ${btnText}</button>`;
         }
 
-        // "Return to Manager" - Available to Manager (if submitted) AND Admin (at any stage)
         const adminCanReturn = ['Admin', 'Master'].includes(uRole) && (stat === 'Submitted to HR' || stat === 'Approved');
         if ((isDirectSupervisor && stat === 'Submitted to Manager') || adminCanReturn) {
             h += `<button class="btn btn-outline" style="color:var(--danger); border-color:#fee2e2; background:#fff1f2;" onclick="rejectToManager('${targetId}')"><i class="fa-solid fa-ban"></i> &nbsp; Return to Manager</button>`;
         }
 
-        // "Publish Score" - Only for Admin, Only when Approved
         if (['Admin', 'Master'].includes(uRole) && stat === 'Approved') {
              h += `<button class="btn btn-primary" style="background:#10b981; border-color:#10b981;" onclick="publishSingle('${targetId}')"><i class="fa-solid fa-check-double"></i> &nbsp; Publish Score</button>`;
         }
@@ -4163,8 +4162,9 @@ try {
         }
 
     } catch (err) {
-        console.error(err);
-        alert("Unexpected error: " + err.message);
+        // --- THIS IS THE MISSING PART FROM YOUR PREVIOUS ERROR ---
+        console.error("Critical Runtime Error:", err);
+        alert("An unexpected error occurred. Please refresh.");
     }
 }
 async function rejectToManager(id) {
