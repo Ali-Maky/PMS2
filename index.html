@@ -589,7 +589,144 @@
             else if (t === 'bulk') loadAdminBulk();
             else if (t === 'perm') loadAdminPerms();
         }
+// --- RESTORED: MANAGEMENT REPORTS & ANALYTICS ---
 
+// Helper to recursively find all employees under a manager (Downstream)
+function getDownstream(rootId, allData) {
+    let team = [];
+    const direct = allData.filter(u => (u[COL.mgr] || "").toString().toLowerCase().includes(rootId.toString().toLowerCase()));
+    
+    direct.forEach(d => {
+        team.push(d);
+        // Recursively find reports of reports
+        const sub = getDownstream(d[COL.id], allData);
+        team = team.concat(sub);
+    });
+    return team;
+}
+
+async function loadReports() {
+    // 1. Loading State
+    document.getElementById('main-view').innerHTML = `
+        <div style="height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; color:var(--text-muted);">
+            <div class="spinner" style="border-width:3px; width:30px; height:30px;"></div>
+            <div style="margin-top:10px; font-weight:600; font-size:0.9rem;">Generating Performance Report...</div>
+        </div>`;
+
+    // 2. Ensure Data is Fresh
+    if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
+
+    // 3. Identify Context
+    const myId = user[COL.id].toString().toLowerCase();
+    const myName = user[COL.name].toString().toLowerCase();
+
+    // Direct Reports (Immediate Team)
+    let directReports = allCompanyData.filter(u => {
+        const m = (u[COL.mgr] || "").toString().toLowerCase();
+        return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+    });
+
+    if (!directReports || directReports.length === 0) {
+        document.getElementById('main-view').innerHTML = `<div class="card" style="padding:40px; text-align:center;">No data available for reporting.</div>`;
+        return;
+    }
+
+    // Total Org (Recursive Downstream)
+    let totalOrg = getDownstream(user[COL.id], allCompanyData);
+    let showOrgChart = (totalOrg.length > directReports.length);
+
+    // 4. Calculation Helper (Distribution of ratings)
+    const calcDist = (list) => {
+        let d = [0, 0, 0, 0, 0, 0]; // IDLE to ASTRONAUT
+        list.forEach(u => {
+            let g = u[COL.goals] || [];
+            if (typeof g === 'string') try { g = JSON.parse(g); } catch (e) { g = []; }
+            
+            const w = getW(u[COL.lvl], u[COL.job]);
+            const globalR = masterData.rating || 0;
+            
+            // Calculate Score
+            let sScore = globalR * (w.s / 100);
+            let iScore = 0;
+            if(Array.isArray(g)) g.forEach(x => iScore += (Number(x.rating)||0) * (Number(x.weight)||0));
+            
+            let total = sScore + (iScore * (w.i / 100));
+            
+            // Map to bucket
+            let b = 0;
+            if (total >= 5.5) b = 5; 
+            else if (total >= 4.5) b = 4; 
+            else if (total >= 3.5) b = 3; 
+            else if (total >= 2.5) b = 2; 
+            else if (total >= 1.5) b = 1;
+            d[b]++;
+        });
+        return d;
+    };
+
+    const distDirect = calcDist(directReports);
+    const distOrg = showOrgChart ? calcDist(totalOrg) : null;
+
+    // 5. Render View
+    let h = `
+    <div class="animate-in">
+        <div class="header-bar">
+            <div>
+                <h2 class="page-title">Performance Report</h2>
+                <p class="page-sub">Analytics & Distribution</p>
+            </div>
+            <button class="btn btn-primary" onclick="loadReports()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+
+        <div class="dash-grid" style="grid-template-columns: ${showOrgChart ? '1fr 1fr' : '1fr'};">
+            <div class="card">
+                <h3 style="text-align:center; font-weight:700; margin-bottom:20px;">Direct Reports (${directReports.length})</h3>
+                <div style="height:350px;"><canvas id="chartDirect"></canvas></div>
+            </div>
+            ${showOrgChart ? `
+            <div class="card">
+                <h3 style="text-align:center; font-weight:700; margin-bottom:20px;">Total Organization (${totalOrg.length})</h3>
+                <div style="height:350px;"><canvas id="chartOrg"></canvas></div>
+            </div>` : ''}
+        </div>
+
+        <div class="card" style="margin-top:24px;">
+            <h3>Direct Team Status</h3>
+            <div style="max-height:500px; overflow-y:auto;">
+                <table class="report-table">
+                    <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+                    <tbody>
+                        ${directReports.map(r => `
+                        <tr>
+                            <td style="font-weight:600;">${r[COL.name]}</td>
+                            <td>${r[COL.job] || '-'}</td>
+                            <td><span class="status-badge ${r[COL.stat] === 'Approved' ? 'approved' : 'submitted'}">${r[COL.stat] || 'Draft'}</span></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>`;
+
+    document.getElementById('main-view').innerHTML = h;
+
+    // 6. Init Charts
+    if (window.chart1) window.chart1.destroy();
+    window.chart1 = new Chart(document.getElementById('chartDirect'), { 
+        type: 'bar', 
+        data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Direct Reports', data: distDirect, backgroundColor: '#592C82', borderRadius: 4 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
+    });
+
+    if (showOrgChart) {
+        if (window.chartOrg) window.chartOrg.destroy();
+        window.chartOrg = new Chart(document.getElementById('chartOrg'), { 
+            type: 'bar', 
+            data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Total Org', data: distOrg, backgroundColor: '#10b981', borderRadius: 4 }] },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
+        });
+    }
+}
         async function loadAdminDirectory() {
             if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
             const content = `
@@ -1231,19 +1368,28 @@
         }
         
         function renderNav(r) {
-             let h = '';
-             if (['Admin', 'Master'].includes(r)) {
-                 h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Administration</div>`;
-                 h += `<div class="nav-item" onclick="loadHRAdmin()"><i class="fa-solid fa-user-shield"></i> <span>HR Admin</span></div>`;
-             }
-             if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) {
-                 h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Management</div>`;
-                 h += `<div class="nav-item" onclick="loadTeam()"><i class="fa-solid fa-users"></i> <span>My Team</span></div>`;
-             }
-             h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Personal</div>`;
-             h += `<div class="nav-item" onclick="loadEval('${user[COL.id]}')"><i class="fa-solid fa-address-card"></i> <span>My Scorecard</span></div>`;
-             document.getElementById('nav-menu').innerHTML = h;
-        }
+     let h = `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Menu</div>`;
+     
+     // 1. Admin Section
+     if (['Admin', 'Master'].includes(r)) {
+         h += `<div class="nav-item" onclick="loadHRAdmin()"><i class="fa-solid fa-user-shield"></i> <span>HR Admin</span></div>`;
+     }
+     
+     // 2. Management Section (Added Reports Back)
+     if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) {
+         h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Management</div>`;
+         h += `<div class="nav-item" onclick="loadTeam()"><i class="fa-solid fa-users"></i> <span>My Team</span></div>`;
+         
+         // *** THIS IS THE RESTORED BUTTON ***
+         h += `<div class="nav-item" onclick="loadReports()"><i class="fa-solid fa-chart-line"></i> <span>Reports</span></div>`;
+     }
+     
+     // 3. Personal Section
+     h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Personal</div>`;
+     h += `<div class="nav-item" onclick="loadEval('${user[COL.id]}')"><i class="fa-solid fa-address-card"></i> <span>My Scorecard</span></div>`;
+     
+     document.getElementById('nav-menu').innerHTML = h;
+}
     </script>
 </body>
 </html>
