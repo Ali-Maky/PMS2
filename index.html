@@ -1951,31 +1951,51 @@ async function loadHRApprovals() {
     }
 }
   async function restoreSession(id) {
-            // Now we can fetch because we assume the token is valid
-            const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
-            
-            if (data) { 
-                user = data; 
-                
-                // --- SAFE TO LOAD DATA NOW ---
-                await mapColumns();
-                
-                // Load Shared Goals
-                const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
-                if (sg && sg.data) {
-                    masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
-                } else {
-                    masterData = { rating: 0, goals: [] };
-                }
-                // -----------------------------
+    console.log("Attempting to restore session for:", id);
 
-                startIdleTimer(); 
-                launchApp(); 
-            } else { 
-                // Token invalid or user deleted? Back to login.
-                showLogin(); 
+    // 1. Check if token exists
+    const token = localStorage.getItem('zpms_token');
+    if (!token) {
+        console.warn("No token found in storage. Redirecting to login.");
+        showLogin();
+        return;
+    }
+
+    // 2. Fetch User Data from Secure Backend
+    // This uses the token we just checked
+    const { data, error } = await db.from('active_list').select('*').eq(COL.id, id).single();
+    
+    if (data) { 
+        console.log("Session valid. User loaded:", data[COL.name]);
+        user = data; 
+        
+        // Load App Data
+        await mapColumns();
+        
+        // Load Shared Goals
+        try {
+            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+            if (sg && sg.data) {
+                masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
+            } else {
+                masterData = { rating: 0, goals: [] };
             }
+        } catch (e) {
+            console.warn("Shared goals load warning:", e);
+            masterData = { rating: 0, goals: [] };
         }
+
+        startIdleTimer(); 
+        launchApp(); 
+    } else { 
+        // 3. Failed? Log why.
+        console.error("Session restore failed. Backend refused token or user not found.", error);
+        // Clear invalid session data so we don't loop forever
+        localStorage.removeItem('zpms_uid');
+        localStorage.removeItem('zpms_token');
+        showLogin(); 
+    }
+}
 
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
@@ -2061,16 +2081,32 @@ async function doLogin() {
 
 // Separate function for the final step
 function completeLoginProcess() {
-    // 1. SAVE THE TOKEN
-    if (tempToken) {
-        localStorage.setItem('zpms_token', tempToken); // <--- THIS IS WHERE IT GOES
+    // 1. Debugging: Check if we have the token
+    if (!tempToken) {
+        console.error("Login Error: No access token found.");
+        alert("Login failed: System did not receive a security token.");
+        location.reload();
+        return;
     }
 
-    localStorage.setItem('zpms_uid', user['id'] || user['Employee Number']); 
-    localStorage.setItem('zpms_time', Date.now());
+    // 2. Save Token and User ID
+    localStorage.setItem('zpms_token', tempToken);
     
-    document.getElementById('loading-overlay').classList.remove('hidden');
-    location.reload(); 
+    // Ensure we have a valid User ID
+    const uid = user && (user[COL.id] || user.id || user['Employee Number']);
+    if (uid) {
+        localStorage.setItem('zpms_uid', uid);
+        localStorage.setItem('zpms_time', Date.now());
+        
+        // 3. Visual Feedback
+        document.getElementById('loading-overlay').classList.remove('hidden');
+        
+        // 4. Reload after a short delay to ensure storage commits
+        setTimeout(() => location.reload(), 200);
+    } else {
+        console.error("Login Error: User object missing ID", user);
+        alert("Login failed: Could not identify user.");
+    }
 }
         // --- BATCHED FETCH HELPER ---
 async function fetchAllData() {
