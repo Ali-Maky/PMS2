@@ -1558,10 +1558,9 @@
     </div>
 
     <script>
-        // --- 1. CONFIGURATION ---
+        
 // --- 1. SECURE CONFIGURATION ---
-
-const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
+const API_URL = 'https://pms-back-production-b693.up.railway.app';
 
 // --- 2. THE BRIDGE (Connects Frontend to PHP) ---
 const db = {
@@ -1573,16 +1572,25 @@ const db = {
                     // .eq(COL.id, val) -> Used for Login & Profile Check
                     eq: async (col, val) => {
                         try {
+                            // Fetch the data from PHP
                             const res = await fetch(`${API_URL}?action=checkID&id=${encodeURIComponent(val)}`);
                             if (!res.ok) return { data: null, error: true };
                             const json = await res.json();
-                            // Supabase .maybeSingle() expects { data: object, error: null }
-                            return { 
+                            
+                            // HELPER: Create a response object that mimics Supabase structure
+                            // This wrapper allows the code to call .single() or .maybeSingle() on the result
+                            const resultObj = { 
                                 data: json, 
-                                error: null, 
-                                maybeSingle: async () => ({ data: json, error: null }),
-                                single: async () => ({ data: json, error: null })
+                                error: null,
+                                // FIX: Add the missing .single() function here
+                                single: function() { return this; },
+                                maybeSingle: function() { return this; }
                             };
+                            
+                            // If the code awaits .eq() directly, return the result
+                            // If the code calls .single(), it calls the function above which returns this same object
+                            return resultObj;
+
                         } catch (e) { return { data: null, error: e }; }
                     },
                     // .range(from, to) -> Used for Directory Sync
@@ -1603,7 +1611,6 @@ const db = {
             
             // Handle Inserts/Upserts (saveUser, saveGoal)
             upsert: async (payload) => {
-                 // Check if it's a bulk import (Array) or single user (Object)
                  const action = Array.isArray(payload) ? 'bulkUpsert' : 'saveUser';
                  const res = await fetch(`${API_URL}?action=${action}`, {
                     method: 'POST',
@@ -1618,7 +1625,6 @@ const db = {
                 return {
                     // .eq(COL.id, id)
                     eq: async (col, val) => {
-                        // We send the ID separately so PHP knows who to update
                         const res = await fetch(`${API_URL}?action=saveUser`, {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -1628,7 +1634,6 @@ const db = {
                     },
                     // .in(COL.id, [ids]) -> Bulk Approve
                     in: async (col, valArray) => {
-                         // Loop through IDs and update them one by one (Simple approach)
                          for (const id of valArray) {
                              await fetch(`${API_URL}?action=saveUser`, {
                                 method: 'POST',
