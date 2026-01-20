@@ -1613,15 +1613,17 @@ const db = {
                     },
 
                     // 4. OR Filter (Team Loading)
+                    // 4. OR Filter (Team Loading) - UPDATED FOR FULL DIRECTORY
                     or: async (filterStr) => {
                         try {
-                            // Fetch a large batch of users to filter locally
-                            const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=2000`);
+                            // FIX: Increased limit from 2,000 to 10,000 to ensure we search everyone
+                            // If you have more than 10k employees, we can make this even smarter later.
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=9999`);
                             const allRows = await res.json();
                             
                             if (!Array.isArray(allRows)) return { data: [], error: "Data error" };
 
-                            // Parse the "col.ilike.%val%,col.ilike.%val%" string
+                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
                             const conditions = filterStr.split(',');
                             
                             const filtered = allRows.filter(row => {
@@ -1631,7 +1633,10 @@ const db = {
                                     if(parts.length < 3) return false;
                                     
                                     const col = parts[0]; 
-                                    const val = parts[2].replace(/%/g, '').toLowerCase(); // Remove % and lowercase
+                                    // Clean up the search value (remove % and make lowercase)
+                                    const val = parts[2].replace(/%/g, '').toLowerCase(); 
+                                    
+                                    // Get the actual data from the row (safe check)
                                     const rowVal = (row[col] || '').toString().toLowerCase();
                                     
                                     return rowVal.includes(val);
