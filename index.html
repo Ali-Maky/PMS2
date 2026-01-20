@@ -1801,16 +1801,17 @@ function resendOTP() {
         let hasDraft = false;
         let saveTimer;
         let chart1, chartAdmin, chartOrg;
-        let COL = { 
+      // Recommended COL mapping for Excel-imported data
+let COL = { 
     id: 'id', 
-    name: 'name', 
-    lvl: 'level', 
-    job: 'job', 
-    mgr: 'manager_id', 
+    name: 'Name', 
+    lvl: 'Level', 
+    job: 'Job', 
+    mgr: 'Manager', 
     stat: 'status', 
     goals: 'goals', 
-    div: 'division', 
-    dept: 'department', 
+    div: 'Division', 
+    dept: 'Department', 
     pass: 'password', 
     role: 'access_role', 
     phone: 'phone_number', 
@@ -2165,38 +2166,48 @@ function getCompany(id) {
 
     return "Other";
 }
-        async function launchApp() {
-            document.getElementById('loading-overlay').classList.add('hidden');
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-container').style.display = 'flex';
-            document.getElementById('disp-user').innerText = user[COL.name];
-            document.getElementById('disp-role').innerText = user[COL.lvl];
+     async function launchApp() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-container').style.display = 'flex';
 
-            if (allCompanyData.length === 0) {
-                document.getElementById('save-text').innerText = "Syncing directory...";
-                document.getElementById('save-status').classList.add('show');
-                allCompanyData = await fetchAllData();
-                document.getElementById('save-status').classList.remove('show');
-            }
+    // --- FIX START: Robust Data Finding ---
+    // This checks COL mapping, then Capitalized keys, then Lowercase keys
+    // ensuring it works for both "Login" mode and "Reload" mode.
+    
+    const safeName = user[COL.name] || user['Name'] || user['name'] || user['Full Name'] || 'Employee';
+    const safeRole = user[COL.lvl]  || user['Level'] || user['level'] || user['Lvl'] || 'Staff';
 
-            let hasReports = false;
-            const myId = user[COL.id].toString().toLowerCase();
-            const myName = (user[COL.name] || "").toString().toLowerCase();
+    document.getElementById('disp-user').innerText = safeName;
+    document.getElementById('disp-role').innerText = safeRole;
+    // --- FIX END ---
 
-            hasReports = allCompanyData.some(u => {
-                const m = (u[COL.mgr] || "").toString().toLowerCase();
-                return m.includes(myId) || (myName.length > 3 && m.includes(myName));
-            });
+    if (allCompanyData.length === 0) {
+        document.getElementById('save-text').innerText = "Syncing directory...";
+        document.getElementById('save-status').classList.add('show');
+        allCompanyData = await fetchAllData();
+        document.getElementById('save-status').classList.remove('show');
+    }
 
-            const role = getRole(user, hasReports);
-            renderNav(role);
+    let hasReports = false;
+    
+    // Handle ID safety (check both 'id' and 'Employee Number')
+    const myId = (user[COL.id] || user['id'] || user['Employee Number'] || '').toString().toLowerCase();
+    const myName = (safeName || "").toString().toLowerCase();
 
-            if (role === 'Admin' || role === 'Master') loadHRAdmin();
-            else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
-            else if (role === 'Manager') loadTeam();
-            else loadEval(user[COL.id]);
-        }
+    hasReports = allCompanyData.some(u => {
+        const m = (u[COL.mgr] || u['Manager'] || "").toString().toLowerCase();
+        return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+    });
 
+    const role = getRole(user, hasReports);
+    renderNav(role);
+
+    if (role === 'Admin' || role === 'Master') loadHRAdmin();
+    else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
+    else if (role === 'Manager') loadTeam();
+    else loadEval(user[COL.id] || user['id']);
+}
         function triggerImport() { document.getElementById('file-import').click(); }
 
         function processFile(inp) {
