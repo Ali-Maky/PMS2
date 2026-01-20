@@ -1168,72 +1168,86 @@ async function loadReports() {
             document.getElementById('main-view').innerHTML = h;
         }
 
-        async function loadEval(tid, isSearchMode = false) {
-            // Re-fetch fresh user data
-            const data = await callBackend('checkID', { id: tid });
-            const freshUser = Array.isArray(data) ? data[0] : data;
+       async function loadEval(tid, isSearchMode = false) {
+    // Re-fetch fresh user data
+    const data = await callBackend('checkID', { id: tid });
+    const freshUser = Array.isArray(data) ? data[0] : data;
 
-            if (!freshUser || freshUser.error) { alert("Error loading user"); return; }
-            targetUser = freshUser;
+    if (!freshUser || freshUser.error) { alert("Error loading user"); return; }
+    targetUser = freshUser;
 
-            const uRole = getRole(user);
-            const myId = (user[COL.id] || '').toString();
-            const targetId = (targetUser[COL.id] || '').toString();
-            const viewingSelf = (myId === targetId);
-            const mgrStr = (targetUser[COL.mgr] || "").toString().toLowerCase();
-            isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()));
-            isManager = !viewingSelf && (isDirectSupervisor || ['Admin', 'Master'].includes(uRole));
-            
-            const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
-            let userGoals = targetUser[COL.goals];
-            if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
-            if (!Array.isArray(userGoals) || userGoals.length === 0) userGoals = JSON.parse(JSON.stringify(defaultIndivGoals));
-            targetUser[COL.goals] = userGoals;
+    const uRole = getRole(user);
+    const myId = (user[COL.id] || '').toString();
+    const targetId = (targetUser[COL.id] || '').toString();
+    const viewingSelf = (myId === targetId);
+    const mgrStr = (targetUser[COL.mgr] || "").toString().toLowerCase();
+    
+    // Determine Roles
+    isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()));
+    isManager = !viewingSelf && (isDirectSupervisor || ['Admin', 'Master'].includes(uRole));
+    
+    const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
+    let userGoals = targetUser[COL.goals];
+    if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
+    if (!Array.isArray(userGoals) || userGoals.length === 0) userGoals = JSON.parse(JSON.stringify(defaultIndivGoals));
+    targetUser[COL.goals] = userGoals;
 
-            const stat = targetUser[COL.stat] || 'Draft';
-            let canEdit = false;
-            if (viewingSelf) canEdit = (stat === 'Draft' || stat === 'Returned');
-            else if (isDirectSupervisor) canEdit = (stat === 'Submitted to Manager');
-            if (isSearchMode) canEdit = false;
+    const stat = targetUser[COL.stat] || 'Draft';
+    let canEdit = false;
 
-            let h = `
-            <div class="animate-in">
-                <div class="header-bar">
-                    <div>
-                        <h2 class="page-title">${isManager ? 'Evaluation' : 'My Scorecard'}</h2>
-                        <p class="page-sub">${targetUser[COL.name]} • <span class="status-badge ${stat === 'Approved' ? 'approved' : 'submitted'}">${stat}</span></p>
-                    </div>
-                    ${isManager ? `<button onclick="loadTeam()" class="btn btn-outline">Back</button>` : ''}
-                </div>
-                
-                <div class="metrics-row">
-                     <div class="metric-card highlight"><div class="metric-val" id="score">--</div><div class="metric-lbl">Score</div></div>
-                     <div class="metric-card"><div class="metric-val" id="rating">--</div><div class="metric-lbl">Rating</div></div>
-                     <div class="metric-card"><div class="metric-val">${w.s}%</div><div class="metric-lbl">Shared</div></div>
-                     <div class="metric-card"><div class="metric-val">${w.i}%</div><div class="metric-lbl">Individual</div></div>
-                </div>
+    // --- PERMISSION LOGIC UPDATE ---
+    if (viewingSelf) {
+        // Employee can edit Drafts
+        canEdit = ['Draft', 'Returned'].includes(stat);
+    } else if (isDirectSupervisor) {
+        // Manager can NOW edit Drafts, Returned, and Submitted cards
+        canEdit = ['Draft', 'Returned', 'Submitted to Manager'].includes(stat);
+    }
+    
+    // Admins can always edit unless approved (optional, but safer to keep strictly to workflow)
+    if (['Admin', 'Master'].includes(uRole) && !viewingSelf && stat === 'Submitted to HR') canEdit = true;
+    
+    if (isSearchMode) canEdit = false;
 
-                ${w.s > 0 ? `<div class="card"><h3>Shared Goals</h3><div class="shared-grid" id="shared-goals-container"></div></div>` : ''}
-                
-                <div class="card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                        <h3>Individual Goals</h3>
-                        ${canEdit ? `<button class="btn btn-primary" onclick="openGoalModal()">Add Goal</button>` : ''}
-                    </div>
-                    <div id="goal-list"></div>
-                </div>
-
-                <div style="display:flex; justify-content:flex-end; gap:16px; margin-top:40px;">
-                     ${canEdit ? `<button class="btn btn-outline" onclick="autoSave()">Save Draft</button><button class="btn btn-primary" onclick="submitFinal()">Submit</button>` : ''}
-                </div>
-            </div>`;
-            document.getElementById('main-view').innerHTML = h;
-            
-            renderGoals(canEdit);
-            renderSharedGoals(w.s); // Helper to render shared goals
-            calc();
-        }
+    // --- RENDER UI ---
+    let h = `
+    <div class="animate-in">
+        <div class="header-bar">
+            <div>
+                <h2 class="page-title">${isManager ? 'Evaluation' : 'My Scorecard'}</h2>
+                <p class="page-sub">${targetUser[COL.name]} • <span class="status-badge ${stat === 'Approved' ? 'approved' : 'submitted'}">${stat}</span></p>
+            </div>
+            ${isManager ? `<button onclick="loadTeam()" class="btn btn-outline">Back</button>` : ''}
+        </div>
         
+        <div class="metrics-row">
+             <div class="metric-card highlight"><div class="metric-val" id="score">--</div><div class="metric-lbl">Score</div></div>
+             <div class="metric-card"><div class="metric-val" id="rating">--</div><div class="metric-lbl">Rating</div></div>
+             <div class="metric-card"><div class="metric-val">${w.s}%</div><div class="metric-lbl">Shared</div></div>
+             <div class="metric-card"><div class="metric-val">${w.i}%</div><div class="metric-lbl">Individual</div></div>
+        </div>
+
+        ${w.s > 0 ? `<div class="card"><h3>Shared Goals</h3><div class="shared-grid" id="shared-goals-container"></div></div>` : ''}
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3>Individual Goals</h3>
+                ${canEdit ? `<button class="btn btn-primary" onclick="openGoalModal()">Add Goal</button>` : ''}
+            </div>
+            <div id="goal-list"></div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:16px; margin-top:40px;">
+             ${canEdit ? `<button class="btn btn-outline" onclick="autoSave()">Save Changes</button><button class="btn btn-primary" onclick="submitFinal()">Submit / Approve</button>` : ''}
+        </div>
+    </div>`;
+    
+    document.getElementById('main-view').innerHTML = h;
+    
+    renderGoals(canEdit);
+    renderSharedGoals(w.s);
+    calc();
+}
         function renderSharedGoals(weight) {
              const userDiv = (targetUser[COL.div] || "").trim();
              const userId = (targetUser[COL.id] || "").trim();
@@ -1282,34 +1296,39 @@ async function loadReports() {
             autoSave(); 
         }
 
-        function calc() {
-            if (!targetUser) return;
-            const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
-            const userDiv = (targetUser[COL.div] || "").trim();
-            const userId = (targetUser[COL.id] || "").trim();
-            
-            let sharedScore = 0;
-            (masterData.goals || []).forEach(g => {
-                const assign = (g.assignments || []).find(a => a.target === userDiv || a.target === userId);
-                if (assign) sharedScore += (Number(g.rating) || 0) * (Number(assign.weight) || 0);
-            });
+       function calc() {
+    if (!targetUser) return;
+    const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
+    const userDiv = (targetUser[COL.div] || "").trim();
+    const userId = (targetUser[COL.id] || "").trim();
+    
+    let sharedScore = 0;
+    (masterData.goals || []).forEach(g => {
+        const assign = (g.assignments || []).find(a => a.target === userDiv || a.target === userId);
+        if (assign) sharedScore += (Number(g.rating) || 0) * (Number(assign.weight) || 0);
+    });
 
-            let indivScore = 0;
-            (targetUser[COL.goals] || []).forEach(g => indivScore += (Number(g.rating) || 0) * (Number(g.weight) || 0));
+    let indivScore = 0;
+    (targetUser[COL.goals] || []).forEach(g => indivScore += (Number(g.rating) || 0) * (Number(g.weight) || 0));
 
-            const total = (sharedScore * (w.s / 100)) + (indivScore * (w.i / 100));
-            
-            // Logic to hide score if not finalized
-            const canSee = (targetUser[COL.stat] === 'Approved') || isManager;
-            if(canSee) {
-                 if(document.getElementById('score')) document.getElementById('score').innerText = total.toFixed(2);
-                 let lbl = "-";
-                 if(total>=5.5) lbl="ASTRONAUT"; else if(total>=4.5) lbl="FLYER"; else if(total>=3.5) lbl="RUNNER"; else if(total>=2.5) lbl="WALKER"; else if(total>=1.5) lbl="STAGNANT"; else if(total>0) lbl="IDLE";
-                 if(document.getElementById('rating')) document.getElementById('rating').innerText = lbl;
-            } else {
-                 if(document.getElementById('score')) document.getElementById('score').innerHTML = '<i class="fa-solid fa-lock" style="opacity:0.3;"></i>';
-            }
-        }
+    const total = (sharedScore * (w.s / 100)) + (indivScore * (w.i / 100));
+    
+    // --- VISIBILITY LOGIC UPDATE ---
+    const stat = targetUser[COL.stat] || 'Draft';
+    // Employee: See score ONLY if Approved
+    // Manager/Admin: See score ALWAYS
+    const canSee = (stat === 'Approved') || isManager;
+
+    if(canSee) {
+         if(document.getElementById('score')) document.getElementById('score').innerText = total.toFixed(2);
+         let lbl = "-";
+         if(total>=5.5) lbl="ASTRONAUT"; else if(total>=4.5) lbl="FLYER"; else if(total>=3.5) lbl="RUNNER"; else if(total>=2.5) lbl="WALKER"; else if(total>=1.5) lbl="STAGNANT"; else if(total>0) lbl="IDLE";
+         if(document.getElementById('rating')) document.getElementById('rating').innerText = lbl;
+    } else {
+         if(document.getElementById('score')) document.getElementById('score').innerHTML = '<i class="fa-solid fa-lock" style="opacity:0.3;"></i>';
+         if(document.getElementById('rating')) document.getElementById('rating').innerText = "Pending";
+    }
+}
 
         async function submitFinal() {
             if(confirm("Submit Final Evaluation?")) {
@@ -1323,13 +1342,26 @@ async function loadReports() {
         }
         
         async function autoSave() {
-             showSaving();
-             const res = await callBackend('saveUser', {
-                 id: targetUser[COL.id],
-                 payload: { [COL.goals]: targetUser[COL.goals] }
-             });
-             if(!res.error) showSaved();
-        }
+     showSaving();
+     
+     // 1. Send to Backend
+     const res = await callBackend('saveUser', {
+         id: targetUser[COL.id],
+         payload: { [COL.goals]: targetUser[COL.goals] }
+     });
+
+     // 2. Sync Local Data for Reports (Live Update)
+     // This ensures the charts in 'loadReports' view use the new scores immediately
+     if (allCompanyData.length > 0) {
+         const idx = allCompanyData.findIndex(u => u[COL.id] === targetUser[COL.id]);
+         if (idx !== -1) {
+             // Update the specific user in the global cache
+             allCompanyData[idx][COL.goals] = JSON.parse(JSON.stringify(targetUser[COL.goals]));
+         }
+     }
+
+     if(!res.error) showSaved();
+}
 
         function showSaving() { document.getElementById('save-status').classList.add('show'); document.getElementById('save-dot').className = 'save-dot saving'; document.getElementById('save-text').innerText = "Saving..."; }
         function showSaved() { document.getElementById('save-dot').className = 'save-dot saved'; document.getElementById('save-text').innerText = "All changes saved"; setTimeout(() => document.getElementById('save-status').classList.remove('show'), 2000); }
