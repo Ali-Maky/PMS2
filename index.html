@@ -1613,56 +1613,20 @@ const db = {
                     },
 
                     // 4. OR Filter (Team Loading)
-                   // 4. OR Filter (Team Loading) - UPDATED WITH PAGINATION LOOP
+                   // 4. OR Filter (Optimized Server-Side Search)
                     or: async (filterStr) => {
                         try {
-                            let allRows = [];
-                            let from = 0;
-                            const step = 1000; // Supabase default limit
-                            let more = true;
-
-                            // LOOP: Keep fetching pages until we run out of data
-                            while (more) {
-                                // Fetch the next page
-                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
-                                if (!res.ok) break;
-
-                                const chunk = await res.json();
-                                
-                                if (!Array.isArray(chunk) || chunk.length === 0) {
-                                    break; // Stop if no data returned
-                                }
-
-                                allRows = allRows.concat(chunk);
-
-                                // If we got less than a full page, we are at the end
-                                if (chunk.length < step) {
-                                    more = false;
-                                } else {
-                                    // Prepare for next page
-                                    from += step;
-                                }
-                            }
-                            
-                            // Now 'allRows' contains EVERYONE (e.g., 2500+ users)
-                            
-                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
-                            const conditions = filterStr.split(',');
-                            
-                            const filtered = allRows.filter(row => {
-                                return conditions.some(cond => {
-                                    const parts = cond.split('.');
-                                    if(parts.length < 3) return false;
-                                    
-                                    const col = parts[0]; 
-                                    const val = parts[2].replace(/%/g, '').toLowerCase(); 
-                                    const rowVal = (row[col] || '').toString().toLowerCase();
-                                    
-                                    return rowVal.includes(val);
-                                });
+                            // Instead of fetching everyone, we send the filter to PHP
+                            const res = await fetch(`${API_URL}?action=searchUsers`, {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ filter: filterStr })
                             });
                             
-                            return { data: filtered, error: null };
+                            if (!res.ok) return { data: [], error: "Search failed" };
+                            
+                            const json = await res.json();
+                            return { data: json, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
