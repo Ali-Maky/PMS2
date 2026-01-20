@@ -1825,22 +1825,19 @@ function resendOTP() {
 		let tempToken = null;
 
         // --- 2. INIT ---
-        window.onload = async function () {
+      window.onload = async function () {
+    // 1. Check if we have a saved user ID (BUT DO NOT FETCH DATA YET)
     const uid = localStorage.getItem('zpms_uid');
-    // Only check if we have a session. DO NOT fetch data yet.
-    if (uid && (Date.now() - localStorage.getItem('zpms_time') < IDLE_LIMIT)) {
+    const lastActive = localStorage.getItem('zpms_time');
+    
+    if (uid && lastActive && (Date.now() - lastActive < IDLE_LIMIT)) {
+        // 2. Session looks valid, now we attempt to restore it
         restoreSession(uid);
     } else {
+        // 3. No session or expired? Show login screen
         showLogin();
     }
-        if (sg && sg.data) {
-                if (Array.isArray(sg.data)) masterData = { rating: 0, goals: sg.data }; else masterData = sg.data;
-            } else { masterData = { rating: 0, goals: [] }; }
-
-            const uid = localStorage.getItem('zpms_uid');
-            if (uid && (Date.now() - localStorage.getItem('zpms_time') < IDLE_LIMIT)) restoreSession(uid);
-            else showLogin();
-        }
+};
 
         async function mapColumns() {
             const { data } = await db.from('active_list').select('*').limit(1);
