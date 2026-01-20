@@ -1581,114 +1581,163 @@
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
 
 // --- 2. THE BRIDGE (Connects Frontend to PHP) ---
+// --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 const db = {
     from: (table) => {
+        // Helper to get headers with the token
+        const getHeaders = () => {
+            const token = localStorage.getItem('zpms_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // <--- THE KEY TO UNLOCKING THE BACKEND
+            };
+        };
+
         return {
             select: (cols) => {
                 return {
-                    // 1. Exact Match (Login, Profile)
+                    // 1. Exact Match
                     eq: (col, val) => {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
                             try {
-                              const token = localStorage.getItem('zpms_token');
-
-const res = await fetch(`${API_URL}?action=${action}`, {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` // <--- CRITICAL SECURITY ADDITION
-    },
-    body: JSON.stringify(payload)
-});
+                                // For checkID (Login check), we might not have a token yet, 
+                                // but standard lookups need it.
+                                const res = await fetch(`${API_URL}?action=${action}`, {
+                                    method: 'POST',
+                                    headers: getHeaders(),
+                                    body: JSON.stringify({ id: val }) 
+                                });
                                 if (!res.ok) return { data: null, error: { message: "Server Error" } };
                                 return { data: await res.json(), error: null };
                             } catch (e) { return { data: null, error: e }; }
                         };
                         return {
                             then: (resolve, reject) => execute().then(resolve, reject),
-                            single: async () => {
-                                const r = await execute();
-                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
-                                return r; 
-                            },
-                            maybeSingle: async () => {
-                                const r = await execute();
-                                if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
-                                return r;
-                            }
+                            single: async () => { const r = await execute(); if (r.data && Array.isArray(r.data)) r.data = r.data[0]; return r; },
+                            maybeSingle: async () => { const r = await execute(); if (r.data && Array.isArray(r.data)) r.data = r.data[0]; return r; }
                         };
                     },
                     
-                    // 2. Range (Directory)
+                    // 2. Range (Directory) - NOW SECURE
                     range: async (from, to) => {
                         try {
-                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`);
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
+                                headers: getHeaders() // <--- Added Header
+                            });
                             return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
 
-                    // 3. Limit (Column Mapping)
+                    // 3. Limit (Column Mapping) - NOW SECURE
                     limit: async (n) => {
-                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`);
+                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
+                            headers: getHeaders() // <--- Added Header
+                        });
                         return { data: await res.json(), error: null };
                     },
 
-                    // 4. OR Filter (Team Loading)
-                   // 4. OR Filter (Team Loading) - UPDATED WITH PAGINATION LOOP
+                    // 4. OR Filter (Team Loading) - NOW SECURE
                     or: async (filterStr) => {
                         try {
                             let allRows = [];
                             let from = 0;
-                            const step = 1000; // Supabase default limit
+                            const step = 1000;
                             let more = true;
 
-                            // LOOP: Keep fetching pages until we run out of data
                             while (more) {
-                                // Fetch the next page
-                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
+                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`, {
+                                    headers: getHeaders() // <--- Added Header
+                                });
                                 if (!res.ok) break;
-
                                 const chunk = await res.json();
-                                
-                                if (!Array.isArray(chunk) || chunk.length === 0) {
-                                    break; // Stop if no data returned
-                                }
-
+                                if (!Array.isArray(chunk) || chunk.length === 0) break;
                                 allRows = allRows.concat(chunk);
-
-                                // If we got less than a full page, we are at the end
-                                if (chunk.length < step) {
-                                    more = false;
-                                } else {
-                                    // Prepare for next page
-                                    from += step;
-                                }
+                                if (chunk.length < step) more = false;
+                                else from += step;
                             }
                             
-                            // Now 'allRows' contains EVERYONE (e.g., 2500+ users)
-                            
-                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
+                            // Client-side filtering logic remains the same
                             const conditions = filterStr.split(',');
-                            
                             const filtered = allRows.filter(row => {
                                 return conditions.some(cond => {
                                     const parts = cond.split('.');
                                     if(parts.length < 3) return false;
-                                    
                                     const col = parts[0]; 
                                     const val = parts[2].replace(/%/g, '').toLowerCase(); 
                                     const rowVal = (row[col] || '').toString().toLowerCase();
-                                    
                                     return rowVal.includes(val);
                                 });
                             });
-                            
                             return { data: filtered, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
             },
+            
+            // Handle Writes - NOW SECURE
+            upsert: async (payload) => {
+                 const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
+                 const res = await fetch(`${API_URL}?action=${action}`, {
+                    method: 'POST',
+                    headers: getHeaders(), // <--- Added Header
+                    body: JSON.stringify({ payload: payload }) 
+                });
+                return { error: res.ok ? null : { message: "Save failed" } };
+            },
+
+            update: (payload) => {
+                return {
+                    eq: async (col, val) => {
+                        const res = await fetch(`${API_URL}?action=saveUser`, {
+                            method: 'POST',
+                            headers: getHeaders(), // <--- Added Header
+                            body: JSON.stringify({ id: val, payload: payload })
+                        });
+                        return { error: res.ok ? null : { message: "Update failed" } };
+                    },
+                    in: async (col, valArray) => {
+                         // Loop or bulk update logic
+                         for (const id of valArray) {
+                             await fetch(`${API_URL}?action=saveUser`, {
+                                method: 'POST',
+                                headers: getHeaders(), // <--- Added Header
+                                body: JSON.stringify({ id: id, payload: payload })
+                            });
+                         }
+                         return { error: null };
+                    }
+                };
+            },
+
+            delete: () => {
+                return {
+                    eq: async (col, val) => {
+                        const res = await fetch(`${API_URL}?action=deleteUser`, {
+                            method: 'POST',
+                            headers: getHeaders(), // <--- Added Header
+                            body: JSON.stringify({ id: val })
+                        });
+                        return { error: res.ok ? null : { message: "Delete failed" } };
+                    }
+                };
+            }
+        };
+    },
+    rpc: async (name, params) => {
+        if (name === 'publish_goals') {
+             const res = await fetch(`${API_URL}?action=rpcPublish`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}` // <--- Added Header
+                },
+                body: JSON.stringify({ payload: params })
+            });
+            return { error: res.ok ? null : { message: "RPC failed" } };
+        }
+    }
+};
             
             // Handle Writes
             upsert: async (payload) => {
