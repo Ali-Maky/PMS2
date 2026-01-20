@@ -2107,23 +2107,36 @@ async function fetchAllData() {
             switchAdminTab('shared');
         }
 
-        function switchAdminTab(t) {
-            document.querySelectorAll('.admin-nav-item').forEach(btn => {
-        btn.classList.remove('active')
-				if (btn.getAttribute('onclick').includes(tabName)) {
+   function switchAdminTab(t) {
+    // 1. Fix the "Active" button highlighting
+    document.querySelectorAll('.admin-nav-item').forEach(btn => {
+        btn.classList.remove('active');
+        // FIX: Changed 'tabName' to 't' to match the function argument
+        const attr = btn.getAttribute('onclick') || '';
+        if (attr.includes(`'${t}'`)) {
             btn.classList.add('active');
         }
     });
-            document.getElementById('tab-' + t).classList.add('active');
-            if (t === 'shared') loadAdminSharedGoals();
-            else if (t === 'directory') loadAdminDirectory();
-            else if (t === 'app') loadAdminApprovals();
-            else if (t === 'search') loadAdminSearch();
-            else if (t === 'analytics') loadAdminAnalytics();
-            else if (t === 'bulk') loadAdminBulk();
-            else if (t === 'perm') loadAdminPerms();
-		    else if (t === 'approvals') loadHRApprovals();
-        }
+
+    // 2. Hide all tab contents first (if your HTML uses static tab containers)
+    document.querySelectorAll('.admin-tab-view').forEach(el => el.classList.remove('active'));
+    
+    // Try to activate the specific container if it exists
+    const targetTab = document.getElementById('tab-' + t);
+    if (targetTab) targetTab.classList.add('active');
+
+    // 3. Load the correct data
+    if (t === 'shared') loadAdminSharedGoals();
+    else if (t === 'directory') loadAdminDirectory();
+    
+    // FIX: Catch BOTH 'app' (old) and 'approvals' (new) and force them to use the NEW function
+    else if (t === 'app' || t === 'approvals') loadHRApprovals();
+    
+    else if (t === 'search') loadAdminSearch();
+    else if (t === 'analytics') loadAdminAnalytics();
+    else if (t === 'bulk') loadAdminBulk();
+    else if (t === 'perm') loadAdminPerms();
+}
 
         // --- DIRECTORY TAB (ADD/EDIT/DELETE USERS) ---
         async function loadAdminDirectory() {
