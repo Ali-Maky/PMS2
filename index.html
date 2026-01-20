@@ -3923,28 +3923,37 @@ function filterTeamGrid() {
 
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
-    try {
+ try {
         // 1. Fetch Data
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
-		
-      if (error || !data) {
-            console.error("Load Error for ID:", tid, error);
-            // If this runs on startup (My Scorecard), show a gentler message
-            document.getElementById('main-view').innerHTML = `
-                <div style="text-align:center; padding:50px; color:var(--text-muted);">
-                    <i class="fa-solid fa-triangle-exclamation" style="font-size:2rem; margin-bottom:15px;"></i>
-                    <p>Could not load user data. <br>Please verify your connection or log in again.</p>
-                    <button class="btn btn-primary" onclick="location.reload()">Retry</button>
+
+        // --- SAFETY CHECK (Prevents the 'split' error) ---
+        if (error || !data) {
+            console.error("Critical Load Error:", error);
+            
+            // If the error is 401, force logout because the token is bad
+            if (error && error.message && error.message.includes("401")) {
+                alert("Session expired or invalid. Please log in again.");
+                logout();
+                return;
+            }
+			document.getElementById('main-view').innerHTML = `
+                <div style="text-align:center; padding:60px; color:var(--text-muted);">
+                    <div style="font-size:3rem; margin-bottom:20px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <h3>Connection Failed</h3>
+                    <p>Could not retrieve employee data.</p>
+                    <button class="btn btn-outline" onclick="location.reload()">Reload Page</button>
                 </div>`;
             return;
         }
+	 
         // 2. Setup Context Variables
-        targetUser = data;
+       targetUser = data;
         const uRole = getRole(user);
         const myId = (user[COL.id] || '').toString();
         const targetId = (targetUser[COL.id] || '').toString();
         const viewingSelf = (myId === targetId);
-
+	 
         // Manager Detection Logic
         const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
         const myName = (user[COL.name] || "").toString().toLowerCase();
