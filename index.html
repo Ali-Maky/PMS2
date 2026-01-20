@@ -1692,8 +1692,6 @@ const db = {
 
         // --- 2. INIT ---
         window.onload = async function () {
-            if (SUPABASE_URL.includes("YOUR")) alert(" Please update Supabase Keys in the code!");
-        
 
             await mapColumns();
             const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
