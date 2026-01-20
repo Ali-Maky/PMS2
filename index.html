@@ -2115,6 +2115,10 @@ async function fetchAllData() {
         function switchAdminTab(t) {
             document.querySelectorAll('.admin-nav-item').forEach(btn => {
         btn.classList.remove('active')
+				if (btn.getAttribute('onclick').includes(tabName)) {
+            btn.classList.add('active');
+        }
+    });
             document.getElementById('tab-' + t).classList.add('active');
             if (t === 'shared') loadAdminSharedGoals();
             else if (t === 'directory') loadAdminDirectory();
