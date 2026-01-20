@@ -1933,19 +1933,19 @@ async function loadHRApprovals() {
         contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`; 
     }
 }
- async function restoreSession(id) {
-    // 1. Check if token exists in storage
+async function restoreSession(id) {
+    // 1. Check local storage
     const token = localStorage.getItem('zpms_token');
     if (!token) { logout(); return; }
 
-    // 2. Fetch User Identity (This works because it uses checkID/ServiceKey)
+    // 2. Fetch User Identity (Uses Service Key - Usually works)
     const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
     
     if (data) { 
         user = data; 
         
-        // 3. CRITICAL TEST: Try to fetch protected data using the Token
-        // If this fails with 401, we MUST logout, otherwise the app crashes later.
+        // 3. CRITICAL TEST: Validate Token against Backend
+        // If this fails (401), we MUST logout immediately.
         try {
             const testReq = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
                 headers: { 
@@ -1956,23 +1956,27 @@ async function loadHRApprovals() {
 
             if (testReq.status === 401) {
                 console.warn("Session Token Expired. Logging out...");
-                localStorage.clear();
-                location.reload();
+                localStorage.clear(); // Wipe bad data
+                location.reload();    // Reload to Login screen
                 return;
             }
 
-            // Token is good! Proceed to load data.
+            // 4. Token is valid! Proceed safely.
             await mapColumns();
             
             // Load Shared Goals
-            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
-            masterData = (sg && sg.data) ? (Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data) : { rating: 0, goals: [] };
+            try {
+                const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+                masterData = (sg && sg.data) ? (Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data) : { rating: 0, goals: [] };
+            } catch (e) {
+                masterData = { rating: 0, goals: [] };
+            }
 
             startIdleTimer(); 
             launchApp(); 
 
         } catch (e) {
-            console.error("Network Error during session restore:", e);
+            console.error("Network Error during restore:", e);
         }
     } else { 
         logout(); 
@@ -2094,34 +2098,33 @@ async function fetchAllData() {
     let allRows = [];
     let from = 0;
     const step = 1000;
-    
-    // Cache Buster: Prevents the browser from serving old data
-    const timestamp = Date.now(); 
+    const timestamp = Date.now();
+    const token = localStorage.getItem('zpms_token');
+
+    if (!token) return [];
 
     while (true) {
         try {
-            // We use direct fetch here to inject the '&_t=' timestamp
-            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`);
+            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
             
             if (!res.ok) {
-                console.error("Fetch failed:", res.status);
+                if (res.status === 401) return []; // Stop quietly on auth error
                 break;
             }
             
             const chunk = await res.json();
-            
-            // Validation: Ensure we got a valid array
             if (!Array.isArray(chunk) || chunk.length === 0) break;
             
             allRows = allRows.concat(chunk);
-            
-            // If we got fewer rows than the limit, we've reached the end
             if (chunk.length < step) break;
-            
             from += step;
         } catch (e) {
-            console.error("Fetch Error:", e);
-            break; // Stop loop on network error to prevent infinite looping
+            break; 
         }
     }
     return allRows;
