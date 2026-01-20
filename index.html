@@ -1785,32 +1785,64 @@ const db = {
             }
         }
 async function loadHRApprovals() {
-    // 1. Target the specific Approvals container
-    // This ensures we never overwrite Shared Goals
-    let container = document.getElementById('tab-app');
+  async function loadHRApprovals() {
+    // 1. Fetch Data
+    const { data, error } = await db.from('active_list')
+        .select('*')
+        .eq(COL.stat, 'Submitted to HR');
+
+    if (error) { showToast("Error: " + error.message, 'error'); return; }
+
+    adminCache = data || []; // Store globally for filtering
+    const pendingCount = adminCache.length;
     
-    // If it doesn't exist, create it dynamically to prevent errors
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'tab-app';
-        container.className = 'admin-tab-view';
-        // Append it to the main admin content area
-        const mainContent = document.getElementById('admin-tab-content') || document.querySelector('.admin-content');
-        if (mainContent) mainContent.appendChild(container);
-    }
+    // Get unique Divisions for the dropdown
+    const divs = [...new Set(adminCache.map(i => i[COL.div] || 'Other'))].sort();
 
-    // 2. Force it to be visible (and hide Shared Goals manually just in case)
-    document.querySelectorAll('.admin-tab-view').forEach(el => el.style.display = 'none');
-    container.style.display = 'block';
-    container.classList.add('active');
+    // 2. Render The Specific Card Layout
+    document.getElementById('admin-content').innerHTML = `
+    <div class="animate-in">
+        <div class="card" style="padding: 32px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">
+                        Pending Approvals <span style="margin-left:8px; color:var(--text-muted);">${pendingCount}</span>
+                    </h3>
+                    
+                    <select id="div-filter" onchange="filterAdminTable()" 
+                        style="padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: #f3f4f6; font-weight: 600; color: var(--text-main); cursor: pointer; min-width: 180px;">
+                        <option value="ALL">All Divisions</option>
+                        ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                    </select>
+                </div>
 
-    // 3. Show Loading
-    container.innerHTML = `
-    <div style="padding:60px; text-align:center; color:var(--text-muted);">
-        <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2rem; color:var(--primary);"></i>
-        <div style="margin-top:16px; font-weight:600;">Scanning for pending requests...</div>
+                <button class="btn btn-primary" onclick="approveBulk()" style="background: #4f46e5; padding: 12px 24px; border-radius: 8px; font-weight: 700;">
+                    <i class="fa-solid fa-check-double"></i> &nbsp; Approve All Visible
+                </button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="report-table" style="width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: -12px;">
+                    <thead>
+                        <tr style="text-align: left;">
+                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">NAME</th>
+                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">DIVISION</th>
+                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">JOB TITLE</th>
+                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">MANAGER</th>
+                            <th style="padding: 12px 24px; text-align: right; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-tbody"></tbody>
+                </table>
+            </div>
+
+        </div>
     </div>`;
 
+    // 3. Render the rows
+    filterAdminTable(); 
+}
     try {
         // --- FETCH LOGIC (Same as before) ---
         let allUsers = [];
@@ -2069,6 +2101,7 @@ async function fetchAllData() {
         // --- 5. MASTER ADMIN PORTAL ---
       
       async function loadHRAdmin() {
+  async function loadHRAdmin() {
     document.getElementById('main-view').innerHTML = `
     <div class="animate-in">
         <div class="header-bar">
@@ -2078,27 +2111,29 @@ async function fetchAllData() {
             </div>
         </div>
         
-        <div class="card" style="padding: 10px; display: flex; gap: 10px; overflow-x: auto; margin-bottom: 32px; border-radius: 12px; background: white;">
-            <div class="admin-tab active" id="tab-shared" onclick="switchAdminTab('shared')">
-                <i class="fa-solid fa-bullseye"></i> &nbsp; Shared Goals
-            </div>
-            <div class="admin-tab" id="tab-directory" onclick="switchAdminTab('directory')">
-                <i class="fa-solid fa-address-book"></i> &nbsp; Directory
-            </div>
-            <div class="admin-tab" id="tab-analytics" onclick="switchAdminTab('analytics')">
-                <i class="fa-solid fa-chart-pie"></i> &nbsp; Analytics
-            </div>
-            <div class="admin-tab" id="tab-app" onclick="switchAdminTab('app')">
-                <i class="fa-solid fa-list-check"></i> &nbsp; Approvals
-            </div>
-            <div class="admin-tab" id="tab-bulk" onclick="switchAdminTab('bulk')">
-                <i class="fa-solid fa-file-csv"></i> &nbsp; Bulk Import
-            </div>
-            <div class="admin-tab" id="tab-perm" onclick="switchAdminTab('perm')">
-                <i class="fa-solid fa-shield-halved"></i> &nbsp; Admins
-            </div>
-            <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')">
-                <i class="fa-solid fa-magnifying-glass"></i> &nbsp; Search
+        <div class="card" style="padding: 0; margin-bottom: 32px; border-radius: 12px; background: white; overflow: hidden;">
+            <div style="display: flex; overflow-x: auto; border-bottom: 1px solid var(--border);">
+                <div class="admin-tab active" id="tab-shared" onclick="switchAdminTab('shared')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-bullseye"></i> <span>Shared Goals</span>
+                </div>
+                <div class="admin-tab" id="tab-directory" onclick="switchAdminTab('directory')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-address-book"></i> <span>Directory</span>
+                </div>
+                <div class="admin-tab" id="tab-analytics" onclick="switchAdminTab('analytics')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-chart-pie"></i> <span>Analytics</span>
+                </div>
+                <div class="admin-tab" id="tab-app" onclick="switchAdminTab('app')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-list-check"></i> <span>Approvals</span>
+                </div>
+                <div class="admin-tab" id="tab-bulk" onclick="switchAdminTab('bulk')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-file-csv"></i> <span>Bulk Import</span>
+                </div>
+                <div class="admin-tab" id="tab-perm" onclick="switchAdminTab('perm')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-shield-halved"></i> <span>Admins</span>
+                </div>
+                <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
+                </div>
             </div>
         </div>
 
@@ -2106,7 +2141,17 @@ async function fetchAllData() {
     </div>
     `;
     
-    // Default to Shared Goals on load, but Approvals is now accessible via click
+    // Ensure styles for the active tab match the screenshot (Blue Underline)
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .admin-tab { color: var(--text-muted); font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .admin-tab:hover { background: #f8fafc; color: var(--text-main); }
+        .admin-tab.active { color: #4f46e5; border-bottom: 3px solid #4f46e5; background: #eff6ff; }
+        .admin-tab i { font-size: 1.1rem; }
+    `;
+    document.head.appendChild(style);
+
+    // Default to Approvals if that is the focus, or Shared
     switchAdminTab('shared');
 }
 
@@ -3121,42 +3166,75 @@ function refreshGlobalAdminRating() {
     document.getElementById('admin-content').innerHTML = h;
     filterAdminTable();
 }
-     function filterAdminTable() {
+ function filterAdminTable() {
     const f = document.getElementById('div-filter').value;
     const tbody = document.getElementById('admin-tbody');
-    const myId = (user[COL.id] || '').toString(); 
-
-    // Filter results based on the dropdown (Division/Company)
+    
+    // Filter logic
     const visible = adminCache.filter(r => f === 'ALL' || (r[COL.div] || 'Other') === f);
 
     if (visible.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">No pending approvals found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">No pending approvals found.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = visible.map(r => {
-        // We still mark which one is yours with the 'ME' badge for clarity
-        const isMe = (r[COL.id].toString() === myId);
+        // Safe extractions
+        const empName = r[COL.name] || 'Unknown';
+        const empId = r[COL.id] || '';
+        const jobTitle = r[COL.job] || '-';
+        const divName = r[COL.div] || '-';
         
-        return `
-        <tr>
-            <td style="font-weight:600;">
-                ${r[COL.name]} ${isMe ? '<span class="draft-badge">ME</span>' : ''}
-            </td>
-            <td>${r[COL.div] || '-'}</td>
-            <td>${r[COL.job] || '-'}</td>
-            <td>${r[COL.mgr] || '-'}</td>
-            <td>
-                <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center;">
-                    <button class="btn btn-outline" style="padding:6px 10px; font-size:0.75rem;" onclick="loadEval('${r[COL.id]}')">View</button>
-                    
-                    <button class="btn btn-outline" style="padding:6px 10px; font-size:0.75rem; color:var(--danger); border-color:#fee2e2;" 
-                            onclick="rejectToManager('${r[COL.id]}')">Reject</button>
+        // Handle Manager Name/ID separation if stored as "Name (ID)"
+        let mgrRaw = r[COL.mgr] || '-';
+        let mgrName = mgrRaw;
+        let mgrId = '';
+        if (mgrRaw.includes('(')) {
+            mgrName = mgrRaw.split('(')[0].trim();
+            mgrId = mgrRaw.match(/\(([^)]+)\)/)?.[1] || '';
+        }
 
-                    <button class="btn btn-primary" style="padding:6px 10px; font-size:0.75rem;" onclick="approveSingle('${r[COL.id]}')">Approve</button>
+        return `
+        <tr style="background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: transform 0.2s;">
+            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; border-left: 1px solid #f3f4f6; border-radius: 12px 0 0 12px;">
+                <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${empName}</div>
+                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 4px;">(${empId})</div>
+            </td>
+
+            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
+                <span style="color: var(--text-main); font-weight: 500;">${divName}</span>
+            </td>
+
+            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
+                <span style="color: var(--text-main); font-weight: 500;">${jobTitle}</span>
+            </td>
+
+            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
+                <div style="font-weight: 600; color: var(--text-main);">${mgrName}</div>
+                ${mgrId ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 4px;">(${mgrId})</div>` : ''}
+            </td>
+
+            <td style="padding: 20px 24px; text-align: right; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; border-radius: 0 12px 12px 0; vertical-align: middle;">
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    
+                    <button onclick="loadEval('${empId}', true)" 
+                        style="background: white; border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; font-weight: 600; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
+                        View
+                    </button>
+
+                    <button onclick="rejectToManager('${empId}')" 
+                        style="background: white; border: 1px solid #fecaca; padding: 8px 16px; border-radius: 6px; font-weight: 600; color: #ef4444; cursor: pointer; transition: all 0.2s;">
+                        Reject
+                    </button>
+
+                    <button onclick="approveSingle('${empId}')" 
+                        style="background: #4f46e5; border: 1px solid #4f46e5; padding: 8px 16px; border-radius: 6px; font-weight: 600; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
+                        Approve
+                    </button>
                 </div>
             </td>
-        </tr>`;
+        </tr>
+        `;
     }).join('');
 }
         async function loadAdminSearch() {
