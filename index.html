@@ -1584,7 +1584,6 @@ const API_URL = 'https://pms-back-production-b693.up.railway.app';
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 const db = {
     from: (table) => {
-        // Helper to get headers with the token
         const getHeaders = () => {
             const token = localStorage.getItem('zpms_token');
             return {
@@ -1597,7 +1596,6 @@ const db = {
             // 1. SELECT OPERATIONS
             select: (cols) => {
                 return {
-                    // Exact Match
                     eq: (col, val) => {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
@@ -1617,45 +1615,30 @@ const db = {
                             maybeSingle: async () => { const r = await execute(); if (r.data && Array.isArray(r.data)) r.data = r.data[0]; return r; }
                         };
                     },
-                    
-                    // Range (Directory)
                     range: async (from, to) => {
                         try {
-                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
-                                headers: getHeaders()
-                            });
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, { headers: getHeaders() });
                             return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
-
-                    // Limit (Column Mapping)
                     limit: async (n) => {
-                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
-                            headers: getHeaders()
-                        });
+                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, { headers: getHeaders() });
                         return { data: await res.json(), error: null };
                     },
-
-                    // OR Filter (Team Loading)
                     or: async (filterStr) => {
                         try {
                             let allRows = [];
                             let from = 0;
                             const step = 1000;
                             let more = true;
-
                             while (more) {
-                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`, {
-                                    headers: getHeaders()
-                                });
+                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`, { headers: getHeaders() });
                                 if (!res.ok) break;
                                 const chunk = await res.json();
                                 if (!Array.isArray(chunk) || chunk.length === 0) break;
                                 allRows = allRows.concat(chunk);
-                                if (chunk.length < step) more = false;
-                                else from += step;
+                                if (chunk.length < step) more = false; else from += step;
                             }
-                            
                             const conditions = filterStr.split(',');
                             const filtered = allRows.filter(row => {
                                 return conditions.some(cond => {
@@ -1671,9 +1654,9 @@ const db = {
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
-            }, // End of Select
+            }, 
 
-            // 2. WRITE OPERATIONS
+            // 2. WRITE OPERATIONS (NOW INSIDE THE RETURN OBJECT)
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
@@ -1719,8 +1702,8 @@ const db = {
                     }
                 };
             }
-        };
-    },
+        }; // <--- THIS CLOSES THE RETURN
+    }, // <--- THIS CLOSES THE FROM
 
     // 3. RPC OPERATIONS
     rpc: async (name, params) => {
@@ -3923,20 +3906,19 @@ function filterTeamGrid() {
 
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
- try {
-        // 1. Fetch Data
+try {
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
-        // --- SAFETY CHECK (Prevents the 'split' error) ---
+        // --- ADD THIS SAFETY CHECK ---
         if (error || !data) {
-            console.error("Critical Load Error:", error);
-            
-            // If the error is 401, force logout because the token is bad
+            console.error("Load failed:", error);
+            // Prevent crash if token is invalid
             if (error && error.message && error.message.includes("401")) {
-                alert("Session expired or invalid. Please log in again.");
-                logout();
-                return;
+                localStorage.removeItem('zpms_token');
+                location.reload();
             }
+            return; // Stop execution so it doesn't hit the 'split' error
+        }
 			document.getElementById('main-view').innerHTML = `
                 <div style="text-align:center; padding:60px; color:var(--text-muted);">
                     <div style="font-size:3rem; margin-bottom:20px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i></div>
