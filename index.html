@@ -3916,6 +3916,8 @@ function filterTeamGrid() {
         // --- 9. SCORECARD ---
 async function loadEval(tid, isSearchMode = false) {
     try {
+        console.log("Loading scorecard for:", tid);
+
         // 1. Fetch Data
         const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
@@ -3923,10 +3925,10 @@ async function loadEval(tid, isSearchMode = false) {
         if (error || !data) {
             console.error("Critical Load Error:", error);
             
-            // If the error is 401 (Unauthorized), force logout
+            // If the error is 401, it means the token is bad. Log out.
             if (error && error.message && error.message.includes("401")) {
-                alert("Session expired or invalid. Please log in again.");
-                localStorage.removeItem('zpms_token'); // Clear bad token
+                console.warn("Token invalid. Logging out to fix...");
+                localStorage.clear();
                 location.reload();
                 return;
             }
@@ -3935,14 +3937,14 @@ async function loadEval(tid, isSearchMode = false) {
                 <div style="text-align:center; padding:60px; color:var(--text-muted);">
                     <div style="font-size:3rem; margin-bottom:20px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i></div>
                     <h3>Connection Failed</h3>
-                    <p>Could not retrieve employee data.</p>
-                    <button class="btn btn-outline" onclick="location.reload()">Reload Page</button>
+                    <p>Could not load user data. Please try logging in again.</p>
+                    <button class="btn btn-primary" onclick="logout()">Go to Login</button>
                 </div>`;
-            return;
+            return; // <--- STOP EXECUTION HERE
         }
         // ----------------------------------------
 
-        // 2. Setup Context Variables
+        // 2. Setup Context Variables (Now safe to proceed)
         targetUser = data;
         const uRole = getRole(user);
         const myId = (user[COL.id] || '').toString();
@@ -3951,7 +3953,7 @@ async function loadEval(tid, isSearchMode = false) {
 
         // Manager Detection Logic
         const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
-        const myName = (user[COL.name] || "").toString().toLowerCase();
+        const myName = (user[COL.name] || "").toString().toLowerCase(); // <--- This line caused the error before
         isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()) || (myName.length > 3 && mgrStr.includes(myName)));
         
         // Admin acts as Manager only if not viewing themselves
@@ -3961,7 +3963,6 @@ async function loadEval(tid, isSearchMode = false) {
         const w = getW(data[COL.lvl], data[COL.job]);
         let userGoals = targetUser[COL.goals];
         
-        // Robust JSON parsing for goals
         if (typeof userGoals === 'string') { 
             try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } 
         }
@@ -3983,7 +3984,7 @@ async function loadEval(tid, isSearchMode = false) {
         
         if (isSearchMode) canEdit = false;
 
-        // --- VISIBILITY RULE: Only show scores if 'Published' or if user is Reviewer ---
+        // --- VISIBILITY RULE ---
         const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
 
         // 4. UI Preparation (Manager Name, Company)
@@ -3997,7 +3998,7 @@ async function loadEval(tid, isSearchMode = false) {
         if (mName.includes('(')) mName = mName.split('(')[0].trim();
         let comp = getCompany(data[COL.id]);
 
-        // 5. Construct HTML
+        // 5. Construct HTML (Scorecard UI)
         let h = `
         <div class="animate-in">
             <div class="header-bar">
@@ -4078,7 +4079,7 @@ async function loadEval(tid, isSearchMode = false) {
                     <p style="color:var(--text-muted); font-size:1.1rem; max-width:500px; margin:0 auto;">The employee has not submitted their scorecard yet.</p>
                 </div>`;
         } else {
-            // SHARED GOALS SECTION
+            // SHARED GOALS
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
@@ -4115,7 +4116,7 @@ async function loadEval(tid, isSearchMode = false) {
                 </div>`;
             }
 
-            // INDIVIDUAL GOALS SECTION
+            // INDIVIDUAL GOALS
             if (w.i > 0) {
                 h += `
                 <div class="animate-in" style="animation-delay: 0.2s;">
@@ -4133,7 +4134,7 @@ async function loadEval(tid, isSearchMode = false) {
             }
         }
 
-        // 6. Footer & Actions Logic
+        // Footer Actions
         h += `<div style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px;">`;
 
         if (canEdit) {
@@ -4158,7 +4159,6 @@ async function loadEval(tid, isSearchMode = false) {
 
         render(h);
 
-        // 7. Render Goals & Score Masking
         if (w.i > 0 && !managerBlocked) renderGoals(canEdit);
         calc();
 
@@ -4171,9 +4171,7 @@ async function loadEval(tid, isSearchMode = false) {
         }
 
     } catch (err) {
-        // --- THIS IS THE MISSING PART FROM YOUR PREVIOUS ERROR ---
         console.error("Critical Runtime Error:", err);
-        alert("An unexpected error occurred. Please refresh.");
     }
 }
 async function rejectToManager(id) {
