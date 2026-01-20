@@ -1575,8 +1575,7 @@
 
     <script>
         // ... existing variables ...
-let user, targetUser; 
-let tempToken = null; // <--- ADD THIS LINE HERE
+
 // --- 1. SECURE CONFIGURATION ---
 // --- 1. SECURE CONFIGURATION ---
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
@@ -1835,6 +1834,7 @@ function resendOTP() {
         let adminCache = [];
         let allCompanyData = [];
         let globalReports = [];
+		let tempToken = null;
 
         // --- 2. INIT ---
         window.onload = async function () {
