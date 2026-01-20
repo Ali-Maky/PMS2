@@ -1833,9 +1833,7 @@ function resendOTP() {
     } else {
         showLogin();
     }
-}
-			
-            if (sg && sg.data) {
+        if (sg && sg.data) {
                 if (Array.isArray(sg.data)) masterData = { rating: 0, goals: sg.data }; else masterData = sg.data;
             } else { masterData = { rating: 0, goals: [] }; }
 
