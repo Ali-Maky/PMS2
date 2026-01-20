@@ -3129,26 +3129,25 @@ function refreshGlobalAdminRating() {
     document.getElementById('admin-content').innerHTML = h;
     filterAdminTable();
 }
- function filterAdminTable() {
+function filterAdminTable() {
     const f = document.getElementById('div-filter').value;
     const tbody = document.getElementById('admin-tbody');
     
-    // Filter logic
+    // Filter logic based on global cache and dropdown selection
     const visible = adminCache.filter(r => f === 'ALL' || (r[COL.div] || 'Other') === f);
 
     if (visible.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">No pending approvals found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-style:italic;">No pending approvals found for this selection.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = visible.map(r => {
-        // Safe extractions
         const empName = r[COL.name] || 'Unknown';
         const empId = r[COL.id] || '';
         const jobTitle = r[COL.job] || '-';
         const divName = r[COL.div] || '-';
         
-        // Handle Manager Name/ID separation if stored as "Name (ID)"
+        // Parse Manager Name and ID
         let mgrRaw = r[COL.mgr] || '-';
         let mgrName = mgrRaw;
         let mgrId = '';
@@ -3158,46 +3157,50 @@ function refreshGlobalAdminRating() {
         }
 
         return `
-        <tr style="background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: transform 0.2s;">
-            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; border-left: 1px solid #f3f4f6; border-radius: 12px 0 0 12px;">
-                <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${empName}</div>
-                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 4px;">(${empId})</div>
+        <tr style="background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;">
+            
+            <td style="padding: 20px 24px; border: 1px solid var(--border); border-right: none; border-radius: 12px 0 0 12px; vertical-align: middle;">
+                <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">${empName}</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">(${empId})</div>
             </td>
 
-            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
-                <span style="color: var(--text-main); font-weight: 500;">${divName}</span>
+            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
+                <span style="color: var(--text-main); font-weight: 600; font-size: 0.9rem;">${divName}</span>
             </td>
 
-            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
-                <span style="color: var(--text-main); font-weight: 500;">${jobTitle}</span>
+            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
+                <span style="color: var(--text-main); font-weight: 500; font-size: 0.9rem;">${jobTitle}</span>
             </td>
 
-            <td style="padding: 20px 24px; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; vertical-align: middle;">
-                <div style="font-weight: 600; color: var(--text-main);">${mgrName}</div>
-                ${mgrId ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 4px;">(${mgrId})</div>` : ''}
+            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
+                <div style="font-weight: 600; color: var(--text-main); font-size: 0.9rem;">${mgrName}</div>
+                ${mgrId ? `<div style="font-size: 0.75rem; color: var(--text-light); margin-top: 4px;">(${mgrId})</div>` : ''}
             </td>
 
-            <td style="padding: 20px 24px; text-align: right; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; border-radius: 0 12px 12px 0; vertical-align: middle;">
+            <td style="padding: 20px 24px; border: 1px solid var(--border); border-left: none; border-radius: 0 12px 12px 0; text-align: right; vertical-align: middle;">
                 <div style="display: flex; gap: 8px; justify-content: flex-end;">
                     
                     <button onclick="loadEval('${empId}', true)" 
-                        style="background: white; border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; font-weight: 600; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
+                        style="background: white; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-weight: 700; color: var(--text-main); cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
                         View
                     </button>
 
                     <button onclick="rejectToManager('${empId}')" 
-                        style="background: white; border: 1px solid #fecaca; padding: 8px 16px; border-radius: 6px; font-weight: 600; color: #ef4444; cursor: pointer; transition: all 0.2s;">
+                        style="background: white; border: 1px solid #fee2e2; padding: 8px 16px; border-radius: 8px; font-weight: 700; color: #ef4444; cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='white'">
                         Reject
                     </button>
 
                     <button onclick="approveSingle('${empId}')" 
-                        style="background: #4f46e5; border: 1px solid #4f46e5; padding: 8px 16px; border-radius: 6px; font-weight: 600; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
+                        style="background: #4f46e5; border: 1px solid #4f46e5; padding: 8px 16px; border-radius: 8px; font-weight: 700; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);"
+                        onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
                         Approve
                     </button>
+
                 </div>
             </td>
-        </tr>
-        `;
+        </tr>`;
     }).join('');
 }
         async function loadAdminSearch() {
