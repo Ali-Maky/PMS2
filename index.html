@@ -2121,9 +2121,15 @@ async function fetchAllData() {
         }
     }
 
-    // Final UI Cleanup
-    if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
-    return allRows;
+   if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
+    
+    // --- SAVE TO CACHE ---
+    if (allRows.length > 0) {
+        try {
+            localStorage.setItem('zpms_data_cache', JSON.stringify(allRows));
+        } catch (e) {
+            console.warn("Cache full, could not save offline data.");
+        }
 }
 
 function getCompany(id) {
@@ -2147,37 +2153,62 @@ function getCompany(id) {
 
     return "Other";
 }
-        async function launchApp() {
-            document.getElementById('loading-overlay').classList.add('hidden');
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-container').style.display = 'flex';
-            document.getElementById('disp-user').innerText = user[COL.name];
-            document.getElementById('disp-role').innerText = user[COL.lvl];
+   async function launchApp() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-container').style.display = 'flex';
+    document.getElementById('disp-user').innerText = user[COL.name];
+    document.getElementById('disp-role').innerText = user[COL.lvl];
 
-            if (allCompanyData.length === 0) {
-                document.getElementById('save-text').innerText = "Syncing directory...";
-                document.getElementById('save-status').classList.add('show');
-                allCompanyData = await fetchAllData();
-                document.getElementById('save-status').classList.remove('show');
-            }
-
-            let hasReports = false;
-            const myId = user[COL.id].toString().toLowerCase();
-            const myName = (user[COL.name] || "").toString().toLowerCase();
-
-            hasReports = allCompanyData.some(u => {
-                const m = (u[COL.mgr] || "").toString().toLowerCase();
-                return m.includes(myId) || (myName.length > 3 && m.includes(myName));
-            });
-
-            const role = getRole(user, hasReports);
-            renderNav(role);
-
-            if (role === 'Admin' || role === 'Master') loadHRAdmin();
-            else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
-            else if (role === 'Manager') loadTeam();
-            else loadEval(user[COL.id]);
+    // --- SPEED OPTIMIZATION START ---
+    // 1. Try to load from local memory first (Instant Load)
+    const cachedData = localStorage.getItem('zpms_data_cache');
+    if (cachedData) {
+        try {
+            allCompanyData = JSON.parse(cachedData);
+            console.log("Loaded from cache:", allCompanyData.length);
+        } catch (e) {
+            console.error("Cache corrupted, reloading...");
         }
+    }
+
+    // 2. If memory is empty, fetch from server (Blocking)
+    if (allCompanyData.length === 0) {
+        document.getElementById('save-text').innerText = "Syncing directory...";
+        document.getElementById('save-status').classList.add('show');
+        allCompanyData = await fetchAllData(); // Downloads and saves to cache
+        document.getElementById('save-status').classList.remove('show');
+    } else {
+        // 3. If memory had data, refresh it in the BACKGROUND (Silent Update)
+        // This ensures you have fresh data without making the user wait
+        setTimeout(() => {
+            fetchAllData().then(freshData => {
+                if (freshData.length > 0) {
+                    allCompanyData = freshData;
+                    console.log("Background sync finished");
+                }
+            });
+        }, 2000);
+    }
+    // --- SPEED OPTIMIZATION END ---
+
+    let hasReports = false;
+    const myId = user[COL.id].toString().toLowerCase();
+    const myName = (user[COL.name] || "").toString().toLowerCase();
+
+    hasReports = allCompanyData.some(u => {
+        const m = (u[COL.mgr] || "").toString().toLowerCase();
+        return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+    });
+
+    const role = getRole(user, hasReports);
+    renderNav(role);
+
+    if (role === 'Admin' || role === 'Master') loadHRAdmin();
+    else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
+    else if (role === 'Manager') loadTeam();
+    else loadEval(user[COL.id]);
+}
 
         function triggerImport() { document.getElementById('file-import').click(); }
 
