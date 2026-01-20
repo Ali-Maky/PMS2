@@ -1784,7 +1784,116 @@ const db = {
                 if (roleCol) COL.role = roleCol;
             }
         }
+async function loadHRApprovals() {
+    // 1. Target the content area
+    // Try to find the specific tab content container. 
+    // If your HTML uses 'admin-tab-content', use that. Otherwise, fall back to 'admin-content' or a generic container.
+    let container = document.getElementById('admin-tab-content');
+    if (!container) container = document.querySelector('.admin-content'); // Fallback
+    if (!container) return; // Safety check
 
+    // 2. Show Loading State
+    container.innerHTML = `
+    <div style="padding:60px; text-align:center; color:var(--text-muted);">
+        <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2rem; color:var(--primary);"></i>
+        <div style="margin-top:16px; font-weight:600;">Scanning entire database for pending requests...</div>
+    </div>`;
+
+    try {
+        // 3. THE FETCH LOOP (Gets EVERYONE, 1000 at a time)
+        let allUsers = [];
+        let from = 0;
+        const step = 1000;
+        let more = true;
+
+        while (more) {
+            // Fetch batch
+            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
+            if (!res.ok) break;
+            
+            const chunk = await res.json();
+            
+            if (!Array.isArray(chunk) || chunk.length === 0) break;
+
+            allUsers = allUsers.concat(chunk);
+
+            // Check if we reached the end
+            if (chunk.length < step) {
+                more = false;
+            } else {
+                from += step;
+            }
+        }
+
+        // 4. FILTER: Find only "Submitted to HR"
+        // Note: We filter LOCALLY because we need to check everyone anyway
+        const pending = allUsers.filter(u => u[COL.stat] === 'Submitted to HR');
+
+        // 5. RENDER RESULT
+        if (pending.length === 0) {
+            container.innerHTML = `
+            <div class="card" style="border:1px solid var(--border); box-shadow:none;">
+                <div style="padding:20px; border-bottom:1px solid var(--border);">
+                    <h3 style="margin:0; font-size:1.1rem;">Pending Approvals</h3>
+                </div>
+                <div style="padding:60px; text-align:center; color:var(--text-muted);">
+                    <i class="fa-solid fa-clipboard-check" style="font-size:2.5rem; margin-bottom:16px; opacity:0.3;"></i>
+                    <div>No pending approvals found.</div>
+                </div>
+            </div>`;
+            return;
+        }
+
+        // Render Table if data exists
+        let html = `
+        <div class="card" style="border:1px solid var(--border); box-shadow:none;">
+            <div style="padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:1.1rem; display:flex; align-items:center; gap:10px;">
+                    Pending Approvals 
+                    <span style="background:var(--primary); color:white; padding:2px 10px; border-radius:12px; font-size:0.8rem;">${pending.length}</span>
+                </h3>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#f9fafb; border-bottom:1px solid var(--border); text-align:left;">
+                            <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Employee</th>
+                            <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Division</th>
+                            <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Manager</th>
+                            <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${pending.map(u => {
+                            // Clean Manager Name
+                            let mgr = u[COL.mgr] || '-';
+                            if (mgr.includes('(')) mgr = mgr.split('(')[0].trim();
+                            
+                            return `
+                            <tr style="border-bottom:1px solid var(--border); transition:0.2s; cursor:pointer;" onclick="loadEval('${u[COL.id]}', true)">
+                                <td style="padding:16px 20px;">
+                                    <div style="font-weight:700; color:var(--text-main);">${u[COL.name].split('(')[0]}</div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted);">${u[COL.id]}</div>
+                                </td>
+                                <td style="padding:16px 20px; font-size:0.9rem;">${u[COL.div] || '-'}</td>
+                                <td style="padding:16px 20px; font-size:0.9rem;">${mgr}</td>
+                                <td style="padding:16px 20px; text-align:right;">
+                                    <button class="btn btn-primary" style="padding:6px 16px; font-size:0.85rem;">Review</button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger);">Error loading data: ${e.message}</div>`;
+    }
+}
         async function restoreSession(id) {
             const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
             if (data) { user = data; startIdleTimer(); launchApp(); } else showLogin();
@@ -2004,7 +2113,8 @@ async function fetchAllData() {
         }
 
         function switchAdminTab(t) {
-            document.querySelectorAll('.admin-tab').forEach(e => e.classList.remove('active'));
+            document.querySelectorAll('.admin-nav-item').forEach(btn => {
+        btn.classList.remove('active')
             document.getElementById('tab-' + t).classList.add('active');
             if (t === 'shared') loadAdminSharedGoals();
             else if (t === 'directory') loadAdminDirectory();
@@ -2013,6 +2123,7 @@ async function fetchAllData() {
             else if (t === 'analytics') loadAdminAnalytics();
             else if (t === 'bulk') loadAdminBulk();
             else if (t === 'perm') loadAdminPerms();
+		    else if (t === 'approvals') loadHRApprovals();
         }
 
         // --- DIRECTORY TAB (ADD/EDIT/DELETE USERS) ---
