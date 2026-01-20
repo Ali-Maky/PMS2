@@ -1594,6 +1594,7 @@ const db = {
         };
 
         return {
+            // 1. SELECT OPERATIONS
             select: (cols) => {
                 return {
                     // 1. Exact Match
@@ -1671,6 +1672,71 @@ const db = {
                     }
                 };
             },
+            
+            // 2. WRITE OPERATIONS (Moved inside 'from' return object)
+            upsert: async (payload) => {
+                 const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
+                 const res = await fetch(`${API_URL}?action=${action}`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ payload: payload }) 
+                });
+                return { error: res.ok ? null : { message: "Save failed" } };
+            },
+
+            update: (payload) => {
+                return {
+                    eq: async (col, val) => {
+                        const res = await fetch(`${API_URL}?action=saveUser`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ id: val, payload: payload })
+                        });
+                        return { error: res.ok ? null : { message: "Update failed" } };
+                    },
+                    in: async (col, valArray) => {
+                         for (const id of valArray) {
+                             await fetch(`${API_URL}?action=saveUser`, {
+                                method: 'POST',
+                                headers: getHeaders(),
+                                body: JSON.stringify({ id: id, payload: payload })
+                            });
+                         }
+                         return { error: null };
+                    }
+                };
+            },
+
+            delete: () => {
+                return {
+                    eq: async (col, val) => {
+                        const res = await fetch(`${API_URL}?action=deleteUser`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ id: val })
+                        });
+                        return { error: res.ok ? null : { message: "Delete failed" } };
+                    }
+                };
+            }
+        };
+    },
+
+    // 3. RPC OPERATIONS (Sibling of 'from')
+    rpc: async (name, params) => {
+        if (name === 'publish_goals') {
+             const res = await fetch(`${API_URL}?action=rpcPublish`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}`
+                },
+                body: JSON.stringify({ payload: params })
+            });
+            return { error: res.ok ? null : { message: "RPC failed" } };
+        }
+    }
+};
             
             // Handle Writes
             upsert: async (payload) => {
