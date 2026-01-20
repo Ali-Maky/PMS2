@@ -184,16 +184,27 @@
             if (data && data.length > 0) { user = data[0]; launchApp(); } else showLogin();
         }
 
-        function launchApp() {
-            document.getElementById('loading-overlay').classList.add('hidden');
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-container').style.display = 'flex';
-            document.getElementById('disp-user').innerText = user[COL.name];
-            document.getElementById('disp-role').innerText = user[COL.lvl];
-            document.getElementById('nav-menu').innerHTML = `<div class="nav-item active"><i class="fa-solid fa-address-card"></i> <span>Dashboard</span></div>`;
-            document.getElementById('main-view').innerHTML = `<h2>Welcome back, ${user.name}!</h2>`;
-        }
+     function launchApp() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-container').style.display = 'flex';
 
+    // This chain tries the mapped name, then the raw 'name' field, then 'id'
+    const displayName = user[COL.name] || user.name || user.id || "User";
+
+    // Update sidebar
+    document.getElementById('disp-user').innerText = displayName;
+    document.getElementById('disp-role').innerText = user[COL.lvl] || user.level || "Staff";
+    
+    // Update main dashboard area
+    document.getElementById('nav-menu').innerHTML = `<div class="nav-item active"><i class="fa-solid fa-address-card"></i> <span>Dashboard</span></div>`;
+    document.getElementById('main-view').innerHTML = `
+        <div style="padding: 20px;">
+            <h2 style="font-size: 2rem; color: var(--text-main);">Welcome back, ${displayName}!</h2>
+            <p style="color: var(--text-muted);">You are logged in as ${user[COL.job] || user.job || 'Team Member'}.</p>
+        </div>
+    `;
+}
         function logout() { localStorage.clear(); location.reload(); }
     </script>
 </body>
