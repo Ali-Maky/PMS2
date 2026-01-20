@@ -1580,7 +1580,7 @@
 // --- 1. SECURE CONFIGURATION ---
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
 
-// --- 2. THE BRIDGE (Connects Frontend to PHP) ---
+// --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 const db = {
     from: (table) => {
@@ -1589,7 +1589,7 @@ const db = {
             const token = localStorage.getItem('zpms_token');
             return {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // <--- THE KEY TO UNLOCKING THE BACKEND
+                'Authorization': `Bearer ${token}` 
             };
         };
 
@@ -1601,8 +1601,6 @@ const db = {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
                             try {
-                                // For checkID (Login check), we might not have a token yet, 
-                                // but standard lookups need it.
                                 const res = await fetch(`${API_URL}?action=${action}`, {
                                     method: 'POST',
                                     headers: getHeaders(),
@@ -1619,25 +1617,25 @@ const db = {
                         };
                     },
                     
-                    // 2. Range (Directory) - NOW SECURE
+                    // 2. Range (Directory)
                     range: async (from, to) => {
                         try {
                             const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
-                                headers: getHeaders() // <--- Added Header
+                                headers: getHeaders()
                             });
                             return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
 
-                    // 3. Limit (Column Mapping) - NOW SECURE
+                    // 3. Limit (Column Mapping)
                     limit: async (n) => {
                         const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
-                            headers: getHeaders() // <--- Added Header
+                            headers: getHeaders()
                         });
                         return { data: await res.json(), error: null };
                     },
 
-                    // 4. OR Filter (Team Loading) - NOW SECURE
+                    // 4. OR Filter (Team Loading)
                     or: async (filterStr) => {
                         try {
                             let allRows = [];
@@ -1647,7 +1645,7 @@ const db = {
 
                             while (more) {
                                 const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`, {
-                                    headers: getHeaders() // <--- Added Header
+                                    headers: getHeaders()
                                 });
                                 if (!res.ok) break;
                                 const chunk = await res.json();
@@ -1657,7 +1655,6 @@ const db = {
                                 else from += step;
                             }
                             
-                            // Client-side filtering logic remains the same
                             const conditions = filterStr.split(',');
                             const filtered = allRows.filter(row => {
                                 return conditions.some(cond => {
@@ -1675,12 +1672,12 @@ const db = {
                 };
             },
             
-            // Handle Writes - NOW SECURE
+            // Handle Writes
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
                     method: 'POST',
-                    headers: getHeaders(), // <--- Added Header
+                    headers: getHeaders(),
                     body: JSON.stringify({ payload: payload }) 
                 });
                 return { error: res.ok ? null : { message: "Save failed" } };
@@ -1691,17 +1688,16 @@ const db = {
                     eq: async (col, val) => {
                         const res = await fetch(`${API_URL}?action=saveUser`, {
                             method: 'POST',
-                            headers: getHeaders(), // <--- Added Header
+                            headers: getHeaders(),
                             body: JSON.stringify({ id: val, payload: payload })
                         });
                         return { error: res.ok ? null : { message: "Update failed" } };
                     },
                     in: async (col, valArray) => {
-                         // Loop or bulk update logic
                          for (const id of valArray) {
                              await fetch(`${API_URL}?action=saveUser`, {
                                 method: 'POST',
-                                headers: getHeaders(), // <--- Added Header
+                                headers: getHeaders(),
                                 body: JSON.stringify({ id: id, payload: payload })
                             });
                          }
@@ -1715,7 +1711,7 @@ const db = {
                     eq: async (col, val) => {
                         const res = await fetch(`${API_URL}?action=deleteUser`, {
                             method: 'POST',
-                            headers: getHeaders(), // <--- Added Header
+                            headers: getHeaders(),
                             body: JSON.stringify({ id: val })
                         });
                         return { error: res.ok ? null : { message: "Delete failed" } };
@@ -1730,7 +1726,7 @@ const db = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}` // <--- Added Header
+                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}`
                 },
                 body: JSON.stringify({ payload: params })
             });
