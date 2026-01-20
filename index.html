@@ -4100,7 +4100,7 @@ async function loadEval(tid, isSearchMode = false) {
         alert("Unexpected error: " + err.message);
     }
 }
-    async function rejectToManager(id) {
+async function rejectToManager(id) {
     showConfirm(
         "Return to Manager", 
         "This will move the scorecard back to 'Submitted to Manager' for editing. Continue?", 
@@ -4119,28 +4119,20 @@ async function loadEval(tid, isSearchMode = false) {
             } else {
                 showToast("Returned to Manager", 'success');
 
-                // 2. Update Global Memory (Fixes Tab Switching)
+                // 2. Update Global Memory
                 const globalItem = allCompanyData.find(u => u[COL.id] == id);
                 if (globalItem) globalItem[COL.stat] = 'Submitted to Manager';
 
-                // 3. Update Admin Cache (Fixes Current View)
+                // 3. Update Admin Cache
                 // We filter it OUT because "Submitted to Manager" does not belong in the Admin Queue
-                adminCache = adminCache.filter(u => u[COL.id] != id);
-
-                // 4. Refresh Table
-                filterAdminTable();
-                
-                // 5. Update Badge Count (Optional polish)
-                const badge = document.querySelector('.card h3 span');
-                if(badge) badge.innerText = adminCache.filter(u => u[COL.stat] === 'Submitted to HR').length; // Or total length based on your preference
-            }
-            showSaved();
-        }
-    );
-}
+                if (typeof adminCache !== 'undefined' && Array.isArray(adminCache)) {
+                    adminCache = adminCache.filter(u => u[COL.id] != id);
+                    // Refresh Table
+                    if (typeof filterAdminTable === 'function') filterAdminTable();
+                }
 
                 // 4. Handle "Detailed View" Scenario
-                // If we are currently looking at the scorecard (not the list), go back to the list
+                // If we are currently looking at the scorecard (not the list), reload view or go back
                 if (typeof targetUser !== 'undefined' && targetUser && targetUser[COL.id] === id) {
                     const myRole = getRole(user);
                     if (['Admin', 'Master'].includes(myRole)) {
@@ -4153,6 +4145,7 @@ async function loadEval(tid, isSearchMode = false) {
                     }
                 }
             }
+            showSaved();
         }
     );
 }
