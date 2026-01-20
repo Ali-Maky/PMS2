@@ -592,8 +592,12 @@
 // --- RESTORED: MANAGEMENT REPORTS & ANALYTICS ---
 
 // Helper to recursively find all employees under a manager (Downstream)
+// --- RESTORED: MANAGEMENT LIVE REPORTS ---
+
+// Helper: Recursively find all employees under a manager (Grandchildren, Great-grandchildren, etc.)
 function getDownstream(rootId, allData) {
     let team = [];
+    // Case-insensitive check for manager ID match
     const direct = allData.filter(u => (u[COL.mgr] || "").toString().toLowerCase().includes(rootId.toString().toLowerCase()));
     
     direct.forEach(d => {
@@ -606,21 +610,21 @@ function getDownstream(rootId, allData) {
 }
 
 async function loadReports() {
-    // 1. Loading State
+    // 1. UI Loading State
     document.getElementById('main-view').innerHTML = `
         <div style="height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; color:var(--text-muted);">
-            <div class="spinner" style="border-width:3px; width:30px; height:30px;"></div>
-            <div style="margin-top:10px; font-weight:600; font-size:0.9rem;">Generating Performance Report...</div>
+            <div class="spinner"></div>
+            <div style="margin-top:10px; font-weight:600;">Generating Live Report...</div>
         </div>`;
 
     // 2. Ensure Data is Fresh
     if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
 
-    // 3. Identify Context
+    // 3. Identify Context (Who am I?)
     const myId = user[COL.id].toString().toLowerCase();
     const myName = user[COL.name].toString().toLowerCase();
 
-    // Direct Reports (Immediate Team)
+    // A. Direct Reports (Immediate Team)
     let directReports = allCompanyData.filter(u => {
         const m = (u[COL.mgr] || "").toString().toLowerCase();
         return m.includes(myId) || (myName.length > 3 && m.includes(myName));
@@ -631,34 +635,36 @@ async function loadReports() {
         return;
     }
 
-    // Total Org (Recursive Downstream)
+    // B. Total Org (Recursive Downstream for Directors/Chiefs)
     let totalOrg = getDownstream(user[COL.id], allCompanyData);
+    // Only show the 2nd chart if there is a deeper hierarchy
     let showOrgChart = (totalOrg.length > directReports.length);
 
-    // 4. Calculation Helper (Distribution of ratings)
+    // 4. Calculation Helper (Bucketing scores into 1-6)
     const calcDist = (list) => {
-        let d = [0, 0, 0, 0, 0, 0]; // IDLE to ASTRONAUT
+        let d = [0, 0, 0, 0, 0, 0]; // Index 0=IDLE ... 5=ASTRONAUT
         list.forEach(u => {
             let g = u[COL.goals] || [];
             if (typeof g === 'string') try { g = JSON.parse(g); } catch (e) { g = []; }
+            if (!Array.isArray(g)) g = [];
             
-            const w = getW(u[COL.lvl], u[COL.job]);
-            const globalR = masterData.rating || 0;
+            const w = getW(u[COL.lvl], u[COL.job]); // Get weights (Shared vs Indiv)
+            const globalR = masterData.rating || 0; // Get Company Rating
             
             // Calculate Score
             let sScore = globalR * (w.s / 100);
             let iScore = 0;
-            if(Array.isArray(g)) g.forEach(x => iScore += (Number(x.rating)||0) * (Number(x.weight)||0));
+            g.forEach(x => iScore += (Number(x.rating)||0) * (Number(x.weight)||0));
             
             let total = sScore + (iScore * (w.i / 100));
             
-            // Map to bucket
+            // Map total score to Bucket Index
             let b = 0;
-            if (total >= 5.5) b = 5; 
-            else if (total >= 4.5) b = 4; 
-            else if (total >= 3.5) b = 3; 
-            else if (total >= 2.5) b = 2; 
-            else if (total >= 1.5) b = 1;
+            if (total >= 5.5) b = 5; // Astronaut
+            else if (total >= 4.5) b = 4; // Flyer
+            else if (total >= 3.5) b = 3; // Runner
+            else if (total >= 2.5) b = 2; // Walker
+            else if (total >= 1.5) b = 1; // Stagnant
             d[b]++;
         });
         return d;
@@ -667,13 +673,13 @@ async function loadReports() {
     const distDirect = calcDist(directReports);
     const distOrg = showOrgChart ? calcDist(totalOrg) : null;
 
-    // 5. Render View
+    // 5. Render HTML View
     let h = `
     <div class="animate-in">
         <div class="header-bar">
             <div>
                 <h2 class="page-title">Performance Report</h2>
-                <p class="page-sub">Analytics & Distribution</p>
+                <p class="page-sub">Live Analytics & Distribution</p>
             </div>
             <button class="btn btn-primary" onclick="loadReports()"><i class="fa-solid fa-rotate"></i> Refresh</button>
         </div>
@@ -700,7 +706,7 @@ async function loadReports() {
                         <tr>
                             <td style="font-weight:600;">${r[COL.name]}</td>
                             <td>${r[COL.job] || '-'}</td>
-                            <td><span class="status-badge ${r[COL.stat] === 'Approved' ? 'approved' : 'submitted'}">${r[COL.stat] || 'Draft'}</span></td>
+                            <td style="text-align:right;"><span class="status-badge ${r[COL.stat] === 'Approved' ? 'approved' : 'submitted'}">${r[COL.stat] || 'Draft'}</span></td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -710,20 +716,46 @@ async function loadReports() {
 
     document.getElementById('main-view').innerHTML = h;
 
-    // 6. Init Charts
+    // 6. Initialize Charts (Chart.js)
     if (window.chart1) window.chart1.destroy();
-    window.chart1 = new Chart(document.getElementById('chartDirect'), { 
+    const ctx1 = document.getElementById('chartDirect').getContext('2d');
+    window.chart1 = new Chart(ctx1, { 
         type: 'bar', 
-        data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Direct Reports', data: distDirect, backgroundColor: '#592C82', borderRadius: 4 }] },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
+        data: { 
+            labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], 
+            datasets: [{ 
+                label: 'Direct Reports', 
+                data: distDirect, 
+                backgroundColor: '#592C82', 
+                borderRadius: 4 
+            }] 
+        },
+        options: { 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } }, 
+            scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } 
+        }
     });
 
     if (showOrgChart) {
         if (window.chartOrg) window.chartOrg.destroy();
-        window.chartOrg = new Chart(document.getElementById('chartOrg'), { 
+        const ctx2 = document.getElementById('chartOrg').getContext('2d');
+        window.chartOrg = new Chart(ctx2, { 
             type: 'bar', 
-            data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Total Org', data: distOrg, backgroundColor: '#10b981', borderRadius: 4 }] },
-            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
+            data: { 
+                labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], 
+                datasets: [{ 
+                    label: 'Total Org', 
+                    data: distOrg, 
+                    backgroundColor: '#10b981', 
+                    borderRadius: 4 
+                }] 
+            },
+            options: { 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } 
+            }
         });
     }
 }
@@ -1375,7 +1407,7 @@ async function loadReports() {
          h += `<div class="nav-item" onclick="loadHRAdmin()"><i class="fa-solid fa-user-shield"></i> <span>HR Admin</span></div>`;
      }
      
-     // 2. Management Section (Added Reports Back)
+     // 2. Management Section
      if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) {
          h += `<div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding:16px 12px 8px 12px; margin-top:8px;">Management</div>`;
          h += `<div class="nav-item" onclick="loadTeam()"><i class="fa-solid fa-users"></i> <span>My Team</span></div>`;
