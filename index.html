@@ -1577,7 +1577,17 @@
         
 // --- 1. SECURE CONFIGURATION ---
 // --- 1. SECURE CONFIGURATION ---
+// REPLACE THIS with your actual Railway PHP URL
 const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
+
+// REPLACE THIS with the "API_SECRET" you set in Railway Variables
+const API_KEY = 'ZainSecurev1_9928374'; 
+
+// Shared Headers Helper (Ensures every request is authorized)
+const API_HEADERS = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': API_KEY 
+};
 
 // --- 2. THE BRIDGE (Connects Frontend to PHP) ---
 const db = {
@@ -1592,10 +1602,10 @@ const db = {
                             try {
                                 const res = await fetch(`${API_URL}?action=${action}`, {
                                     method: 'POST', 
-                                    headers: {'Content-Type': 'application/json'},
+                                    headers: API_HEADERS,
                                     body: JSON.stringify({ id: val }) 
                                 });
-                                if (!res.ok) return { data: null, error: { message: "Server Error" } };
+                                if (!res.ok) return { data: null, error: { message: "Server Error: " + res.status } };
                                 return { data: await res.json(), error: null };
                             } catch (e) { return { data: null, error: e }; }
                         };
@@ -1603,6 +1613,7 @@ const db = {
                             then: (resolve, reject) => execute().then(resolve, reject),
                             single: async () => {
                                 const r = await execute();
+                                // Backend checkID/getSettings already returns a single object, but we ensure safety
                                 if (r.data && Array.isArray(r.data)) r.data = r.data.length ? r.data[0] : null;
                                 return r; 
                             },
@@ -1614,58 +1625,39 @@ const db = {
                         };
                     },
                     
-                    // 2. Range (Directory)
+                    // 2. Range (Directory) - Note: This just wraps the fetchAll logic if called via db
                     range: async (from, to) => {
                         try {
-                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`);
+                            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
+                                headers: API_HEADERS
+                            });
                             return { data: await res.json(), error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
 
                     // 3. Limit (Column Mapping)
                     limit: async (n) => {
-                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`);
+                        const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
+                            headers: API_HEADERS
+                        });
                         return { data: await res.json(), error: null };
                     },
 
-                    // 4. OR Filter (Team Loading)
-                   // 4. OR Filter (Team Loading) - UPDATED WITH PAGINATION LOOP
+                    // 4. OR Filter (Team Loading - Client Side Filtering)
+                    // Since backend fetchAll is secured, we fetch all and filter in memory for complex logic
                     or: async (filterStr) => {
                         try {
-                            let allRows = [];
-                            let from = 0;
-                            const step = 1000; // Supabase default limit
-                            let more = true;
-
-                            // LOOP: Keep fetching pages until we run out of data
-                            while (more) {
-                                // Fetch the next page
-                                const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}`);
-                                if (!res.ok) break;
-
-                                const chunk = await res.json();
-                                
-                                if (!Array.isArray(chunk) || chunk.length === 0) {
-                                    break; // Stop if no data returned
-                                }
-
-                                allRows = allRows.concat(chunk);
-
-                                // If we got less than a full page, we are at the end
-                                if (chunk.length < step) {
-                                    more = false;
-                                } else {
-                                    // Prepare for next page
-                                    from += step;
-                                }
+                            // Reuse the robust fetchAllData logic if possible, or do a simplified fetch
+                            // For safety, we fetch the relevant rows. Ideally, fetchAllData() is used instead.
+                            // This implements a basic filter on the full dataset for compatibility.
+                            if (typeof allCompanyData === 'undefined' || allCompanyData.length === 0) {
+                                return { data: [], error: { message: "Data not synced" } };
                             }
                             
-                            // Now 'allRows' contains EVERYONE (e.g., 2500+ users)
-                            
-                            // Parse the conditions: "manager_id.ilike.%123%,name.ilike.%abc%"
+                            // Parse conditions: "manager_id.ilike.%123%"
                             const conditions = filterStr.split(',');
                             
-                            const filtered = allRows.filter(row => {
+                            const filtered = allCompanyData.filter(row => {
                                 return conditions.some(cond => {
                                     const parts = cond.split('.');
                                     if(parts.length < 3) return false;
@@ -1684,32 +1676,47 @@ const db = {
                 };
             },
             
-            // Handle Writes
+            // Handle Writes (Upsert)
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
-                 const res = await fetch(`${API_URL}?action=${action}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ payload: payload }) 
-                });
-                return { error: res.ok ? null : { message: "Save failed" } };
+                 try {
+                     const res = await fetch(`${API_URL}?action=${action}`, {
+                        method: 'POST',
+                        headers: API_HEADERS,
+                        body: JSON.stringify({ payload: payload }) 
+                    });
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        return { error: { message: errText || "Save failed" } };
+                    }
+                    return { error: null };
+                 } catch (e) { return { error: e }; }
             },
 
+            // Handle Updates (Re-uses saveUser logic)
             update: (payload) => {
                 return {
                     eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=saveUser`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ id: val, payload: payload })
-                        });
-                        return { error: res.ok ? null : { message: "Update failed" } };
+                        // For single update
+                        try {
+                            const res = await fetch(`${API_URL}?action=saveUser`, {
+                                method: 'POST',
+                                headers: API_HEADERS,
+                                body: JSON.stringify({ id: val, payload: payload })
+                            });
+                            if (!res.ok) {
+                                const txt = await res.text();
+                                return { error: { message: txt || "Update failed" } };
+                            }
+                            return { error: null };
+                        } catch (e) { return { error: e }; }
                     },
                     in: async (col, valArray) => {
+                         // For bulk status updates (Approve/Publish)
                          for (const id of valArray) {
                              await fetch(`${API_URL}?action=saveUser`, {
                                 method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
+                                headers: API_HEADERS,
                                 body: JSON.stringify({ id: id, payload: payload })
                             });
                          }
@@ -1718,28 +1725,34 @@ const db = {
                 };
             },
 
+            // Handle Deletes
             delete: () => {
                 return {
                     eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=deleteUser`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ id: val })
-                        });
-                        return { error: res.ok ? null : { message: "Delete failed" } };
+                        try {
+                            const res = await fetch(`${API_URL}?action=deleteUser`, {
+                                method: 'POST',
+                                headers: API_HEADERS,
+                                body: JSON.stringify({ id: val })
+                            });
+                            return { error: res.ok ? null : { message: "Delete failed" } };
+                        } catch(e) { return { error: e }; }
                     }
                 };
             }
         };
     },
+    // RPC Calls (Publishing Goals)
     rpc: async (name, params) => {
         if (name === 'publish_goals') {
-             const res = await fetch(`${API_URL}?action=rpcPublish`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ payload: params })
-            });
-            return { error: res.ok ? null : { message: "RPC failed" } };
+             try {
+                 const res = await fetch(`${API_URL}?action=rpcPublish`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ payload: params })
+                });
+                return { error: res.ok ? null : { message: "RPC failed" } };
+             } catch(e) { return { error: e }; }
         }
     }
 };
