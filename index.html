@@ -1785,24 +1785,29 @@ const db = {
             }
         }
 async function loadHRApprovals() {
-    // 1. Target the container
-    let container = document.getElementById('admin-tab-content');
-    if (!container) container = document.querySelector('.admin-content');
+    // 1. Target the specific Approvals Tab container
+    // We try 'tab-app' (old name) first, then 'tab-approvals' (new name)
+    let container = document.getElementById('tab-app');
+    if (!container) container = document.getElementById('tab-approvals');
     
+    // Fallback: If neither exists, look for the generic container
+    if (!container) container = document.getElementById('admin-tab-content');
+
     if (!container) {
-        console.error("Could not find admin container");
+        console.error("Could not find 'tab-app' or 'tab-approvals' in HTML");
+        alert("Error: The 'Approvals' tab container is missing from the HTML.");
         return;
     }
 
-    // 2. Show "Scanning" Loading State
+    // 2. Show Loading State
     container.innerHTML = `
     <div style="padding:60px; text-align:center; color:var(--text-muted);">
         <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2rem; color:var(--primary);"></i>
-        <div style="margin-top:16px; font-weight:600;">Scanning entire database for pending requests...</div>
+        <div style="margin-top:16px; font-weight:600;">Scanning database for pending requests...</div>
     </div>`;
 
     try {
-        // 3. THE LOOP: Fetch ALL users
+        // 3. THE FETCH LOOP (Gets EVERYONE)
         let allUsers = [];
         let from = 0;
         const step = 1000;
@@ -1821,16 +1826,10 @@ async function loadHRApprovals() {
             else from += step;
         }
 
-        // 4. FILTER: ROBUST MATCHING (Fixes "Invisible Space" bug)
-        // We use .trim() to remove spaces and .includes() to be safe
-        const pending = allUsers.filter(u => {
-            const s = (u[COL.stat] || '').toString().trim();
-            return s === 'Submitted to HR';
-        });
+        // 4. FILTER: Find "Submitted to HR" (Trim spaces)
+        const pending = allUsers.filter(u => (u[COL.stat] || '').toString().trim() === 'Submitted to HR');
 
-        console.log(`🔎 Scan Complete. Checked ${allUsers.length} users. Found ${pending.length} pending.`);
-
-        // 5. RENDER THE RESULT
+        // 5. RENDER RESULT
         if (pending.length === 0) {
             container.innerHTML = `
             <div class="card" style="box-shadow:none; border:1px solid var(--border);">
@@ -1840,7 +1839,6 @@ async function loadHRApprovals() {
                 <div style="padding:60px; text-align:center; color:var(--text-muted);">
                     <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:16px; opacity:0.2;"></i>
                     <div>No pending approvals found.</div>
-                    <div style="font-size:0.8rem; margin-top:10px;">(Scanned ${allUsers.length} records)</div>
                 </div>
             </div>`;
             return;
