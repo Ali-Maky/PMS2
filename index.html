@@ -1614,19 +1614,45 @@ const db = {
 
                     // 4. OR Filter (Team Loading)
                    // 4. OR Filter (Optimized Server-Side Search)
+                    // 4. OR Filter (Server-Side Search + Auto-Pagination)
                     or: async (filterStr) => {
                         try {
-                            // Instead of fetching everyone, we send the filter to PHP
-                            const res = await fetch(`${API_URL}?action=searchUsers`, {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ filter: filterStr })
-                            });
+                            let allResults = [];
+                            let from = 0;
+                            const step = 1000;
+                            let more = true;
+
+                            // Loop ONLY through search results (Fast & Complete)
+                            while (more) {
+                                const res = await fetch(`${API_URL}?action=searchUsers`, {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ 
+                                        filter: filterStr,
+                                        from: from,
+                                        to: from + step - 1
+                                    })
+                                });
+                                
+                                if (!res.ok) break;
+                                const chunk = await res.json();
+                                
+                                if (!Array.isArray(chunk) || chunk.length === 0) {
+                                    break; 
+                                }
+
+                                allResults = allResults.concat(chunk);
+
+                                // If we got a full page, there might be more. 
+                                // If less, we are done.
+                                if (chunk.length < step) {
+                                    more = false;
+                                } else {
+                                    from += step;
+                                }
+                            }
                             
-                            if (!res.ok) return { data: [], error: "Search failed" };
-                            
-                            const json = await res.json();
-                            return { data: json, error: null };
+                            return { data: allResults, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
