@@ -1560,48 +1560,75 @@
     <script>
         
 // --- 1. SECURE CONFIGURATION ---
-const API_URL = 'https://pms-back-production-b693.up.railway.app';
+// --- 1. SECURE CONFIGURATION ---
+const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
 
 // --- 2. THE BRIDGE (Connects Frontend to PHP) ---
 const db = {
     from: (table) => {
         return {
-            // Handle Selects (checkID, fetchAll)
             select: (cols) => {
                 return {
-                    // .eq(COL.id, val) -> Used for Login & Profile Check
-                    eq: async (col, val) => {
-                        try {
-                            // Fetch the data from PHP
-                            const res = await fetch(`${API_URL}?action=checkID&id=${encodeURIComponent(val)}`);
-                            if (!res.ok) return { data: null, error: true };
-                            const json = await res.json();
+                    // .eq(col, val) -> Handles Login, Profile, and Settings
+                    eq: (col, val) => {
+                        // Define the execution logic
+                        const execute = async () => {
+                            // Switch action based on the table being accessed
+                            let action = 'checkID'; 
+                            if (table === 'company_settings') action = 'getSettings';
                             
-                            // HELPER: Create a response object that mimics Supabase structure
-                            // This wrapper allows the code to call .single() or .maybeSingle() on the result
-                            const resultObj = { 
-                                data: json, 
-                                error: null,
-                                // FIX: Add the missing .single() function here
-                                single: function() { return this; },
-                                maybeSingle: function() { return this; }
-                            };
-                            
-                            // If the code awaits .eq() directly, return the result
-                            // If the code calls .single(), it calls the function above which returns this same object
-                            return resultObj;
+                            // Send POST request (so PHP can read the JSON body)
+                            try {
+                                const res = await fetch(`${API_URL}?action=${action}`, {
+                                    method: 'POST', 
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ id: val }) 
+                                });
+                                
+                                if (!res.ok) return { data: null, error: { message: "Server Error" } };
+                                const json = await res.json();
+                                return { data: json, error: null };
+                            } catch (e) {
+                                return { data: null, error: e };
+                            }
+                        };
 
-                        } catch (e) { return { data: null, error: e }; }
+                        // Return an object that allows both 'await' and chaining '.single()'
+                        return {
+                            // If code uses: await db...eq()
+                            then: (resolve, reject) => execute().then(resolve, reject),
+                            
+                            // If code uses: await db...eq().single()
+                            single: async () => {
+                                const result = await execute();
+                                // If array, extract first item
+                                if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+                                    result.data = result.data[0];
+                                }
+                                return result; 
+                            },
+                            
+                            // If code uses: await db...eq().maybeSingle()
+                            maybeSingle: async () => {
+                                const result = await execute();
+                                if (result.data && Array.isArray(result.data)) {
+                                    result.data = result.data.length > 0 ? result.data[0] : null;
+                                }
+                                return result;
+                            }
+                        };
                     },
-                    // .range(from, to) -> Used for Directory Sync
+                    
+                    // .range(from, to) -> Directory Sync
                     range: async (from, to) => {
                         try {
+                            // Using POST to be safe, though GET worked for this one
                             const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`);
                             const json = await res.json();
                             return { data: json, error: null };
                         } catch (e) { return { data: [], error: e }; }
                     },
-                    // .limit(1) -> Used for Column Mapping
+                    // .limit(1) -> Column Mapping
                     limit: async (n) => {
                         const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`);
                         return { data: await res.json(), error: null };
@@ -1609,9 +1636,9 @@ const db = {
                 };
             },
             
-            // Handle Inserts/Upserts (saveUser, saveGoal)
+            // Handle Inserts/Upserts
             upsert: async (payload) => {
-                 const action = Array.isArray(payload) ? 'bulkUpsert' : 'saveUser';
+                 const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -1620,10 +1647,9 @@ const db = {
                 return { error: res.ok ? null : { message: "Save failed" } };
             },
 
-            // Handle Updates (submitFinal, approve, etc.)
+            // Handle Updates
             update: (payload) => {
                 return {
-                    // .eq(COL.id, id)
                     eq: async (col, val) => {
                         const res = await fetch(`${API_URL}?action=saveUser`, {
                             method: 'POST',
@@ -1632,7 +1658,6 @@ const db = {
                         });
                         return { error: res.ok ? null : { message: "Update failed" } };
                     },
-                    // .in(COL.id, [ids]) -> Bulk Approve
                     in: async (col, valArray) => {
                          for (const id of valArray) {
                              await fetch(`${API_URL}?action=saveUser`, {
@@ -1661,7 +1686,7 @@ const db = {
             }
         };
     },
-    // Handle RPC (Publish Goals)
+    // Handle RPC
     rpc: async (name, params) => {
         if (name === 'publish_goals') {
              const res = await fetch(`${API_URL}?action=rpcPublish`, {
