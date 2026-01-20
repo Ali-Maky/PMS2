@@ -1583,15 +1583,15 @@ const API_URL = 'https://pms-back-production-b693.up.railway.app';
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 const db = {
-    from: (table) => {
-        // Helper to get headers with the token
-        const getHeaders = () => {
-            const token = localStorage.getItem('zpms_token');
-            return {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
-            };
-        };
+    // CORRECT STRUCTURE
+from: (table) => {
+    return {
+       select: ...,
+       upsert: ..., // <--- Still inside the return object
+       update: ...,
+       delete: ...
+    }; // <--- Closing brace goes AFTER everything
+}
 
         return {
             // 1. SELECT OPERATIONS
