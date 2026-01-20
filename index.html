@@ -4021,15 +4021,33 @@ function calc() {
 }
 
    function autoSave() {
-            if (SUPABASE_URL.includes("YOUR")) return;
-            showSaving(); clearTimeout(saveTimer);
-            saveTimer = setTimeout(async () => {
-                let u = {}; u[COL.goals] = targetUser[COL.goals];
-                const { error } = await db.from('active_list').update(u).eq(COL.id, targetUser[COL.id]);
-                if (error) console.error(error); else showSaved();
-            }, 500);
-        }
+    // 1. Show the "Saving..." indicator
+    showSaving(); 
+    clearTimeout(saveTimer);
 
+    // 2. Wait 500ms (debounce) to avoid spamming the server while typing
+    saveTimer = setTimeout(async () => {
+        try {
+            // Prepare the data to update (Goals only)
+            let u = {}; 
+            u[COL.goals] = targetUser[COL.goals];
+
+            // Send to Backend
+            const { error } = await db.from('active_list')
+                .update(u)
+                .eq(COL.id, targetUser[COL.id]);
+
+            if (error) {
+                console.error("AutoSave Error:", error);
+                // Optional: Show error toast here if needed
+            } else {
+                showSaved();
+            }
+        } catch (err) {
+            console.error("AutoSave Crash:", err);
+        }
+    }, 500);
+}
         function showSaving() { document.getElementById('save-status').classList.add('show'); document.getElementById('save-dot').className = 'save-dot saving'; document.getElementById('save-text').innerText = "Saving..."; }
         function showSaved() { document.getElementById('save-dot').className = 'save-dot saved'; document.getElementById('save-text').innerText = "All changes saved"; setTimeout(() => document.getElementById('save-status').classList.remove('show'), 2000); }
         async function saveDraft() { autoSave(); }
