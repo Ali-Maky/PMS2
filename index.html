@@ -1785,126 +1785,89 @@ const db = {
             }
         }
 
-  async function loadHRApprovals() {
-    // 1. Fetch Data
-    const { data, error } = await db.from('active_list')
-        .select('*')
-        .eq(COL.stat, 'Submitted to HR');
-
-    if (error) { showToast("Error: " + error.message, 'error'); return; }
-
-    adminCache = data || []; // Store globally for filtering
-    const pendingCount = adminCache.length;
-    
-    // Get unique Divisions for the dropdown
-    const divs = [...new Set(adminCache.map(i => i[COL.div] || 'Other'))].sort();
-
-    // 2. Render The Specific Card Layout
+ async function loadHRApprovals() {
+    // 1. Loading State
     document.getElementById('admin-content').innerHTML = `
-    <div class="animate-in">
-        <div class="card" style="padding: 32px;">
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
-                <div style="display: flex; align-items: center; gap: 16px;">
-                    <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">
-                        Pending Approvals <span style="margin-left:8px; color:var(--text-muted);">${pendingCount}</span>
-                    </h3>
-                    
-                    <select id="div-filter" onchange="filterAdminTable()" 
-                        style="padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: #f3f4f6; font-weight: 600; color: var(--text-main); cursor: pointer; min-width: 180px;">
-                        <option value="ALL">All Divisions</option>
-                        ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
-                    </select>
-                </div>
+        <div style="padding:40px; text-align:center; color:var(--text-muted);">
+            <div class="spinner" style="width:30px; height:30px; border-width:3px; margin-bottom:10px;"></div>
+            <div>Loading pending requests...</div>
+        </div>`;
 
-                <button class="btn btn-primary" onclick="approveBulk()" style="background: #4f46e5; padding: 12px 24px; border-radius: 8px; font-weight: 700;">
-                    <i class="fa-solid fa-check-double"></i> &nbsp; Approve All Visible
-                </button>
-            </div>
-
-            <div style="overflow-x: auto;">
-                <table class="report-table" style="width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: -12px;">
-                    <thead>
-                        <tr style="text-align: left;">
-                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">NAME</th>
-                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">DIVISION</th>
-                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">JOB TITLE</th>
-                            <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">MANAGER</th>
-                            <th style="padding: 12px 24px; text-align: right; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;">ACTION</th>
-                        </tr>
-                    </thead>
-                    <tbody id="admin-tbody"></tbody>
-                </table>
-            </div>
-
-        </div>
-    </div>`;
-
-    // 3. Render the rows
-    filterAdminTable(); 
-}
+    // 2. Fetch Data (Status = 'Submitted to HR')
     try {
-        // --- FETCH LOGIC (Same as before) ---
-        let allUsers = [];
-        let from = 0;
-        let more = true;
-        while (more) {
-            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + 999}`);
-            if (!res.ok) break;
-            const chunk = await res.json();
-            if (!Array.isArray(chunk) || chunk.length === 0) break;
-            allUsers = allUsers.concat(chunk);
-            if (chunk.length < 1000) more = false;
-            else from += 1000;
-        }
+        const { data, error } = await db.from('active_list')
+            .select('*')
+            .eq(COL.stat, 'Submitted to HR');
 
-        // Filter
-        const pending = allUsers.filter(u => (u[COL.stat] || '').toString().trim() === 'Submitted to HR');
-
-        // Render Empty State
-        if (pending.length === 0) {
-            container.innerHTML = `
-            <div class="card" style="box-shadow:none; border:1px solid var(--border);">
-                <div style="padding:40px; text-align:center; color:var(--text-muted);">
-                    <i class="fa-solid fa-check-circle" style="font-size:3rem; margin-bottom:16px; opacity:0.2;"></i>
-                    <div>No pending approvals found.</div>
-                </div>
-            </div>`;
+        if (error) {
+            document.getElementById('admin-content').innerHTML = `
+                <div class="card" style="padding:40px; text-align:center; color:var(--danger);">
+                    <i class="fa-solid fa-circle-exclamation" style="font-size:2rem; margin-bottom:10px;"></i>
+                    <div>Error loading data: ${error.message}</div>
+                </div>`;
             return;
         }
 
-        // Render Table
-        container.innerHTML = `
-        <div class="card" style="box-shadow:none; border:1px solid var(--border);">
-            <div style="padding:20px; border-bottom:1px solid var(--border);">
-                <h3 style="margin:0; font-size:1.1rem;">Pending Approvals <span style="background:var(--primary); color:white; padding:2px 10px; border-radius:12px; font-size:0.8rem;">${pending.length}</span></h3>
+        // 3. Update Global Cache & Calculate Metadata
+        adminCache = data || [];
+        const pendingCount = adminCache.length;
+        const divs = [...new Set(adminCache.map(i => i[COL.div] || 'Other'))].sort();
+
+        // 4. Render the UI Shell (Card, Header, Controls, Table Headers)
+        document.getElementById('admin-content').innerHTML = `
+        <div class="animate-in">
+            <div class="card" style="padding: 32px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 20px;">
+                    
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                            Pending Approvals 
+                            <span style="background: var(--text-main); color: white; padding: 2px 8px; border-radius: 99px; font-size: 0.85rem; font-family: monospace;">${pendingCount}</span>
+                        </h3>
+                        
+                        <div style="position: relative;">
+                            <select id="div-filter" onchange="filterAdminTable()" 
+                                style="padding: 10px 36px 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: #f3f4f6; font-weight: 600; color: var(--text-main); cursor: pointer; min-width: 180px; appearance: none; -webkit-appearance: none;">
+                                <option value="ALL">All Divisions</option>
+                                ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                            </select>
+                            <i class="fa-solid fa-chevron-down" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; color: var(--text-muted); pointer-events: none;"></i>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="approveBulk()" 
+                        style="background: #4f46e5; border-color: #4f46e5; padding: 12px 24px; border-radius: 8px; font-weight: 700; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
+                        <i class="fa-solid fa-check-double"></i>
+                        <span>Approve All Visible</span>
+                    </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table class="report-table" style="width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: -12px;">
+                        <thead>
+                            <tr style="text-align: left;">
+                                <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">NAME</th>
+                                <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">DIVISION</th>
+                                <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">JOB TITLE</th>
+                                <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">MANAGER</th>
+                                <th style="padding: 12px 24px; text-align: right; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-tbody">
+                            </tbody>
+                    </table>
+                </div>
+
             </div>
-            <table style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr style="background:#f9fafb; border-bottom:1px solid var(--border); text-align:left;">
-                        <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted);">EMPLOYEE</th>
-                        <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted);">DIVISION</th>
-                        <th style="padding:12px 20px; font-size:0.75rem; color:var(--text-muted);">MANAGER</th>
-                        <th style="padding:12px 20px; text-align:right;">ACTION</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${pending.map(u => `
-                    <tr style="border-bottom:1px solid var(--border); transition:0.2s;">
-                        <td style="padding:16px 20px; font-weight:600;">${u[COL.name].split('(')[0]}</td>
-                        <td style="padding:16px 20px;">${u[COL.div] || '-'}</td>
-                        <td style="padding:16px 20px;">${(u[COL.mgr]||'-').split('(')[0]}</td>
-                        <td style="padding:16px 20px; text-align:right;">
-                            <button class="btn btn-primary" onclick="loadEval('${u[COL.id]}', true)">Review</button>
-                        </td>
-                    </tr>`).join('')}
-                </tbody>
-            </table>
         </div>`;
+
+        // 5. Populate Rows
+        filterAdminTable();
 
     } catch (e) {
         console.error(e);
-        container.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`;
+        document.getElementById('admin-content').innerHTML = `<div style="color:red; padding:20px;">System Error: ${e.message}</div>`;
     }
 }
         async function restoreSession(id) {
