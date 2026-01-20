@@ -1788,92 +1788,90 @@ const db = {
 async function loadHRApprovals() {
     // 1. Loading State
     const contentDiv = document.getElementById('admin-content');
-    if (contentDiv) {
-        contentDiv.innerHTML = `
-        <div style="padding:40px; text-align:center; color:var(--text-muted);">
+    contentDiv.innerHTML = `
+        <div style="padding:60px; text-align:center; color:var(--text-muted);">
             <div class="spinner" style="width:30px; height:30px; border-width:3px; margin-bottom:10px;"></div>
-            <div>Scanning employee records...</div>
+            <div>Syncing Approval & History Records...</div>
         </div>`;
-    }
 
     try {
-        // --- FIX START ---
-        // The .eq() method relies on 'checkID' which only searches by Employee ID.
-        // We must fetch all data (or use the cached copy) and filter client-side.
-        
-        if (allCompanyData.length === 0) {
-            allCompanyData = await fetchAllData();
-        }
+        if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
 
-        // Filter the full list for 'Submitted to HR'
-        const data = allCompanyData.filter(u => (u[COL.stat] || '').trim() === 'Submitted to HR');
-        // --- FIX END ---
-
-        // 3. Update Global Cache & Calculate Metadata
-        adminCache = data || [];
-        const pendingCount = adminCache.length;
+        // --- CHANGE: Fetch ALL relevant statuses (Pending + History) ---
+        // We now include 'Published' so you can see history
+        adminCache = allCompanyData.filter(u => {
+            const s = (u[COL.stat] || '').trim();
+            return ['Submitted to HR', 'Approved', 'Published'].includes(s);
+        });
         
-        // Get unique Divisions for dropdown
+        const totalCount = adminCache.length;
+        const pendingCount = adminCache.filter(u => u[COL.stat] === 'Submitted to HR').length;
+        const readyCount = adminCache.filter(u => u[COL.stat] === 'Approved').length;
+        
+        // Unique Divisions
         const divs = [...new Set(adminCache.map(i => i[COL.div] || 'Other'))].sort();
 
-        // 4. Render the UI Shell
-        if (contentDiv) {
-            contentDiv.innerHTML = `
-            <div class="animate-in">
-                <div class="card" style="padding: 32px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+        // 2. Render UI with TWO Filters (Status & Division)
+        contentDiv.innerHTML = `
+        <div class="animate-in">
+            <div class="card" style="padding: 32px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 20px;">
                     
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 20px;">
-                        
-                        <div style="display: flex; align-items: center; gap: 16px;">
-                            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                                Pending Approvals 
-                                <span style="background: var(--text-main); color: white; padding: 2px 8px; border-radius: 99px; font-size: 0.85rem; font-family: monospace;">${pendingCount}</span>
-                            </h3>
+                    <div>
+                        <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">
+                            Approvals & History
+                        </h3>
+                        <div style="display:flex; gap:12px; align-items:center;">
                             
-                            <div style="position: relative;">
-                                <select id="div-filter" onchange="filterAdminTable()" 
-                                    style="padding: 10px 36px 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: #f3f4f6; font-weight: 600; color: var(--text-main); cursor: pointer; min-width: 180px; appearance: none; -webkit-appearance: none;">
-                                    <option value="ALL">All Divisions</option>
-                                    ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
-                                </select>
-                                <i class="fa-solid fa-chevron-down" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; color: var(--text-muted); pointer-events: none;"></i>
-                            </div>
-                        </div>
+                            <select id="status-filter" onchange="filterAdminTable()" 
+                                style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-weight: 700; color: var(--text-main); cursor: pointer; min-width: 160px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                                <option value="ACTION">⚠️ Pending Action (${pendingCount})</option>
+                                <option value="Approved">🚀 Ready to Publish (${readyCount})</option>
+                                <option value="Published">📜 Published History</option>
+                                <option value="ALL">Show All Records</option>
+                            </select>
 
-                        <button class="btn btn-primary" onclick="approveBulk()" 
-                            style="background: #4f46e5; border-color: #4f46e5; padding: 12px 24px; border-radius: 8px; font-weight: 700; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
-                            <i class="fa-solid fa-check-double"></i>
-                            <span>Approve All Visible</span>
+                            <select id="div-filter" onchange="filterAdminTable()" 
+                                style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f9fafb; font-weight: 600; color: var(--text-muted); cursor: pointer; min-width: 150px;">
+                                <option value="ALL">All Divisions</option>
+                                ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn btn-primary" onclick="approveBulk()" style="background:#6366f1; padding:10px 20px;">
+                            <i class="fa-solid fa-check"></i> &nbsp; Approve Pending
+                        </button>
+                        <button class="btn btn-primary" onclick="publishBulk()" style="background:#10b981; border-color:#10b981; padding:10px 20px;">
+                            <i class="fa-solid fa-rocket"></i> &nbsp; Publish Ready
                         </button>
                     </div>
-
-                    <div style="overflow-x: auto;">
-                        <table class="report-table" style="width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: -12px;">
-                            <thead>
-                                <tr style="text-align: left;">
-                                    <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">NAME</th>
-                                    <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">DIVISION</th>
-                                    <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">JOB TITLE</th>
-                                    <th style="padding: 12px 24px; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">MANAGER</th>
-                                    <th style="padding: 12px 24px; text-align: right; color: var(--text-light); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">ACTION</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-tbody"></tbody>
-                        </table>
-                    </div>
-
                 </div>
-            </div>`;
-        }
 
-        // 5. Render Rows
+                <div style="overflow-x: auto; border:1px solid var(--border); border-radius:12px;">
+                    <table class="report-table" style="margin:0;">
+                        <thead style="background:#f8fafc;">
+                            <tr>
+                                <th style="padding:16px 24px;">EMPLOYEE</th>
+                                <th style="padding:16px 24px;">STATUS</th>
+                                <th style="padding:16px 24px;">DIVISION</th>
+                                <th style="padding:16px 24px;">MANAGER</th>
+                                <th style="padding:16px 24px; text-align:right;">CONTROLS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+
+        // 3. Render Rows
         filterAdminTable();
 
-    } catch (e) {
+    } catch (e) { 
         console.error(e);
-        if (contentDiv) {
-            contentDiv.innerHTML = `<div style="color:red; padding:20px;">System Error: ${e.message}</div>`;
-        }
+        contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`; 
     }
 }
         async function restoreSession(id) {
@@ -3157,78 +3155,81 @@ function refreshGlobalAdminRating() {
     filterAdminTable();
 }
 function filterAdminTable() {
-    const filterEl = document.getElementById('div-filter');
+    const sFilter = document.getElementById('status-filter').value;
+    const dFilter = document.getElementById('div-filter').value;
     const tbody = document.getElementById('admin-tbody');
     
-    if (!filterEl || !tbody) return;
+    if (!tbody) return;
 
-    const f = filterEl.value;
-    
-    // Filter logic
-    const visible = adminCache.filter(r => f === 'ALL' || (r[COL.div] || 'Other') === f);
+    // --- FILTER LOGIC ---
+    const visible = adminCache.filter(r => {
+        const stat = r[COL.stat] || '';
+        
+        // 1. Division Match
+        const divMatch = (dFilter === 'ALL' || (r[COL.div] || 'Other') === dFilter);
+        if (!divMatch) return false;
+
+        // 2. Status Match
+        if (sFilter === 'ALL') return true;
+        if (sFilter === 'ACTION') return stat === 'Submitted to HR'; // Only things needing attention
+        return stat === sFilter;
+    });
 
     if (visible.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-style:italic;">No pending approvals found for this selection.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:60px; color:var(--text-muted); font-style:italic;">No records found for this filter.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = visible.map(r => {
-        const empName = r[COL.name] || 'Unknown';
-        const empId = r[COL.id] || '';
-        const jobTitle = r[COL.job] || '-';
-        const divName = r[COL.div] || '-';
+        const status = r[COL.stat];
+        let buttons = '';
+        let rowClass = '';
+
+        // --- DYNAMIC BUTTONS BASED ON STATUS ---
         
-        // Handle Manager Name/ID separation
-        let mgrRaw = r[COL.mgr] || '-';
-        let mgrName = mgrRaw;
-        let mgrId = '';
-        if (mgrRaw.includes('(')) {
-            mgrName = mgrRaw.split('(')[0].trim();
-            mgrId = mgrRaw.match(/\(([^)]+)\)/)?.[1] || '';
+        if (status === 'Submitted to HR') {
+            // Stage 1: Needs Approval
+            buttons = `
+                <button onclick="rejectToManager('${r[COL.id]}')" class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem; color:#ef4444; border-color:#fee2e2;">Reject</button>
+                <button onclick="approveSingle('${r[COL.id]}')" class="btn btn-primary" style="padding:6px 12px; font-size:0.75rem;">Approve</button>
+            `;
+        } 
+        else if (status === 'Approved') {
+            // Stage 2: Ready to Publish
+            rowClass = 'background:#f0fdf4;'; // Light green tint
+            buttons = `
+                <button onclick="rejectToManager('${r[COL.id]}')" class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem; color:#ef4444; border-color:#fee2e2;">Return</button>
+                <button onclick="publishSingle('${r[COL.id]}')" class="btn btn-primary" style="padding:6px 12px; font-size:0.75rem; background:#10b981; border-color:#10b981;">Publish</button>
+            `;
+        } 
+        else if (status === 'Published') {
+            // Stage 3: History (Can be reverted)
+            rowClass = 'opacity: 0.8;';
+            buttons = `
+                <button onclick="unpublishSingle('${r[COL.id]}')" class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem; color:#f59e0b; border-color:#fef3c7;">
+                    <i class="fa-solid fa-rotate-left"></i> Unpublish
+                </button>
+                <button onclick="loadEval('${r[COL.id]}', true)" class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;">View</button>
+            `;
         }
 
         return `
-        <tr style="background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;">
-            
-            <td style="padding: 20px 24px; border: 1px solid var(--border); border-right: none; border-radius: 12px 0 0 12px; vertical-align: middle;">
-                <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">${empName}</div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">(${empId})</div>
+        <tr style="border-bottom:1px solid var(--border); transition:all 0.2s; ${rowClass}">
+            <td style="padding:16px 24px;">
+                <div style="font-weight:700; color:var(--text-main);">${r[COL.name]}</div>
+                <div style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">${r[COL.id]}</div>
             </td>
-
-            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
-                <span style="color: var(--text-main); font-weight: 600; font-size: 0.9rem;">${divName}</span>
+            <td style="padding:16px 24px;">
+                <span class="status-badge ${status === 'Published' ? 'approved' : (status === 'Approved' ? 'submitted' : 'draft')}" 
+                      style="${status === 'Approved' ? 'background:#d1fae5; color:#065f46;' : ''}">
+                    ${status === 'Approved' ? 'Ready to Publish' : status}
+                </span>
             </td>
-
-            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
-                <span style="color: var(--text-main); font-weight: 500; font-size: 0.9rem;">${jobTitle}</span>
-            </td>
-
-            <td style="padding: 20px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle;">
-                <div style="font-weight: 600; color: var(--text-main); font-size: 0.9rem;">${mgrName}</div>
-                ${mgrId ? `<div style="font-size: 0.75rem; color: var(--text-light); margin-top: 4px;">(${mgrId})</div>` : ''}
-            </td>
-
-            <td style="padding: 20px 24px; border: 1px solid var(--border); border-left: none; border-radius: 0 12px 12px 0; text-align: right; vertical-align: middle;">
-                <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                    
-                    <button onclick="loadEval('${empId}', true)" 
-                        style="background: white; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-weight: 700; color: var(--text-main); cursor: pointer; transition: all 0.2s;"
-                        onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
-                        View
-                    </button>
-
-                    <button onclick="rejectToManager('${empId}')" 
-                        style="background: white; border: 1px solid #fee2e2; padding: 8px 16px; border-radius: 8px; font-weight: 700; color: #ef4444; cursor: pointer; transition: all 0.2s;"
-                        onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='white'">
-                        Reject
-                    </button>
-
-                    <button onclick="approveSingle('${empId}')" 
-                        style="background: #4f46e5; border: 1px solid #4f46e5; padding: 8px 16px; border-radius: 8px; font-weight: 700; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);"
-                        onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
-                        Approve
-                    </button>
-
+            <td style="padding:16px 24px;">${r[COL.div] || '-'}</td>
+            <td style="padding:16px 24px;">${(r[COL.mgr]||'-').split('(')[0]}</td>
+            <td style="padding:16px 24px; text-align:right;">
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    ${buttons}
                 </div>
             </td>
         </tr>`;
@@ -3341,6 +3342,31 @@ async function publishBulk() {
         item[COL.stat] = newStatus;
         filterAdminTable();
     }
+}
+		async function unpublishSingle(id) {
+    showConfirm(
+        "Unpublish Scorecard?", 
+        "This will hide the score from the employee and move it back to the 'Ready to Publish' queue.", 
+        "Unpublish", 
+        "warning", 
+        async () => {
+            showSaving();
+            const { error } = await db.from('active_list')
+                .update({ [COL.stat]: 'Approved' }) // Move back to intermediate stage
+                .eq(COL.id, id);
+
+            if (error) {
+                showToast(error.message, 'error');
+            } else {
+                showToast("Scorecard Unpublished.", 'success');
+                // Update local cache
+                const item = adminCache.find(x => x[COL.id] == id);
+                if (item) item[COL.stat] = 'Approved';
+                filterAdminTable();
+            }
+            showSaved();
+        }
+    );
 }
         // --- 7. REPORTS ---
         // --- 7. REPORTS (UPDATED FOR REAL-TIME AUTO-CALCULATION) ---
