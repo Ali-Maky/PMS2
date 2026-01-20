@@ -3907,26 +3907,56 @@ async function loadEval(tid, isSearchMode = false) {
         alert("Unexpected error: " + err.message);
     }
 }
-        async function rejectToManager(id) {
-            showConfirm("Reject to Manager", "Return to 'Submitted to Manager'? The Manager will be able to edit scores.", "Reject", "danger", async () => {
-                const { error } = await db.from('active_list').update({ [COL.stat]: 'Submitted to Manager' }).eq(COL.id, id);
-                if (error) {
-                    showToast("Error: " + error.message, 'error');
-                } else {
-                    if (typeof adminCache !== 'undefined') {
-                        adminCache = adminCache.filter(x => x[COL.id] !== id);
-                        if (document.getElementById('admin-tbody')) filterAdminTable();
-                    }
-                    if (targetUser && targetUser[COL.id] === id) {
-                        showToast("Card returned to Manager", 'success');
-                        setTimeout(() => { if (['Admin', 'Master'].includes(getRole(user))) loadHRAdmin(); else location.reload(); }, 1500);
-                    } else {
-                        showToast("Returned to Manager", 'success');
+       async function rejectToManager(id) {
+    showConfirm(
+        "Reject to Manager", 
+        "Return this scorecard to the 'Submitted to Manager' stage? The Manager will need to review it again.", 
+        "Reject & Return", 
+        "danger", 
+        async () => {
+            // 1. Perform Database Update
+            const { error } = await db.from('active_list')
+                .update({ [COL.stat]: 'Submitted to Manager' })
+                .eq(COL.id, id);
+
+            if (error) {
+                showToast("Update Failed: " + error.message, 'error');
+            } else {
+                // 2. Success Feedback
+                showToast("Returned to Manager", 'success');
+
+                // 3. Update the Admin List Cache (Remove item locally)
+                if (typeof adminCache !== 'undefined' && Array.isArray(adminCache)) {
+                    // Remove the rejected user from the local list
+                    adminCache = adminCache.filter(x => x[COL.id].toString() !== id.toString());
+                    
+                    // Re-render the table immediately
+                    if (typeof filterAdminTable === 'function') {
                         filterAdminTable();
+                        
+                        // Update the counter badge
+                        const badge = document.querySelector('h3 span');
+                        if (badge) badge.innerText = adminCache.length;
                     }
                 }
-            });
+
+                // 4. Handle "Detailed View" Scenario
+                // If we are currently looking at the scorecard (not the list), go back to the list
+                if (typeof targetUser !== 'undefined' && targetUser && targetUser[COL.id] === id) {
+                    const myRole = getRole(user);
+                    if (['Admin', 'Master'].includes(myRole)) {
+                        // If Admin, go back to the Approvals Tab
+                        loadHRAdmin(); 
+                        setTimeout(() => switchAdminTab('app'), 10);
+                    } else {
+                        // If Manager, just reload the scorecard view to show new status
+                        loadEval(id);
+                    }
+                }
+            }
         }
+    );
+}
 
         let editingGoalIndex = null;
 
