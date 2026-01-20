@@ -2062,10 +2062,17 @@ async function fetchAllData() {
             if (loaderText) loaderText.innerText = msg;
             if (saveText) saveText.innerText = msg;
 
-            // Fetch with Cache Buster
-            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`);
+            // Fetch with Cache Buster AND Headers (CRITICAL FIX)
+            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
+                method: 'GET',
+                headers: API_HEADERS // <--- AUTHORIZATION ADDED HERE
+            });
             
             if (!res.ok) {
+                // If unauthorized, stop immediately. Do not retry.
+                if (res.status === 401) {
+                    throw new Error("Security Error: API Key Mismatch (401)");
+                }
                 throw new Error(`Server status: ${res.status}`);
             }
 
@@ -2094,7 +2101,13 @@ async function fetchAllData() {
         } catch (e) {
             console.error(`Fetch error at offset ${from}:`, e);
             
-            // Retry Logic
+            // Security Fail: Stop everything
+            if (e.message.includes("401")) {
+                alert("Security Error: The API Key in your code does not match the Server Variable.");
+                return []; 
+            }
+
+            // Network Fail: Retry Logic
             if (retries < maxRetries) {
                 retries++;
                 const delay = retries * 1000; // Exponential backoff: 1s, 2s, 3s
@@ -2112,6 +2125,7 @@ async function fetchAllData() {
     if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
     return allRows;
 }
+
 function getCompany(id) {
     if (!id) return "Unknown";
     const clean = id.toString().toUpperCase().trim();
