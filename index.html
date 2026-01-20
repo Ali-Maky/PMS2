@@ -2046,7 +2046,7 @@ function completeLoginProcess() {
 async function fetchAllData() {
     let allRows = [];
     let from = 0;
-    const step = 1000;
+    const step = 5000; // Increased chunk size for speed
     const timestamp = Date.now();
     let retries = 0;
     const maxRetries = 3;
@@ -2062,14 +2062,13 @@ async function fetchAllData() {
             if (loaderText) loaderText.innerText = msg;
             if (saveText) saveText.innerText = msg;
 
-            // Fetch with Cache Buster AND Headers (CRITICAL FIX)
+            // Fetch with Cache Buster AND Headers
             const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
                 method: 'GET',
-                headers: API_HEADERS // <--- AUTHORIZATION ADDED HERE
+                headers: API_HEADERS
             });
             
             if (!res.ok) {
-                // If unauthorized, stop immediately. Do not retry.
                 if (res.status === 401) {
                     throw new Error("Security Error: API Key Mismatch (401)");
                 }
@@ -2085,7 +2084,7 @@ async function fetchAllData() {
             }
 
             if (chunk.length === 0) {
-                break; // Done
+                break; 
             }
 
             // Success: Reset retries and append data
@@ -2101,35 +2100,37 @@ async function fetchAllData() {
         } catch (e) {
             console.error(`Fetch error at offset ${from}:`, e);
             
-            // Security Fail: Stop everything
             if (e.message.includes("401")) {
                 alert("Security Error: The API Key in your code does not match the Server Variable.");
                 return []; 
             }
 
-            // Network Fail: Retry Logic
             if (retries < maxRetries) {
                 retries++;
-                const delay = retries * 1000; // Exponential backoff: 1s, 2s, 3s
+                const delay = retries * 1000;
                 if (loaderText) loaderText.innerText = `Network blip. Retrying batch ${from}... (${retries}/${maxRetries})`;
                 await new Promise(resolve => setTimeout(resolve, delay));
-                continue; // Retry the loop without incrementing 'from'
+                continue; 
             } else {
                 alert("Connection unstable. Loaded partial data. Please refresh.");
-                break; // Give up after 3 tries to prevent infinite loops
+                break; 
             }
         }
     }
 
-   if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
+    // Final UI Cleanup
+    if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
     
-    // --- SAVE TO CACHE ---
+    // --- SAVE TO CACHE (Speed Optimization) ---
     if (allRows.length > 0) {
         try {
             localStorage.setItem('zpms_data_cache', JSON.stringify(allRows));
         } catch (e) {
             console.warn("Cache full, could not save offline data.");
         }
+    }
+    
+    return allRows;
 }
 
 function getCompany(id) {
