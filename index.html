@@ -1866,7 +1866,6 @@ function resendOTP() {
         }
 
 async function loadHRApprovals() {
-    // 1. Loading State
     const contentDiv = document.getElementById('admin-content');
     contentDiv.innerHTML = `
         <div style="padding:60px; text-align:center; color:var(--text-muted);">
@@ -1875,10 +1874,11 @@ async function loadHRApprovals() {
         </div>`;
 
     try {
-        if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
+        // --- FIX: Always fetch fresh data for the Admin Queue ---
+        // This ensures that if you approved/returned something, the list reflects reality.
+        allCompanyData = await fetchAllData(); 
 
-        // --- CHANGE: Fetch ALL relevant statuses (Pending + History) ---
-        // We now include 'Published' so you can see history
+        // Filter for Approval Queue + History
         adminCache = allCompanyData.filter(u => {
             const s = (u[COL.stat] || '').trim();
             return ['Submitted to HR', 'Approved', 'Published'].includes(s);
@@ -2034,21 +2034,40 @@ async function fetchAllData() {
     let allRows = [];
     let from = 0;
     const step = 1000;
+    
+    // Cache Buster: Prevents the browser from serving old data
+    const timestamp = Date.now(); 
+
     while (true) {
-        // Use a broader select to ensure we don't miss columns due to naming
-        const { data, error } = await db.from('active_list')
-            .select('*') 
-            .range(from, from + step - 1);
-        
-        if (error) { console.error(error); return []; }
-        if (!data || data.length === 0) break;
-        allRows = allRows.concat(data);
-        if (data.length < step) break;
-        from += step;
+        try {
+            // We use direct fetch here to inject the '&_t=' timestamp
+            const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`);
+            
+            if (!res.ok) {
+                console.error("Fetch failed:", res.status);
+                break;
+            }
+            
+            const chunk = await res.json();
+            
+            // Validation: Ensure we got a valid array
+            if (!Array.isArray(chunk) || chunk.length === 0) break;
+            
+            allRows = allRows.concat(chunk);
+            
+            // If we got fewer rows than the limit, we've reached the end
+            if (chunk.length < step) break;
+            
+            from += step;
+        } catch (e) {
+            console.error("Fetch Error:", e);
+            break; // Stop loop on network error to prevent infinite looping
+        }
     }
     return allRows;
 }
-       function getCompany(id) {
+
+function getCompany(id) {
     if (!id) return "Unknown";
     const clean = id.toString().toUpperCase().trim();
 
@@ -4081,14 +4100,16 @@ async function loadEval(tid, isSearchMode = false) {
         alert("Unexpected error: " + err.message);
     }
 }
-       async function rejectToManager(id) {
+    async function rejectToManager(id) {
     showConfirm(
-        "Reject to Manager", 
-        "Return this scorecard to the 'Submitted to Manager' stage? The Manager will need to review it again.", 
-        "Reject & Return", 
+        "Return to Manager", 
+        "This will move the scorecard back to 'Submitted to Manager' for editing. Continue?", 
+        "Return", 
         "danger", 
         async () => {
-            // 1. Perform Database Update
+            showSaving();
+
+            // 1. Database Update
             const { error } = await db.from('active_list')
                 .update({ [COL.stat]: 'Submitted to Manager' })
                 .eq(COL.id, id);
@@ -4096,23 +4117,27 @@ async function loadEval(tid, isSearchMode = false) {
             if (error) {
                 showToast("Update Failed: " + error.message, 'error');
             } else {
-                // 2. Success Feedback
                 showToast("Returned to Manager", 'success');
 
-                // 3. Update the Admin List Cache (Remove item locally)
-                if (typeof adminCache !== 'undefined' && Array.isArray(adminCache)) {
-                    // Remove the rejected user from the local list
-                    adminCache = adminCache.filter(x => x[COL.id].toString() !== id.toString());
-                    
-                    // Re-render the table immediately
-                    if (typeof filterAdminTable === 'function') {
-                        filterAdminTable();
-                        
-                        // Update the counter badge
-                        const badge = document.querySelector('h3 span');
-                        if (badge) badge.innerText = adminCache.length;
-                    }
-                }
+                // 2. Update Global Memory (Fixes Tab Switching)
+                const globalItem = allCompanyData.find(u => u[COL.id] == id);
+                if (globalItem) globalItem[COL.stat] = 'Submitted to Manager';
+
+                // 3. Update Admin Cache (Fixes Current View)
+                // We filter it OUT because "Submitted to Manager" does not belong in the Admin Queue
+                adminCache = adminCache.filter(u => u[COL.id] != id);
+
+                // 4. Refresh Table
+                filterAdminTable();
+                
+                // 5. Update Badge Count (Optional polish)
+                const badge = document.querySelector('.card h3 span');
+                if(badge) badge.innerText = adminCache.filter(u => u[COL.stat] === 'Submitted to HR').length; // Or total length based on your preference
+            }
+            showSaved();
+        }
+    );
+}
 
                 // 4. Handle "Detailed View" Scenario
                 // If we are currently looking at the scorecard (not the list), go back to the list
