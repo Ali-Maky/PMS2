@@ -1585,13 +1585,13 @@ const API_URL = 'https://pms-back-production-b693.up.railway.app';
 const db = {
     // CORRECT STRUCTURE
 from: (table) => {
-    return {
-       select: ...,
-       upsert: ..., // <--- Still inside the return object
-       update: ...,
-       delete: ...
-    }; // <--- Closing brace goes AFTER everything
-}
+  const getHeaders = () => {
+            const token = localStorage.getItem('zpms_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            };
+        };
 
         return {
             // 1. SELECT OPERATIONS
