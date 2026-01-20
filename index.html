@@ -1933,45 +1933,51 @@ async function loadHRApprovals() {
         contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`; 
     }
 }
-  async function restoreSession(id) {
-    // 1. Validate Token Existence
+ async function restoreSession(id) {
+    // 1. Check if token exists in storage
     const token = localStorage.getItem('zpms_token');
-    if (!token || token === "undefined" || token === "null") {
-        console.warn("Security Alert: No valid token found.");
-        logout(); // Force logout to clear bad state
-        return;
-    }
+    if (!token) { logout(); return; }
 
-    // 2. Verify User Identity via Backend
-    // uses 'checkID' which relies on Service Key (does not need token)
-    const { data, error } = await db.from('active_list').select('*').eq(COL.id, id).single();
+    // 2. Fetch User Identity (This works because it uses checkID/ServiceKey)
+    const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
     
     if (data) { 
         user = data; 
         
-        // 3. Try to fetch protected data (This tests the Token)
+        // 3. CRITICAL TEST: Try to fetch protected data using the Token
+        // If this fails with 401, we MUST logout, otherwise the app crashes later.
         try {
-            await mapColumns(); // Test 1
-            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
-            if (sg && sg.data) {
-                masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
-            } else {
-                masterData = { rating: 0, goals: [] };
-            }
-        } catch (e) {
-            console.error("Token invalid or expired:", e);
-            alert("Session expired. Please log in again.");
-            logout();
-            return;
-        }
+            const testReq = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
 
-        startIdleTimer(); 
-        launchApp(); 
+            if (testReq.status === 401) {
+                console.warn("Session Token Expired. Logging out...");
+                localStorage.clear();
+                location.reload();
+                return;
+            }
+
+            // Token is good! Proceed to load data.
+            await mapColumns();
+            
+            // Load Shared Goals
+            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+            masterData = (sg && sg.data) ? (Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data) : { rating: 0, goals: [] };
+
+            startIdleTimer(); 
+            launchApp(); 
+
+        } catch (e) {
+            console.error("Network Error during session restore:", e);
+        }
     } else { 
         logout(); 
     }
 }
-
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
         function logout() { localStorage.clear(); location.reload(); }
