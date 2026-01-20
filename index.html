@@ -1583,9 +1583,9 @@ const API_URL = 'https://pms-back-production-b693.up.railway.app';
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 // --- 2. THE BRIDGE (Connects Frontend to PHP with SECURITY) ---
 const db = {
-    // CORRECT STRUCTURE
-from: (table) => {
-  const getHeaders = () => {
+    from: (table) => {
+        // Helper to get headers with the token
+        const getHeaders = () => {
             const token = localStorage.getItem('zpms_token');
             return {
                 'Content-Type': 'application/json',
@@ -1597,7 +1597,7 @@ from: (table) => {
             // 1. SELECT OPERATIONS
             select: (cols) => {
                 return {
-                    // 1. Exact Match
+                    // Exact Match
                     eq: (col, val) => {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
@@ -1618,7 +1618,7 @@ from: (table) => {
                         };
                     },
                     
-                    // 2. Range (Directory)
+                    // Range (Directory)
                     range: async (from, to) => {
                         try {
                             const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
@@ -1628,7 +1628,7 @@ from: (table) => {
                         } catch (e) { return { data: [], error: e }; }
                     },
 
-                    // 3. Limit (Column Mapping)
+                    // Limit (Column Mapping)
                     limit: async (n) => {
                         const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
                             headers: getHeaders()
@@ -1636,7 +1636,7 @@ from: (table) => {
                         return { data: await res.json(), error: null };
                     },
 
-                    // 4. OR Filter (Team Loading)
+                    // OR Filter (Team Loading)
                     or: async (filterStr) => {
                         try {
                             let allRows = [];
@@ -1671,9 +1671,9 @@ from: (table) => {
                         } catch (e) { return { data: [], error: e }; }
                     }
                 };
-            },
-            
-            // 2. WRITE OPERATIONS (Moved inside 'from' return object)
+            }, // End of Select
+
+            // 2. WRITE OPERATIONS
             upsert: async (payload) => {
                  const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
                  const res = await fetch(`${API_URL}?action=${action}`, {
@@ -1722,7 +1722,7 @@ from: (table) => {
         };
     },
 
-    // 3. RPC OPERATIONS (Sibling of 'from')
+    // 3. RPC OPERATIONS
     rpc: async (name, params) => {
         if (name === 'publish_goals') {
              const res = await fetch(`${API_URL}?action=rpcPublish`, {
@@ -1731,129 +1731,6 @@ from: (table) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('zpms_token')}`
                 },
-                body: JSON.stringify({ payload: params })
-            });
-            return { error: res.ok ? null : { message: "RPC failed" } };
-        }
-    }
-};
-            
-            // Handle Writes
-            upsert: async (payload) => {
-                 const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
-                 const res = await fetch(`${API_URL}?action=${action}`, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({ payload: payload }) 
-                });
-                return { error: res.ok ? null : { message: "Save failed" } };
-            },
-
-            update: (payload) => {
-                return {
-                    eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=saveUser`, {
-                            method: 'POST',
-                            headers: getHeaders(),
-                            body: JSON.stringify({ id: val, payload: payload })
-                        });
-                        return { error: res.ok ? null : { message: "Update failed" } };
-                    },
-                    in: async (col, valArray) => {
-                         for (const id of valArray) {
-                             await fetch(`${API_URL}?action=saveUser`, {
-                                method: 'POST',
-                                headers: getHeaders(),
-                                body: JSON.stringify({ id: id, payload: payload })
-                            });
-                         }
-                         return { error: null };
-                    }
-                };
-            },
-
-            delete: () => {
-                return {
-                    eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=deleteUser`, {
-                            method: 'POST',
-                            headers: getHeaders(),
-                            body: JSON.stringify({ id: val })
-                        });
-                        return { error: res.ok ? null : { message: "Delete failed" } };
-                    }
-                };
-            }
-        };
-    },
-    rpc: async (name, params) => {
-        if (name === 'publish_goals') {
-             const res = await fetch(`${API_URL}?action=rpcPublish`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('zpms_token')}`
-                },
-                body: JSON.stringify({ payload: params })
-            });
-            return { error: res.ok ? null : { message: "RPC failed" } };
-        }
-    }
-};
-            
-            // Handle Writes
-            upsert: async (payload) => {
-                 const action = Array.isArray(payload) ? 'bulkUpsert' : (table === 'company_settings' ? 'saveSettings' : 'saveUser');
-                 const res = await fetch(`${API_URL}?action=${action}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ payload: payload }) 
-                });
-                return { error: res.ok ? null : { message: "Save failed" } };
-            },
-
-            update: (payload) => {
-                return {
-                    eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=saveUser`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ id: val, payload: payload })
-                        });
-                        return { error: res.ok ? null : { message: "Update failed" } };
-                    },
-                    in: async (col, valArray) => {
-                         for (const id of valArray) {
-                             await fetch(`${API_URL}?action=saveUser`, {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ id: id, payload: payload })
-                            });
-                         }
-                         return { error: null };
-                    }
-                };
-            },
-
-            delete: () => {
-                return {
-                    eq: async (col, val) => {
-                        const res = await fetch(`${API_URL}?action=deleteUser`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ id: val })
-                        });
-                        return { error: res.ok ? null : { message: "Delete failed" } };
-                    }
-                };
-            }
-        };
-    },
-    rpc: async (name, params) => {
-        if (name === 'publish_goals') {
-             const res = await fetch(`${API_URL}?action=rpcPublish`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ payload: params })
             });
             return { error: res.ok ? null : { message: "RPC failed" } };
