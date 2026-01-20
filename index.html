@@ -1826,9 +1826,15 @@ function resendOTP() {
 
         // --- 2. INIT ---
         window.onload = async function () {
-
-            await mapColumns();
-            const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+    const uid = localStorage.getItem('zpms_uid');
+    // Only check if we have a session. DO NOT fetch data yet.
+    if (uid && (Date.now() - localStorage.getItem('zpms_time') < IDLE_LIMIT)) {
+        restoreSession(uid);
+    } else {
+        showLogin();
+    }
+}
+			
             if (sg && sg.data) {
                 if (Array.isArray(sg.data)) masterData = { rating: 0, goals: sg.data }; else masterData = sg.data;
             } else { masterData = { rating: 0, goals: [] }; }
@@ -1950,9 +1956,22 @@ async function loadHRApprovals() {
     }
 }
         async function restoreSession(id) {
-            const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
-            if (data) { user = data; startIdleTimer(); launchApp(); } else showLogin();
-        }
+    const { data } = await db.from('active_list').select('*').eq(COL.id, id).single();
+    if (data) { 
+        user = data; 
+        
+        // --- FETCH DATA HERE, AFTER WE HAVE A USER ---
+        await mapColumns();
+        const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
+        if (sg && sg.data) masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
+        // ---------------------------------------------
+
+        startIdleTimer(); 
+        launchApp(); 
+    } else { 
+        showLogin(); 
+    }
+}
 
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
