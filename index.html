@@ -2660,10 +2660,29 @@ function refreshGlobalAdminRating() {
             renderMasterGoals();
         }
 
-     function renderMasterGoals() {
+   function renderMasterGoals() {
     const c = document.getElementById('master-goals-list');
+    
+    // 1. Get unique Divisions
     const allDivs = [...new Set(allCompanyData.map(u => u[COL.div]).filter(Boolean))].sort();
     
+    // 2. STRICTER CHIEF FILTER
+    // We filter strictly for 'L1' or specific C-Suite titles to exclude 'L10', 'L12', etc.
+    const chiefs = allCompanyData.filter(u => {
+        const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
+        const j = (u[COL.job] || "").toString().trim().toUpperCase();
+        
+        // Condition A: Level is STRICTLY "L1" (prevents matching L10, L12)
+        if (l === 'L1') return true;
+        
+        // Condition B: Job Title is explicit C-Suite
+        if (j === 'CEO' || j === 'CHIEF EXECUTIVE OFFICER') return true;
+        if (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) return true; // e.g., Chief Financial Officer
+        
+        return false;
+    }).sort((a, b) => a[COL.name].localeCompare(b[COL.name]));
+
+    // 3. Render HTML
     c.innerHTML = (masterData.goals || []).map((g, i) => `
     <div class="card" style="border-left: 5px solid var(--primary); background: #fff;">
         <div style="display:grid; grid-template-columns: 2fr 1fr; gap:15px; margin-bottom:15px;">
@@ -2671,9 +2690,11 @@ function refreshGlobalAdminRating() {
             
             <select class="login-input" onchange="updateGoalAssignment(${i}, this.value)" style="margin:0;">
                 <option value="">+ Assign Division/Chief</option>
-                ${allDivs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                <optgroup label="Divisions">
+                    ${allDivs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                </optgroup>
                 <optgroup label="Specific Chiefs">
-                    ${allCompanyData.filter(u => getRole(u) === 'Chief').map(u => `<option value="${u[COL.id]}">${u[COL.name]}</option>`).join('')}
+                    ${chiefs.map(u => `<option value="${u[COL.id]}">${u[COL.name]} (${u[COL.id]})</option>`).join('')}
                 </optgroup>
             </select>
         </div>
@@ -2702,19 +2723,19 @@ function refreshGlobalAdminRating() {
 
         <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid #eee;">
            <div style="display:flex; align-items:center; gap:15px;">
-    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">SET ACHIEVEMENT:</span>
-    <select onchange="masterData.goals[${i}].rating=parseInt(this.value); refreshGlobalAdminRating(); saveDraftToDB(); renderMasterGoals();" 
-        style="padding:6px 12px; border-radius:8px; border:2px solid var(--primary); font-weight:700; background:white; cursor:pointer;">
-        <option value="0">Not Rated</option>
-        <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
-        <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
-        <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
-        <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
-        <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
-        <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
-    </select>
-</div>
-             <button class="btn btn-outline" style="color:var(--danger); padding:4px 10px;" onclick="masterData.goals.splice(${i},1); saveDraftToDB(); renderMasterGoals();"><i class="fa-solid fa-trash"></i> Delete Goal</button>
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">SET ACHIEVEMENT:</span>
+                <select onchange="masterData.goals[${i}].rating=parseInt(this.value); refreshGlobalAdminRating(); saveDraftToDB(); renderMasterGoals();" 
+                    style="padding:6px 12px; border-radius:8px; border:2px solid var(--primary); font-weight:700; background:white; cursor:pointer;">
+                    <option value="0">Not Rated</option>
+                    <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
+                    <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
+                    <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
+                    <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
+                    <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
+                    <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
+                </select>
+            </div>
+            <button class="btn btn-outline" style="color:var(--danger); padding:4px 10px;" onclick="masterData.goals.splice(${i},1); saveDraftToDB(); renderMasterGoals();"><i class="fa-solid fa-trash"></i> Delete Goal</button>
         </div>
     </div>`).join('');
 }
