@@ -2857,11 +2857,13 @@ function refreshGlobalAdminRating() {
     // Helper to get companies list
     const companies = ["Zain Iraq", "Horizon", "Next Generation"];
 
+    // Handle empty state
     if (!masterData.goals || masterData.goals.length === 0) {
         container.innerHTML = '<div style="padding:20px; text-align:center; color:#aaa;">No shared goals defined. Click "Create New" below.</div>';
         return;
     }
 
+    // Generate HTML for all goals
     const htmlParts = masterData.goals.map((g, i) => {
         // 1. Setup Context Variables
         const context = g.company_context || 'ALL';
@@ -2986,8 +2988,10 @@ function refreshGlobalAdminRating() {
                 </div>
                 <button class="btn btn-outline" style="color:var(--danger); padding:6px 12px; font-size:0.8rem; border-color:#fee2e2;" onclick="masterData.goals.splice(${i},1); saveDraftToDB(); renderMasterGoals();"><i class="fa-solid fa-trash"></i> Delete Goal</button>
             </div>
-       </div>`; // End of the HTML string
-}).join(''); // Close the map function and join the array
+        </div>`;
+    });
+
+    // Join the array into a single HTML string and inject it
     container.innerHTML = htmlParts.join('');
 }
 function renderMasterGoals() {
