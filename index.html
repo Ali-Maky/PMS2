@@ -1915,37 +1915,57 @@ function setActiveNav(el) {
 
 // --- 7. ADMIN MODULES ---
 
-function loadHRAdmin() {
-    switchAdminTab('directory');
+// --- 7. ADMIN PORTAL ---
+
+function loadHRAdmin() { 
+    // FIX: We must render the container div into the main view first!
+    render(`<div id="admin-content" class="animate-in"></div>`);
+    
+    // Now that #admin-content exists in the DOM, we can load the tabs
+    switchAdminTab('directory'); 
 }
 
 function switchAdminTab(t) {
     const content = document.getElementById('admin-content');
-    // Basic Tabs UI
-    const tabs = ['directory', 'shared', 'analytics', 'app', 'perm'];
-    let tabHtml = `<div class="card" style="margin-bottom:20px; padding:10px;"><div style="display:flex; gap:10px;">`;
-    tabs.forEach(tab => {
-        tabHtml += `<button class="admin-tab ${t===tab?'active':''}" onclick="switchAdminTab('${tab}')" style="padding:10px; border:none; background:transparent; cursor:pointer; border-bottom:2px solid ${t===tab?'blue':'transparent'}">${tab.toUpperCase()}</button>`;
-    });
-    tabHtml += `</div></div><div id="admin-view"></div>`;
     
-    // Inject Tab Structure if not present
-    if(!document.getElementById('admin-view')) content.innerHTML = tabHtml;
-    else { 
-        // Just update active state
-        document.querySelectorAll('.admin-tab').forEach(b => {
-            b.style.borderBottom = b.innerText === t.toUpperCase() ? '2px solid blue' : 'transparent';
-        });
+    // Safety Check: If user refreshed or navigated, content might be gone.
+    if (!content) {
+        loadHRAdmin(); // Restart the render process
+        return;
     }
 
-    const view = document.getElementById('admin-view') || document.getElementById('admin-content');
+    const tabs = ['directory', 'shared', 'analytics', 'app', 'perm', 'search', 'bulk'];
+    
+    // Render Tab Header if it doesn't exist yet
+    if(!document.getElementById('admin-view')) {
+        let tabHtml = `<div class="card" style="margin-bottom:20px; padding:10px;"><div style="display:flex; gap:10px; overflow-x:auto;">`;
+        tabs.forEach(tab => {
+            tabHtml += `<button id="tab-${tab}" class="admin-tab" onclick="switchAdminTab('${tab}')" style="padding:10px; border:none; background:transparent; cursor:pointer; font-weight:bold; border-bottom:2px solid transparent; color:#6b7280; transition:all 0.2s;">${tab.toUpperCase()}</button>`;
+        });
+        tabHtml += `</div></div><div id="admin-view"></div>`;
+        content.innerHTML = tabHtml;
+    }
+
+    // Update Active Tab UI
+    document.querySelectorAll('.admin-tab').forEach(b => {
+        b.style.borderBottom = '2px solid transparent';
+        b.style.color = '#6b7280';
+    });
+    const activeBtn = document.getElementById('tab-' + t);
+    if(activeBtn) {
+        activeBtn.style.borderBottom = '2px solid #6366f1'; // Primary color
+        activeBtn.style.color = '#1f2937'; // Dark text
+    }
+
+    // Route to Logic
     if (t === 'directory') loadAdminDirectory();
     else if (t === 'shared') loadAdminSharedGoals();
     else if (t === 'analytics') loadAdminAnalytics();
     else if (t === 'app') loadHRApprovals();
     else if (t === 'perm') loadAdminPerms();
+    else if (t === 'search') loadAdminSearch();
+    else if (t === 'bulk') loadAdminBulk();
 }
-
 // Admin: Directory
 async function loadAdminDirectory() {
     const view = document.getElementById('admin-view') || document.getElementById('admin-content');
