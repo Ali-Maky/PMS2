@@ -2040,41 +2040,71 @@ async function doLogin() {
     const p1 = document.getElementById('inp-pass').value;
     const p2 = document.getElementById('inp-confirm').value;
     const btn = document.getElementById('btn-login');
+    const isNewSetup = !document.getElementById('grp-confirm').classList.contains('hidden');
     
-    if (!document.getElementById('grp-confirm').classList.contains('hidden')) {
-        if (p1.length < 4) { showToast("Password too short", "error"); return; }
-        if (p1 !== p2) { showToast("Passwords do not match", "error"); return; }
+    // 1. FRONTEND VALIDATION (Prevents useless server calls)
+    if (isNewSetup) {
+        if (p1.length < 4) { 
+            showToast("Password must be at least 4 characters", "error"); 
+            return; 
+        }
+        if (p1 !== p2) { 
+            showToast("Passwords do not match", "error"); 
+            return; 
+        }
     }
 
+    if (!p1) {
+        showToast("Please enter a password", "error");
+        return;
+    }
+
+    // 2. UI FEEDBACK
     btn.innerText = "Verifying...";
     btn.disabled = true;
+    document.getElementById('err-pass').style.display = 'none';
 
     try {
         const res = await fetch(`${API_URL}?action=login`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                id: user.id || document.getElementById('inp-id').value, 
+                // We use the global 'user' object if checkID already set it, 
+                // otherwise fallback to the input field
+                id: (user && user.id) ? user.id : document.getElementById('inp-id').value, 
                 password: p1 
             })
         });
 
+        // Handle standard HTTP error codes (e.g., 401 Unauthorized, 403 Forbidden)
+        if (!res.ok && res.status !== 401) {
+            throw new Error(`Server responded with ${res.status}`);
+        }
+
         const result = await res.json();
 
         if (result.success) {
+            // SECURE SESSION STORAGE (Item #3 & #7)
             localStorage.setItem('zpms_token', result.token);
             localStorage.setItem('zpms_uid', result.user.id);
             localStorage.setItem('zpms_time', Date.now());
+            
+            // Visual transition
             document.getElementById('loading-overlay').classList.remove('hidden');
+            showToast("Success! Entering system...", "success");
+            
+            // Reload to trigger launchApp() with new token
             location.reload(); 
         } else {
+            // LOGIN FAILED
             document.getElementById('err-pass').style.display = 'block';
             document.getElementById('err-pass').innerText = result.message || "Incorrect Password";
             btn.innerText = "Log In";
             btn.disabled = false;
         }
     } catch (e) {
-        console.error(e);
-        showToast("Server connection failed", "error");
+        console.error("Login connection error:", e);
+        showToast("Cannot reach server. Check your connection.", "error");
         btn.innerText = "Log In";
         btn.disabled = false;
     }
