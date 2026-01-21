@@ -1726,20 +1726,24 @@ const db = {
             },
 
             // Handle Deletes
-            delete: () => {
-                return {
-                    eq: async (col, val) => {
-                        try {
-                            const res = await fetch(`${API_URL}?action=deleteUser`, {
-                                method: 'POST',
-                                headers: API_HEADERS,
-                                body: JSON.stringify({ id: val })
-                            });
-                            return { error: res.ok ? null : { message: "Delete failed" } };
-                        } catch(e) { return { error: e }; }
-                    }
-                };
-            }
+        // Handle Deletes
+delete: () => {
+    return {
+        eq: async (col, val) => {
+            try {
+                // Determine action based on the table name
+                const action = (table === 'company_settings') ? 'deleteSettings' : 'deleteUser';
+                
+                const res = await fetch(`${API_URL}?action=${action}`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ id: val })
+                });
+                return { error: res.ok ? null : { message: "Delete failed" } };
+            } catch(e) { return { error: e }; }
+      				  }
+  				  };
+			}
         };
     },
     // RPC Calls (Publishing Goals)
@@ -2850,21 +2854,22 @@ function refreshGlobalAdminRating() {
 }
 
 function saveDraftToDB() {
-    // 1. Show Saving Status immediately for UI feedback
+    // 1. UI Feedback
+    const textEl = document.getElementById('save-text');
     const statusEl = document.getElementById('save-status');
     const dotEl = document.getElementById('save-dot');
-    const textEl = document.getElementById('save-text');
-    
+
     if(statusEl) statusEl.classList.add('show');
     if(dotEl) dotEl.className = 'save-dot saving';
     if(textEl) textEl.innerText = "Saving Draft...";
 
-    // 2. Clear existing timer (Debounce)
+    // 2. Clear previous timer
     clearTimeout(draftSaveTimer);
 
-    // 3. Set new timer (Waits 1 second after you stop typing)
+    // 3. Set new timer
     draftSaveTimer = setTimeout(async () => {
         try {
+            // This now correctly sends 'shared_goals_draft' to the backend
             const { error } = await db.from('company_settings').upsert({ 
                 id: 'shared_goals_draft', 
                 data: masterData 
@@ -2881,7 +2886,7 @@ function saveDraftToDB() {
         } catch (e) {
             console.error("Draft Save Exception:", e);
         }
-    }, 1000);
+    }, 1000); // 1 second delay
 }
 		
         async function discardDraft() {
