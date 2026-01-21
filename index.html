@@ -4062,8 +4062,8 @@ function cascadeFilters() {
     // --- STEP 1: FILTER BY COMPANY ---
     let companySubset = globalReports;
     if (compVal !== 'ALL') {
-        companySubset = globalReports.filter(u => getCompany(u[COL.id]) === compVal);
-    }
+// PASS BOTH ID AND DIVISION
+companySubset = globalReports.filter(u => getCompany(u[COL.id], u[COL.div]) === compVal);    }
 
     // --- STEP 2: UPDATE DIVISION LIST (Only if Company was changed) ---
     if (triggerId === 'org-filter-comp') {
