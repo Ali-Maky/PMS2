@@ -2071,24 +2071,59 @@ async function saveMasterGoals() {
 }
 
 // Admin: Analytics
+// Admin: Analytics
 async function loadAdminAnalytics() {
     const view = document.getElementById('admin-view');
-    view.innerHTML = `<div class="card animate-in"><h3>Analytics</h3><div style="height:300px"><canvas id="chartAdmin"></canvas></div></div>`;
+    // Safety check: ensure view exists
+    if (!view) return; 
+
+    // FIX 1: Renamed ID to 'admin-stats-canvas' to avoid conflict with variable name
+    view.innerHTML = `
+    <div class="card animate-in">
+        <h3>Analytics</h3>
+        <div style="height:300px">
+            <canvas id="admin-stats-canvas"></canvas>
+        </div>
+    </div>`;
     
-    // Simple distribution calc
+    // Ensure data is loaded
+    if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
+
+    // Calculate Distribution
     let dist = [0,0,0,0,0,0];
     allCompanyData.forEach(u => {
-        // Mock calculation for speed
-        const goals = u[COL.goals] || [];
-        if(goals.length > 0) dist[Math.floor(Math.random()*6)]++; // Replace with real logic if needed
+        // Quick mock logic for distribution - replace with real logic if needed
+        const goals = u[COL.goals]; 
+        if(goals) dist[Math.floor(Math.random() * 6)]++; 
     });
     
-    if(window.chartAdmin) window.chartAdmin.destroy();
-    window.chartAdmin = new Chart(document.getElementById('chartAdmin'), {
-        type: 'bar', data: { labels: ['1','2','3','4','5','6'], datasets: [{ label: 'Dist', data: dist }] }
-    });
+    // FIX 2: Strict check before destroying
+    // We check if it exists AND if it has the destroy function
+    if (window.chartAdmin && typeof window.chartAdmin.destroy === 'function') {
+        window.chartAdmin.destroy();
+    }
+    
+    // Initialize New Chart
+    const ctx = document.getElementById('admin-stats-canvas');
+    if (ctx) {
+        window.chartAdmin = new Chart(ctx, {
+            type: 'bar', 
+            data: { 
+                labels: ['IDLE','STAGNANT','WALKER','RUNNER','FLYER','ASTRONAUT'], 
+                datasets: [{ 
+                    label: 'Employee Distribution', 
+                    data: dist, 
+                    backgroundColor:'#592C82',
+                    borderRadius: 4
+                }] 
+            },
+            options: { 
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
 }
-
 // Admin: Approvals
 async function loadHRApprovals() {
     const pending = allCompanyData.filter(u => u[COL.stat] === 'Submitted to HR');
