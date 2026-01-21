@@ -4910,7 +4910,7 @@ const currentUid = (user[COL.id] || '').toString();
     const viewingSelf = (currentUid === profileUid);
     const uRole = getRole(user);
     const status = targetUser[COL.stat] || 'Draft';
-    const canSeeScore = (status === 'Approved') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
+   
 const statusClean = (targetUser[COL.stat] || '').trim().toLowerCase();
     const canSeeScore = (statusClean === 'published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
     const scoreEl = document.getElementById('score');
