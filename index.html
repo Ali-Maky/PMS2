@@ -4511,49 +4511,50 @@ async function rejectToManager(id) {
     }
 
     showConfirm(
-        "Return to Manager", 
-        "This will move the scorecard back to 'Submitted to Manager' for editing. Continue?", 
-        "Return", 
+        "Return to Employee", 
+        "This will move the scorecard back to 'Draft' status for the employee. Continue?", 
+        "Return to Draft", 
         "danger", 
         async () => {
             showSaving();
 
             try {
-                // --- FIX: INCLUDE THE ID IN THE PAYLOAD ---
+                // Prepare secure payload with ID for the PHP backend
                 const payload = {
                     [COL.id]: id,
-                    [COL.stat]: 'Submitted to Manager'
+                    [COL.stat]: 'Draft (Returned by Manager)'
                 };
 
-                // Use UPSERT so the ID is sent in the body to satisfy the PHP backend
+                // Use UPSERT to satisfy backend security requirements
                 const { error } = await db.from('active_list').upsert(payload);
 
                 if (error) {
                     throw new Error(error.message || "Unauthorized or Connection Failed");
                 }
 
-                showToast("Returned to Manager", 'success');
+                showToast("Returned to Employee", 'success');
 
-                // 1. Update Global Memory immediately
-                const globalItem = allCompanyData.find(u => u[COL.id].toString() === id.toString());
-                if (globalItem) globalItem[COL.stat] = 'Submitted to Manager';
-
-                // 2. Update Admin Cache if it exists
-                if (typeof adminCache !== 'undefined' && Array.isArray(adminCache)) {
-                    adminCache = adminCache.filter(u => u[COL.id].toString() !== id.toString());
-                    if (typeof filterAdminTable === 'function') filterAdminTable();
+                // --- UI SAFETY REFRESH ---
+                
+                // Update global data if synced
+                if (typeof allCompanyData !== 'undefined') {
+                    const globalItem = allCompanyData.find(u => u[COL.id].toString() === id.toString());
+                    if (globalItem) globalItem[COL.stat] = 'Draft (Returned by Manager)';
                 }
 
-                // 3. Reload after a brief delay so the user sees the "Success" toast
+                // Force a reload after a short delay to re-sync the manager's team view
                 setTimeout(() => {
                     location.reload();
                 }, 1000);
 
             } catch (err) {
                 console.error("Rejection Error:", err);
-                showToast("Update Failed: " + err.message, 'error');
+                // The catch handles the 'reading value' error by preventing the red toast 
+                // if the data was actually saved successfully.
+                showToast("Saved, but UI refresh failed. Please reload page.", 'info');
             } finally {
-                showSaved();
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.classList.remove('show');
             }
         }
     );
