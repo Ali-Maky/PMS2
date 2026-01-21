@@ -1800,7 +1800,82 @@ async function launchApp() {
     else loadEval(user[COL.id]);
 }
 
-// --- 8. ADMIN DIRECTORY FUNCTIONS ---
+// --- 7.5 MASTER ADMIN PORTAL (MISSING) ---
+
+        async function loadHRAdmin() {
+            document.getElementById('main-view').innerHTML = `
+            <div class="animate-in">
+                <div class="header-bar">
+                    <div>
+                        <h2 class="page-title">HR Portal</h2>
+                        <p class="page-sub">Master Administration & Analytics</p>
+                    </div>
+                </div>
+                
+                <div class="card" style="padding: 0; margin-bottom: 32px; border-radius: 12px; background: white; overflow: hidden;">
+                    <div style="display: flex; overflow-x: auto; border-bottom: 1px solid var(--border);">
+                        <div class="admin-tab active" id="tab-shared" onclick="switchAdminTab('shared')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <i class="fa-solid fa-bullseye"></i> <span>Shared Goals</span>
+                        </div>
+                        <div class="admin-tab" id="tab-directory" onclick="switchAdminTab('directory')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <i class="fa-solid fa-address-book"></i> <span>Directory</span>
+                        </div>
+                        <div class="admin-tab" id="tab-analytics" onclick="switchAdminTab('analytics')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <i class="fa-solid fa-chart-pie"></i> <span>Analytics</span>
+                        </div>
+                        <div class="admin-tab" id="tab-app" onclick="switchAdminTab('app')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <i class="fa-solid fa-list-check"></i> <span>Approvals</span>
+                        </div>
+                        <div class="admin-tab" id="tab-bulk" onclick="switchAdminTab('bulk')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <i class="fa-solid fa-file-csv"></i> <span>Bulk Import</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="admin-content" class="animate-in"></div>
+            </div>`;
+            
+            // Inject Styles for Tabs
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .admin-tab { color: var(--text-muted); font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
+                .admin-tab:hover { background: #f8fafc; color: var(--text-main); }
+                .admin-tab.active { color: var(--primary); border-bottom: 3px solid var(--primary); background: #eff6ff; }
+                .admin-tab i { font-size: 1.1rem; }
+            `;
+            document.head.appendChild(style);
+
+            // Default Load
+            switchAdminTab('shared');
+        }
+
+        function switchAdminTab(t) {
+            // 1. Update Visual Active State
+            document.querySelectorAll('.admin-tab').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.id === 'tab-' + t) btn.classList.add('active');
+            });
+
+            // 2. Clear previous content
+            document.getElementById('admin-content').innerHTML = '<div style="padding:40px; text-align:center;"><div class="spinner"></div></div>';
+
+            // 3. Load View
+            if (t === 'shared') loadAdminSharedGoals();
+            else if (t === 'directory') loadAdminDirectory();
+            else if (t === 'analytics') loadAdminAnalytics();
+            else if (t === 'app') loadAdminApprovals();
+            else if (t === 'bulk') loadAdminBulk();
+        }
+
+        function loadAdminBulk() {
+            document.getElementById('admin-content').innerHTML = `
+            <div class="card animate-in" style="max-width:600px; margin:0 auto; text-align:center; padding:40px;">
+                <div style="font-size:3rem; color:var(--primary); margin-bottom:24px; background:var(--primary-light); width:100px; height:100px; line-height:100px; border-radius:50%; margin-left:auto; margin-right:auto;"><i class="fa-solid fa-file-csv"></i></div>
+                <h3 style="margin-bottom:16px;">Bulk Scorecard Import</h3>
+                <p style="color:var(--text-muted); margin-bottom:32px; line-height:1.6;">Upload an Excel file containing goals for multiple employees. <br>Ensure columns include <strong>Employee ID</strong>, <strong>Title</strong>, <strong>Weight</strong>, etc.</p>
+                <button class="btn btn-primary" onclick="document.getElementById('file-bulk').click()"><i class="fa-solid fa-upload"></i> &nbsp; Select Excel File</button>
+            </div>`;
+        }
 
 // --- 8. ADMIN DIRECTORY FUNCTIONS ---
 
