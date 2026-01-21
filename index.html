@@ -2077,14 +2077,14 @@ async function doLogin() {
             btn.innerText = "Log In";
             btn.disabled = false;
         }
-    } // <--- THIS WAS THE MISSING BRACE AT LINE 2034
+    } // This closes the 'try' block
     catch (e) {
         console.error(e);
         showToast("Server connection failed", "error");
         btn.innerText = "Log In";
         btn.disabled = false;
-    }
-}
+    } // This closes the 'catch' block
+} // This closes the 'doLogin' function
 // Separate function for the final step
 function completeLoginProcess() {
     localStorage.setItem('zpms_uid', user[COL.id]); 
