@@ -2355,7 +2355,7 @@ window.switchAdminTab = async function(tabName) {
     container.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
-                <select id="admin-company-filter" class="form-select d-inline-block w-auto shadow-sm border-primary">
+                <select id="admin-company-filter" class="form-select d-inline-block shadow-sm border-primary" style="width: auto; min-width: 200px;">
                     <option value="ALL">Show All Companies</option>
                     <option value="Zain Iraq">Zain Iraq</option>
                     <option value="Horizon">Horizon</option>
@@ -2397,12 +2397,11 @@ window.switchAdminTab = async function(tabName) {
         // Filter Logic
         const visibleGoals = settings.goals.filter(g => {
             if (filterVal === 'ALL') return true;
-            if (!g.assignments || g.assignments.length === 0) return true; // Show unassigned
-            
-            // Check if goal is assigned to this company OR "Whole Company"
+            if (!g.assignments || g.assignments.length === 0) return true; 
             return g.assignments.some(a => {
                 if (a.target === 'ALL_COMPANY') return true;
-                return true; // Simplified for demo (show all to avoid confusion)
+                // Simple string match for "Zain Iraq" etc.
+                return JSON.stringify(a.target).includes(filterVal) || a.target.includes('COMP_');
             });
         });
 
@@ -2412,23 +2411,26 @@ window.switchAdminTab = async function(tabName) {
             card.innerHTML = `
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between mb-3">
-                            <div class="flex-grow-1 me-3">
+                        <div class="row mb-3 align-items-end">
+                            <div class="col-md-10 col-sm-9">
                                 <label class="small text-muted fw-bold mb-1">GOAL TITLE</label>
-                                <input type="text" class="form-control fw-bold" 
+                                <input type="text" class="form-control form-control-lg fw-bold w-100" 
+                                    style="font-size: 1.1rem;"
                                     value="${goal.title}" 
                                     onchange="updateSharedGoalTitle(${idx}, this.value)"
                                     placeholder="e.g., Consolidated Revenue">
                             </div>
-                            <button class="btn btn-outline-danger btn-sm align-self-center" onclick="deleteSharedGoal(${idx})">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
+                            <div class="col-md-2 col-sm-3 text-end">
+                                <button class="btn btn-outline-danger btn-sm" onclick="deleteSharedGoal(${idx})">
+                                    <i class="fa-solid fa-trash"></i> Delete
+                                </button>
+                            </div>
                         </div>
 
                         <div class="bg-light p-3 rounded mb-3 border">
                             <label class="small text-muted fw-bold mb-2">ASSIGNMENT SCOPE</label>
-                            <div class="d-flex gap-2 mb-2">
-                                <select id="assign-select-${idx}" class="form-select form-select-sm">
+                            <div class="d-flex gap-2 mb-2 align-items-center">
+                                <select id="assign-select-${idx}" class="form-select form-select-sm" style="max-width: 300px;">
                                     <option value="ALL_COMPANY">🌍 Whole Company (All Employees)</option>
                                     <optgroup label="Entities">
                                         <option value="COMP_ZIQ">Zain Iraq</option>
@@ -2439,7 +2441,9 @@ window.switchAdminTab = async function(tabName) {
                                         ${getUniqueDivisions().map(d => `<option value="${d}">${d}</option>`).join('')}
                                     </optgroup>
                                 </select>
-                                <button class="btn btn-primary btn-sm" onclick="addAssignment(${idx})">Assign</button>
+                                <button class="btn btn-primary btn-sm" onclick="addAssignment(${idx})">
+                                    <i class="fa-solid fa-plus"></i> Assign
+                                </button>
                             </div>
                             <div class="d-flex flex-wrap gap-2">
                                 ${renderAssignmentsTags(goal.assignments, idx)}
@@ -2448,11 +2452,11 @@ window.switchAdminTab = async function(tabName) {
 
                         <div>
                             <label class="small text-muted fw-bold mb-1">ACHIEVEMENT SCALES (%)</label>
-                            <div class="d-flex gap-2 overflow-auto pb-2">
+                            <div class="d-flex gap-2 overflow-auto pb-2" style="flex-wrap: wrap;">
                                 ${['idle','stagnant','walker','runner','flyer','astronaut'].map(level => `
-                                    <div class="input-group input-group-sm" style="min-width: 130px;">
-                                        <span class="input-group-text bg-white">${level.charAt(0).toUpperCase() + level.slice(1)}</span>
-                                        <input type="number" class="form-control" 
+                                    <div class="input-group input-group-sm mb-1" style="width: 160px; flex-grow: 1;">
+                                        <span class="input-group-text bg-white fw-bold">${level.charAt(0).toUpperCase() + level.slice(1)}</span>
+                                        <input type="text" class="form-control" 
                                             value="${goal.levels ? goal.levels[level] : ''}" 
                                             onchange="updateSharedGoalLevel(${idx}, '${level}', this.value)">
                                     </div>
@@ -2465,7 +2469,6 @@ window.switchAdminTab = async function(tabName) {
             listArea.appendChild(card);
         });
     };
-
     filterDropdown.onchange = renderList;
     renderList();
 
