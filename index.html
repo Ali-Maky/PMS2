@@ -3271,7 +3271,118 @@ async function loadEval(tid, isSearchMode = false) {
             calc(); // Recalculate totals
             autoSave();
         }
+// --- 17. UTILITIES & HELPERS ---
 
+        function getRole(u, hasReports = false) {
+            if (!u) return 'Staff';
+            
+            const role = (u[COL.role] || "").trim().toLowerCase();
+            const job = (u[COL.job] || "").trim().toUpperCase();
+            const lvl = (u[COL.lvl] || "").trim().toUpperCase();
+
+            // 1. Explicit Database Role (Highest Priority)
+            if (role === 'admin') return 'Admin';
+            if (role === 'master') return 'Master';
+
+            // 2. Job Title Logic (Strict Master Check)
+            const MASTER_TITLE = "HEAD OF EMPLOYEE GROWTH AND RELATION DEPARTMENT";
+            if (job === MASTER_TITLE) return 'Master';
+            
+            // 3. Hierarchy Logic
+            if (job.includes('CHIEF') || job.includes('CCO') || lvl === 'L1') return 'Chief';
+            if (job.includes('DIRECTOR') || lvl === 'L2') return 'Director';
+            if (job.includes('SENIOR MANAGER') || lvl === 'L3') return 'Senior Manager';
+            
+            // 4. Team Logic
+            if (hasReports) return 'Manager';
+
+            return 'Employee';
+        }
+
+        function getW(lvl, job) {
+            // Default Weights
+            let s = 30, i = 70;
+            
+            // Override logic based on Level
+            const l = (lvl || "").toUpperCase();
+            if (l === 'L1') { s = 60; i = 40; }
+            else if (l === 'L2') { s = 50; i = 50; }
+            else if (l === 'L3') { s = 40; i = 60; }
+            
+            return { s, i };
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            
+            let icon = 'fa-circle-info';
+            if (type === 'success') icon = 'fa-circle-check';
+            if (type === 'error') icon = 'fa-circle-exclamation';
+
+            el.innerHTML = `
+                <div class="toast-icon"><i class="fa-solid ${icon}"></i></div>
+                <div class="toast-msg">${msg}</div>
+            `;
+            
+            container.appendChild(el);
+            
+            // Animate In
+            setTimeout(() => el.classList.add('show'), 10);
+            
+            // Remove after 3s
+            setTimeout(() => {
+                el.classList.remove('show');
+                setTimeout(() => el.remove(), 400);
+            }, 3500);
+        }
+
+        function showConfirm(title, msg, confirmBtnText, confirmBtnType, onConfirm) {
+            const overlay = document.getElementById('confirm-overlay');
+            // Ensure elements exist
+            if (!overlay) return; 
+
+            document.getElementById('conf-title').innerText = title;
+            document.getElementById('conf-msg').innerText = msg;
+            
+            const btn = document.getElementById('conf-btn-yes');
+            btn.innerText = confirmBtnText;
+            btn.className = `btn btn-${confirmBtnType}`; 
+
+            // Clone button to remove old event listeners to prevent double-firing
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.onclick = () => {
+                overlay.classList.remove('open');
+                onConfirm();
+            };
+
+            // Close button logic
+            const cancelBtn = overlay.querySelector('.btn-outline');
+            cancelBtn.onclick = () => overlay.classList.remove('open');
+
+            overlay.classList.add('open');
+        }
+        
+        function closeConfirm() {
+             document.getElementById('confirm-overlay').classList.remove('open');
+        }
+        
+        function doConfirm() {
+            // Placeholder for safety, actual logic is bound dynamically in showConfirm
+        }
+
+        // HTML Escape Helper to prevent XSS
+        function escapeHTML(str) {
+            if (!str) return "";
+            return str.toString().replace(/&/g, "&amp;")
+                      .replace(/</g, "&lt;")
+                      .replace(/>/g, "&gt;")
+                      .replace(/"/g, "&quot;")
+                      .replace(/'/g, "&#039;");
+        }
         // --- 18. MODAL HTML STRUCTURES ---
     </script>
 
