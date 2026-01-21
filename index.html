@@ -1867,27 +1867,13 @@ function resendOTP() {
             else showLogin();
         }
 
-        async function mapColumns() {
-            const { data } = await db.from('active_list').select('*').limit(1);
-            if (data && data[0]) {
-                const r = data[0];
-                const keys = Object.keys(r);
-                const findCol = (terms) => keys.find(k => terms.some(t => k.toLowerCase().includes(t.toLowerCase())));
-
-                if (r['Employee Number']) COL.id = 'Employee Number';
-                if (r['Name']) COL.name = 'Name';
-                if (r['Level']) COL.lvl = 'Level';
-                if (r['Job']) COL.job = 'Job';
-                if (r['Division']) COL.div = 'Division';
-                if (r['Department']) COL.dept = 'Department';
-
-                const mgrCol = findCol(['supervisor', 'manager', 'reports to', 'direct manager']);
-                if (mgrCol) COL.mgr = mgrCol;
-
-                const roleCol = findCol(['access_role', 'role', 'permission']);
-                if (roleCol) COL.role = roleCol;
-            }
-        }
+async function mapColumns() {
+    // FUNCTION DISABLED:
+    // We are using the hardcoded COL object above because
+    // the database schema is now fixed and lowercase.
+    console.log("Using hardcoded column mapping.");
+    return;
+}
 
 async function loadHRApprovals() {
     const contentDiv = document.getElementById('admin-content');
