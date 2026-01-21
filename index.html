@@ -4002,44 +4002,68 @@ async function publishBulk() {
         // --- 7. REPORTS ---
         // --- 7. REPORTS (UPDATED FOR REAL-TIME AUTO-CALCULATION) ---
 // --- FIXED: LOAD ANALYTICS DASHBOARD ---
+// --- FIXED: LEADERSHIP REPORTS ---
+async function loadReports() {
+    if (!user) return; // Prevent "undefined id" crash
+
+    document.getElementById('main-view').innerHTML = `<div class="spinner"></div>`;
+
+    try {
+        // 1. Fetch only relevant data from server (Item #9)
+        const res = await fetch(`${API_URL}?action=getMyTeam`, { headers: API_HEADERS });
+        const directReports = await res.json();
+
+        // 2. NOW calculate Hierarchy inside this function ONLY
+        globalReports = getDownstream(user[COL.id], directReports); 
+
+        // CCO Logic
+        const myJob = (user[COL.job] || "").toUpperCase();
+        if (myJob.includes('COMMERCIAL') || myJob.includes('CCO')) {
+            globalReports = globalReports.filter(u => !((u[COL.div] || "").toUpperCase().includes('SECURITY')));
+        }
+
+        const showOrgChart = (globalReports.length > directReports.length);
+        const globalRating = masterData.rating || 0;
+
+        // Render your view normally using 'directReports' instead of a global 'allCompanyData'
+        let tableRows = directReports.map(r => `<tr><td>${r.name}</td><td>${r.status}</td></tr>`).join('');
+        
+        let h = `
+            <div class="header-bar"><h2 class="page-title">Leadership Reports</h2></div>
+            <div class="dash-grid" style="grid-template-columns: ${showOrgChart ? '1fr 1fr' : '1fr'};">
+                <div class="card"><h3>Direct Reports</h3><canvas id="chartDirect"></canvas></div>
+                ${showOrgChart ? '<div class="card"><h3>Total Org</h3><canvas id="chartOrg"></canvas></div>' : ''}
+            </div>
+            <div class="card"><table>${tableRows}</table></div>
+        `;
+        render(h);
+        
+        // Initialize Charts...
+    } catch (err) {
+        console.error("Report Error:", err);
+    }
+}
+
+// --- FIXED: ANALYTICS DASHBOARD ---
 async function loadAnalyticsDashboard() {
     try {
         const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
-        if (!res.ok) throw new Error("Failed to fetch analytics");
         const data = await res.json();
 
-        // 1. Update Chart
         if (chartAdmin) chartAdmin.destroy();
-        
-        const ctx = document.getElementById('chartAdmin');
-        if (ctx) {
-            chartAdmin = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
-                    datasets: [{
-                        label: 'Employees',
-                        data: data.distribution, 
-                        backgroundColor: '#592C82',
-                        borderRadius: 4
-                    }]
-                },
-                options: { 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-        
-        // 2. Update Total Label
-        const countLbl = document.getElementById('org-count-lbl');
-        if (countLbl) countLbl.innerText = `(${data.totalCount})`;
-
+        chartAdmin = new Chart(document.getElementById('chartAdmin'), {
+            type: 'bar',
+            data: {
+                labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
+                datasets: [{ data: data.distribution, backgroundColor: '#592C82' }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+        document.getElementById('org-count-lbl').innerText = `(${data.totalCount})`;
     } catch (e) {
-        console.error("Analytics Load Error:", e);
-        showToast("Error loading analytics stats", "error");
+        console.error("Analytics Error", e);
     }
-} // <--- This closing bracket was likely missing or misplaced
+}
     // 4. Calculate Org Data
     
     // CCO Logic (Optional: Keep if needed)
