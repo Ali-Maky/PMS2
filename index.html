@@ -2833,10 +2833,18 @@ function refreshGlobalAdminRating() {
     }
 }
 
-        async function saveDraftToDB() {
-            await db.from('company_settings').upsert({ id: 'shared_goals_draft', data: masterData });
-            if (!hasDraft) { hasDraft = true; loadAdminSharedGoals(); }
-        }
+      async function saveDraftToDB() {
+    // 1. Send data to database
+    await db.from('company_settings').upsert({ id: 'shared_goals_draft', data: masterData });
+    
+    // 2. If this is the first edit, update the 'hasDraft' flag, 
+    // but DO NOT reload the whole page (loadAdminSharedGoals).
+    if (!hasDraft) { 
+        hasDraft = true; 
+        // Optional: You could manually inject the "Unsaved Draft" banner here if you wanted,
+        // but for now, just setting the flag ensures logic consistency.
+    }
+}
 
         async function discardDraft() {
             showConfirm("Discard Draft", "Discard draft and reload live data?", "Discard", "danger", async () => {
@@ -2945,7 +2953,7 @@ function refreshGlobalAdminRating() {
                     placeholder="Goal Title" style="margin:0;">
                 
                 <select class="login-input" style="margin:0; font-weight:700; color:var(--text-main);"
-                    onchange="masterData.goals[${i}].company_context=this.value; saveDraftToDB(); renderMasterGoals();">
+                    onchange="masterData.goals[${i}].company_context=this.value; renderMasterGoals(); saveDraftToDB();">
                     <option value="ALL" ${context === 'ALL' ? 'selected' : ''}>🌍 All Companies</option>
                     ${companies.map(comp => `<option value="${comp}" ${context === comp ? 'selected' : ''}>🏢 ${comp}</option>`).join('')}
                 </select>
@@ -3120,18 +3128,30 @@ function renderMasterGoals() {
     }).join('');
 }
 // Helper to add a Division or Chief ID to a specific Shared Goal
+// Helper to add a Division or Chief ID to a specific Shared Goal
 function updateGoalAssignment(goalIndex, value) {
     if (!value) return;
-    if (!masterData.goals[goalIndex].assignments) masterData.goals[goalIndex].assignments = [];
+    
+    // Initialize array if missing
+    if (!masterData.goals[goalIndex].assignments) {
+        masterData.goals[goalIndex].assignments = [];
+    }
 
     // Check if target already exists to prevent duplicates
-    if (!masterData.goals[goalIndex].assignments.find(a => a.target === value)) {
+    const exists = masterData.goals[goalIndex].assignments.find(a => a.target === value);
+    
+    if (!exists) {
+        // 1. Update Local Memory
         masterData.goals[goalIndex].assignments.push({ 
             target: value, 
             weight: 0 
         });
+
+        // 2. Update UI immediately (Instant feedback)
+        renderMasterGoals(); 
+
+        // 3. Save to DB in background
         saveDraftToDB();
-        renderMasterGoals(); // Re-render to show the new badge
     }
 }
 
