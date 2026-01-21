@@ -2349,177 +2349,240 @@ window.switchAdminTab = async function(tabName) {
         // Placeholder for other tabs
         container.innerHTML = `<div class="p-5 text-center text-muted"><h4><i class="fa-solid fa-tools"></i> ${tabName.charAt(0).toUpperCase() + tabName.slice(1)} Module</h4><p>This module is ready to be connected.</p></div>`;
     }
-};
-		async function renderSharedGoalsTab(container) {
-    // A. The Toolbar & List Container
+};// --- 3. Shared Goals Feature (Fixed Layout & Cascading Filters) ---
+async function renderSharedGoalsTab(container) {
+    // 1. Inject Styles for the "Clean Card" Look
+    const styleId = 'shared-goals-css';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = `
+            .goal-card { border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+            .goal-header { background: #f8fafc; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+            .goal-title-input { border: none; background: transparent; font-size: 1.1rem; font-weight: 600; color: #1e293b; width: 100%; outline: none; }
+            .goal-title-input:focus { background: #fff; box-shadow: 0 0 0 2px #4f46e5; border-radius: 4px; }
+            .goal-body { padding: 24px; }
+            .scale-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; flex: 1; min-width: 100px; }
+            .scale-label { font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; display: block; }
+            .scale-input { text-align: center; font-weight: bold; width: 100%; border: none; border-bottom: 2px solid transparent; outline: none; color: #0f172a; }
+            .scale-input:focus { border-bottom-color: #4f46e5; }
+            .assign-select { min-width: 250px; padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight: 500; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 2. Fetch Data & Prepare Layout
+    let settings = { goals: [] };
+    try {
+        const res = await db.from('company_settings').select('data').eq('id', 'shared_goals_v1').single();
+        if (res.data && res.data.data) settings = res.data.data;
+    } catch (e) { console.error("Settings error:", e); }
+
+    // Header & Filter Bar
     container.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
             <div>
-                <select id="admin-company-filter" class="form-select d-inline-block shadow-sm border-primary" style="width: auto; min-width: 200px;">
-                    <option value="ALL">Show All Companies</option>
+                <label class="small text-muted fw-bold d-block mb-1">FILTER CONTEXT</label>
+                <select id="admin-company-filter" class="form-select shadow-sm" style="min-width: 280px; font-weight: 600;">
+                    <option value="ALL">Show All Contexts</option>
                     <option value="Zain Iraq">Zain Iraq</option>
                     <option value="Horizon">Horizon</option>
                     <option value="Next Generation">Next Generation</option>
                 </select>
             </div>
-            <button class="btn btn-success shadow-sm" onclick="addNewSharedGoal()">
-                <i class="fa-solid fa-plus"></i> New Shared Goal
+            <div class="d-flex gap-2">
+                 <button class="btn btn-primary" onclick="publishChanges()" style="background: #4f46e5;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Publish Changes
+                </button>
+            </div>
+        </div>
+
+        <div id="unsaved-banner" class="alert alert-warning d-none mb-4">
+            <i class="fa-solid fa-triangle-exclamation"></i> You have unsaved changes. Click "Publish Changes" to make them live.
+        </div>
+
+        <div class="mb-4">
+             <button class="btn btn-success w-100 py-2" onclick="addNewSharedGoal()" style="border-style: dashed; background: #f0fdf4; color: #15803d; border-color: #86efac;">
+                <i class="fa-solid fa-plus"></i> Add New Shared Objective
             </button>
         </div>
-        <div id="goals-list-area" class="row">
-            </div>
+
+        <div id="goals-list-area"></div>
     `;
 
-    // B. Fetch Data
-    let settings = { goals: [] };
-    try {
-        const res = await db.from('company_settings').select('data').eq('id', 'shared_goals_v1').single();
-        if (res.data && res.data.data) {
-            settings = res.data.data;
-        }
-    } catch (e) {
-        console.error("Settings load error:", e);
-    }
-
-    // C. Setup Filter & Render
     const filterDropdown = document.getElementById('admin-company-filter');
     const listArea = document.getElementById('goals-list-area');
 
+    // 3. Render Function (The Logic Core)
     const renderList = () => {
-        const filterVal = filterDropdown.value;
+        const contextFilter = filterDropdown.value; // e.g., "Zain Iraq"
         listArea.innerHTML = '';
 
-        if (!settings.goals || settings.goals.length === 0) {
-            listArea.innerHTML = '<div class="col-12 text-center text-muted p-5">No shared goals defined yet. Click "New Shared Goal" to start.</div>';
+        // If filtering by company, only show goals that are RELEVANT to that company (or unassigned)
+        const visibleGoals = settings.goals.filter(g => {
+            if (contextFilter === 'ALL') return true;
+            if (!g.assignments || g.assignments.length === 0) return true;
+            // Show if it has at least one assignment matching the filter
+            return g.assignments.some(a => 
+                a.target === 'ALL_COMPANY' || 
+                JSON.stringify(a.target).includes(contextFilter) ||
+                (contextFilter === 'Zain Iraq' && a.target.includes('ZIQ')) ||
+                (contextFilter === 'Horizon' && a.target.includes('HOR'))
+            );
+        });
+
+        if (visibleGoals.length === 0) {
+            listArea.innerHTML = '<div class="text-center text-muted p-5">No goals found for this filter context.</div>';
             return;
         }
 
-        // Filter Logic
-        const visibleGoals = settings.goals.filter(g => {
-            if (filterVal === 'ALL') return true;
-            if (!g.assignments || g.assignments.length === 0) return true; 
-            return g.assignments.some(a => {
-                if (a.target === 'ALL_COMPANY') return true;
-                // Simple string match for "Zain Iraq" etc.
-                return JSON.stringify(a.target).includes(filterVal) || a.target.includes('COMP_');
-            });
-        });
-
         visibleGoals.forEach((goal, idx) => {
             const card = document.createElement('div');
-            card.className = 'col-12 mb-3';
+            card.className = 'goal-card animate-in';
+            
+            // --- CASCADING DROPDOWN GENERATOR ---
+            // Only show options relevant to the selected "Company Filter"
+            let dropdownOptions = `<option value="" disabled selected>+ Assign Division/Chief</option>`;
+            
+            // 1. Whole Company (Always visible if ALL is selected)
+            if (contextFilter === 'ALL') {
+                dropdownOptions += `<option value="ALL_COMPANY">🌍 Whole Company (All Employees)</option>`;
+            }
+
+            // 2. Filtered Options
+            const companyMap = {
+                'Zain Iraq': { code: 'COMP_ZIQ', prefix: 'ZIQ' },
+                'Horizon': { code: 'COMP_HOR', prefix: 'HOR' },
+                'Next Generation': { code: 'COMP_NG', prefix: 'NG' }
+            };
+
+            // If "ALL" or specific company is selected, add its Entity Option
+            Object.keys(companyMap).forEach(compName => {
+                if (contextFilter === 'ALL' || contextFilter === compName) {
+                    dropdownOptions += `<optgroup label="${compName}">
+                        <option value="${companyMap[compName].code}">Entire Entity (${compName})</option>
+                        ${getDivisionsForCompany(compName).map(d => `<option value="${d}">${d}</option>`).join('')}
+                    </optgroup>`;
+                }
+            });
+
+            // --- HTML TEMPLATE ---
             card.innerHTML = `
-                <div class="card shadow-sm border-0">
-                    <div class="card-body">
-                        <div class="row mb-3 align-items-end">
-                            <div class="col-md-10 col-sm-9">
-                                <label class="small text-muted fw-bold mb-1">GOAL TITLE</label>
-                                <input type="text" class="form-control form-control-lg fw-bold w-100" 
-                                    style="font-size: 1.1rem;"
-                                    value="${goal.title}" 
-                                    onchange="updateSharedGoalTitle(${idx}, this.value)"
-                                    placeholder="e.g., Consolidated Revenue">
-                            </div>
-                            <div class="col-md-2 col-sm-3 text-end">
-                                <button class="btn btn-outline-danger btn-sm" onclick="deleteSharedGoal(${idx})">
-                                    <i class="fa-solid fa-trash"></i> Delete
-                                </button>
-                            </div>
-                        </div>
+                <div class="goal-header">
+                    <input type="text" class="goal-title-input" 
+                        value="${goal.title}" 
+                        onchange="updateSharedGoalTitle(${idx}, this.value)"
+                        placeholder="Goal Title (e.g., Consolidated Revenue)">
+                    
+                    <div class="d-flex gap-2">
+                        <select id="assign-select-${idx}" class="assign-select" onchange="addAssignment(${idx})">
+                            ${dropdownOptions}
+                        </select>
+                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSharedGoal(${idx})">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
 
-                        <div class="bg-light p-3 rounded mb-3 border">
-                            <label class="small text-muted fw-bold mb-2">ASSIGNMENT SCOPE</label>
-                            <div class="d-flex gap-2 mb-2 align-items-center">
-                                <select id="assign-select-${idx}" class="form-select form-select-sm" style="max-width: 300px;">
-                                    <option value="ALL_COMPANY">🌍 Whole Company (All Employees)</option>
-                                    <optgroup label="Entities">
-                                        <option value="COMP_ZIQ">Zain Iraq</option>
-                                        <option value="COMP_HOR">Horizon</option>
-                                        <option value="COMP_NG">Next Generation</option>
-                                    </optgroup>
-                                    <optgroup label="Divisions & Chiefs">
-                                        ${getUniqueDivisions().map(d => `<option value="${d}">${d}</option>`).join('')}
-                                    </optgroup>
-                                </select>
-                                <button class="btn btn-primary btn-sm" onclick="addAssignment(${idx})">
-                                    <i class="fa-solid fa-plus"></i> Assign
-                                </button>
-                            </div>
-                            <div class="d-flex flex-wrap gap-2">
-                                ${renderAssignmentsTags(goal.assignments, idx)}
-                            </div>
-                        </div>
+                <div class="goal-body">
+                    <label class="small text-muted fw-bold mb-2 d-block">ASSIGNMENTS & CUSTOM WEIGHTS</label>
+                    <div class="d-flex flex-wrap gap-2 mb-4 p-3 bg-light rounded border-0" style="min-height: 50px;">
+                        ${renderAssignmentsTags(goal.assignments, idx)}
+                    </div>
 
-                        <div>
-                            <label class="small text-muted fw-bold mb-1">ACHIEVEMENT SCALES (%)</label>
-                            <div class="d-flex gap-2 overflow-auto pb-2" style="flex-wrap: wrap;">
-                                ${['idle','stagnant','walker','runner','flyer','astronaut'].map(level => `
-                                    <div class="input-group input-group-sm mb-1" style="width: 160px; flex-grow: 1;">
-                                        <span class="input-group-text bg-white fw-bold">${level.charAt(0).toUpperCase() + level.slice(1)}</span>
-                                        <input type="text" class="form-control" 
-                                            value="${goal.levels ? goal.levels[level] : ''}" 
-                                            onchange="updateSharedGoalLevel(${idx}, '${level}', this.value)">
-                                    </div>
-                                `).join('')}
+                    <label class="small text-muted fw-bold mb-2 d-block">ACHIEVEMENT SCALES</label>
+                    <div class="d-flex gap-3 overflow-auto">
+                        ${['idle','stagnant','walker','runner','flyer','astronaut'].map(level => `
+                            <div class="scale-box">
+                                <span class="scale-label">${level}</span>
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <span class="text-muted small me-1">>=</span>
+                                    <input type="text" class="scale-input" 
+                                        value="${goal.levels ? goal.levels[level] : ''}" 
+                                        placeholder="%"
+                                        onchange="updateSharedGoalLevel(${idx}, '${level}', this.value)">
+                                </div>
                             </div>
-                        </div>
+                        `).join('')}
                     </div>
                 </div>
             `;
             listArea.appendChild(card);
         });
     };
+
     filterDropdown.onchange = renderList;
     renderList();
 
-    // --- SHARED HELPERS (Global Scope for HTML OnClick) ---
-    window.updateSharedGoalTitle = (idx, val) => { settings.goals[idx].title = val; saveSettings(); };
+    // --- LOGIC HELPERS ---
+    // 1. Fake Helper to simulate Divisions per company (Since real data might be messy)
+    function getDivisionsForCompany(compName) {
+        const uniqueDivs = new Set();
+        if (typeof allCompanyData !== 'undefined') {
+            allCompanyData.forEach(row => {
+                const div = row.division || row.department;
+                if (!div) return;
+                
+                // Heuristic: Check ID prefix to guess company
+                const id = (row.id || '').toString().toUpperCase();
+                let belongs = false;
+                if (compName === 'Zain Iraq' && id.startsWith('ZIQ')) belongs = true;
+                if (compName === 'Horizon' && (id.startsWith('H') || id.startsWith('AWO'))) belongs = true;
+                if (compName === 'Next Generation' && id.startsWith('NG')) belongs = true;
+
+                if (belongs) uniqueDivs.add(div);
+            });
+        }
+        return Array.from(uniqueDivs).sort();
+    }
+
+    // 2. Global Event Handlers
+    window.updateSharedGoalTitle = (idx, val) => { settings.goals[idx].title = val; saveDraft(); };
     window.updateSharedGoalLevel = (idx, lvl, val) => { 
         if(!settings.goals[idx].levels) settings.goals[idx].levels = {};
         settings.goals[idx].levels[lvl] = val; 
-        saveSettings(); 
-    };
-    window.deleteSharedGoal = (idx) => {
-        if(confirm('Delete this goal?')) {
-            settings.goals.splice(idx, 1);
-            saveSettings();
-            renderList();
-        }
+        saveDraft(); 
     };
     window.addAssignment = (idx) => {
         const sel = document.getElementById(`assign-select-${idx}`);
-        const val = sel.value;
+        if (!sel.value) return;
         if (!settings.goals[idx].assignments) settings.goals[idx].assignments = [];
-        if (settings.goals[idx].assignments.some(a => a.target === val)) return;
-        settings.goals[idx].assignments.push({ target: val });
-        saveSettings();
+        if (settings.goals[idx].assignments.some(a => a.target === sel.value)) return;
+        settings.goals[idx].assignments.push({ target: sel.value });
+        sel.value = ""; // Reset dropdown
+        saveDraft();
         renderList();
     };
     window.removeAssignment = (gIdx, aIdx) => {
         settings.goals[gIdx].assignments.splice(aIdx, 1);
-        saveSettings();
+        saveDraft();
         renderList();
+    };
+    window.deleteSharedGoal = (idx) => {
+        if(confirm('Delete this goal?')) {
+            settings.goals.splice(idx, 1);
+            saveDraft();
+            renderList();
+        }
     };
     window.addNewSharedGoal = () => {
         settings.goals.unshift({ title: "", levels: {}, assignments: [] });
         renderList();
     };
-
-    async function saveSettings() {
+    window.publishChanges = async () => {
+        const btn = document.querySelector('button[onclick="publishChanges()"]');
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
         await db.from('company_settings').upsert({ id: 'shared_goals_v1', data: settings });
-    }
-}
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Published!';
+        document.getElementById('unsaved-banner').classList.add('d-none');
+        setTimeout(() => btn.innerHTML = oldHtml, 2000);
+    };
 
-// --- 4. Helpers ---
-function getUniqueDivisions() {
-    const divs = new Set();
-    if (typeof allCompanyData !== 'undefined') {
-        allCompanyData.forEach(row => {
-            if (row.division) divs.add(row.division);
-            if (row.department) divs.add(row.department);
-        });
+    function saveDraft() {
+        document.getElementById('unsaved-banner').classList.remove('d-none');
+        // In a real app, you might save to localStorage here
     }
-    return Array.from(divs).sort();
 }
 
 function renderAssignmentsTags(assignments, gIdx) {
