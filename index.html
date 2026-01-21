@@ -3997,29 +3997,45 @@ async function publishBulk() {
 }
         // --- 7. REPORTS ---
         // --- 7. REPORTS (UPDATED FOR REAL-TIME AUTO-CALCULATION) ---
+// --- FIXED: LOAD ANALYTICS DASHBOARD ---
 async function loadAnalyticsDashboard() {
-    const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
-    const data = await res.json();
+    try {
+        const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
+        if (!res.ok) throw new Error("Failed to fetch analytics");
+        const data = await res.json();
 
-    // Now, instead of calculating from allCompanyData, we use the server's answer
-    if (chartAdmin) chartAdmin.destroy();
-    
-    chartAdmin = new Chart(document.getElementById('chartAdmin'), {
-        type: 'bar',
-        data: {
-            labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
-            datasets: [{
-                label: 'Employees',
-                data: data.distribution, // Directly from server
-                backgroundColor: '#592C82',
-                borderRadius: 4
-            }]
-        },
-        options: { maintainAspectRatio: false }
-    });
-    
-    document.getElementById('org-count-lbl').innerText = `(${data.totalCount})`;
-}
+        // 1. Update Chart
+        if (chartAdmin) chartAdmin.destroy();
+        
+        const ctx = document.getElementById('chartAdmin');
+        if (ctx) {
+            chartAdmin = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
+                    datasets: [{
+                        label: 'Employees',
+                        data: data.distribution, 
+                        backgroundColor: '#592C82',
+                        borderRadius: 4
+                    }]
+                },
+                options: { 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+        
+        // 2. Update Total Label
+        const countLbl = document.getElementById('org-count-lbl');
+        if (countLbl) countLbl.innerText = `(${data.totalCount})`;
+
+    } catch (e) {
+        console.error("Analytics Load Error:", e);
+        showToast("Error loading analytics stats", "error");
+    }
+} // <--- This closing bracket was likely missing or misplaced
     // 4. Calculate Org Data
     globalReports = getDownstream(user[COL.id], allCompanyData);
     
