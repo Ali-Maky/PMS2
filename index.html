@@ -3022,7 +3022,7 @@ function renderMasterGoals() {
         return `
         <div class="card" style="border-left: 5px solid var(--primary); background: #fff; overflow:visible; margin-bottom:20px;">
             <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:15px; margin-bottom:15px;">
-                <input class="login-input" value="${g.title}" 
+                <input class="login-input" value="${escapeHTML(g.title)}" 
                     onchange="masterData.goals[${i}].title=this.value; saveDraftToDB();" 
                     placeholder="Goal Title" style="margin:0;">
                 
@@ -3111,7 +3111,7 @@ function renderMasterGoals() {
     <div class="card" style="border-left: 5px solid var(--primary); background: #fff; overflow:visible;">
         
         <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:15px; margin-bottom:15px;">
-            <input class="login-input" value="${g.title}" 
+            <input class="login-input" value="${escapeHTML(g.title)}" 
                 onchange="masterData.goals[${i}].title=this.value; saveDraftToDB();" 
                 placeholder="Goal Title (e.g. Revenue Growth)" style="margin:0;">
             
@@ -4612,7 +4612,7 @@ async function rejectToManager(id) {
             
             <div class="pro-goal-header">
                 <div style="flex:1;">
-                    <div style="font-size:1.1rem; font-weight:700; color:var(--text-main);">${g.title}</div>
+                    <div style="font-size:1.1rem; font-weight:700; color:var(--text-main);">${escapeHTML(g.title)}</div>
                 </div>
                 <div class="pro-goal-meta">
                     <div class="pro-weight-badge">Weight: <strong style="${isInvalid ? 'color:var(--danger);' : ''}">${(g.weight * 100).toFixed(0)}%</strong></div>
@@ -5218,6 +5218,17 @@ function getDownstream(managerId, allData) {
         }
         return false;
     });
+}
+		function escapeHTML(str) {
+    if (!str) return "";
+    return str.toString().replace(/[&<>'"]/g, 
+        tag => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;'
+        }[tag]));
 }
     </script>
 
