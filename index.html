@@ -10,8 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        .pro-goal-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-        .pro-unit-badge { background: #e0f2fe; color: #0369a1; font-weight: 700; font-size: 0.8rem; padding: 6px 12px; border-radius: 20px; border: 1px solid #bae6fd; display: flex; align-items: center; gap: 4px; }
+        /* Modern Palette & Dynamic Badges */
         .badge-score { padding: 6px 12px; border-radius: 8px; font-weight: 800; font-family: monospace; display: inline-block; min-width: 60px; text-align: center; }
         .badge-rating { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
         .lvl-6 { background: #592C82; color: white; }
@@ -20,141 +19,115 @@
         .lvl-3 { background: #f59e0b; color: white; }
         .lvl-2 { background: #ef4444; color: white; }
         .lvl-1 { background: #94a3b8; color: white; }
-        .lvl-0 { background: #f1f5f9; color: var(--text-muted); }
+        .lvl-0 { background: #f1f5f9; color: #6b7280; }
         :root {
             --primary: #6366f1; --primary-dark: #4338ca; --primary-light: #e0e7ff; --secondary: #ec4899;
             --bg-body: #f3f4f6; --bg-card: #ffffff; --bg-sidebar: #ffffff;
             --text-main: #1f2937; --text-muted: #6b7280; --text-light: #9ca3af;
             --border: #e5e7eb; --border-hover: #d1d5db;
-            --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6;
-            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05); --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1); --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.3);
-            --radius-lg: 16px; --radius-md: 12px; --radius-sm: 8px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --font-main: 'Inter', sans-serif;
+            --danger: #ef4444; --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         * { box-sizing: border-box; outline: none; }
-        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; font-family: var(--font-main); background: var(--bg-body); color: var(--text-main); -webkit-font-smoothing: antialiased; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); }
         #loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px); z-index: 3000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .spinner { width: 50px; height: 50px; border: 3px solid var(--primary-light); border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        #save-status { position: fixed; bottom: 30px; right: 30px; background: var(--bg-card); padding: 12px 24px; border-radius: 30px; box-shadow: var(--shadow-lg); font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 12px; z-index: 2000; transform: translateY(100px); transition: var(--transition); border: 1px solid var(--border); }
+        #save-status { position: fixed; bottom: 30px; right: 30px; background: var(--bg-card); padding: 12px 24px; border-radius: 30px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 12px; z-index: 2000; transform: translateY(100px); transition: var(--transition); border: 1px solid var(--border); }
         #save-status.show { transform: translateY(0); }
         .save-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-light); }
-        .save-dot.saving { background: var(--warning); animation: pulse 1s infinite; }
-        .save-dot.saved { background: var(--success); }
-        @keyframes pulse { 50% { opacity: 0.5; transform: scale(0.8); } }
+        .save-dot.saving { background: #f59e0b; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
         #login-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #f0fdfa, #f5f3ff); display: flex; justify-content: center; align-items: center; z-index: 2000; }
-        .login-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); width: 420px; padding: 48px; border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.5); }
-        .login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 16px; color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px auto; }
-        .login-input { width: 100%; padding: 14px 18px; border: 2px solid transparent; border-radius: 12px; font-size: 0.95rem; background: #f3f4f6; margin-top: 8px; color: var(--text-main); }
-        .login-input:focus { background: white; border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-light); }
-        .login-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 24px; transition: var(--transition); }
-        #app-container { display: none; width: 100vw; height: 100vh; overflow: hidden; flex-direction: row; background: #f8fafc; }
-        .sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 32px 24px; display: flex; flex-direction: column; z-index: 10; flex-shrink: 0; }
-        .main-content { flex: 1; height: 100%; overflow-y: auto; padding: 40px; background: #f9fafb; min-width: 0; }
-        .brand { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin-bottom: 48px; display: flex; align-items: center; gap: 14px; }
-        .nav-item { padding: 14px 18px; border-radius: 12px; color: var(--text-muted); font-weight: 600; cursor: pointer; display: flex; gap: 14px; align-items: center; margin-bottom: 8px; transition: var(--transition); }
-        .nav-item.active { background: linear-gradient(90deg, var(--primary-light), transparent); color: var(--primary); border-left: 3px solid var(--primary); }
-        .card { background: var(--bg-card); border-radius: var(--radius-lg); padding: 32px; margin-bottom: 24px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); transition: var(--transition); }
+        .login-card { background: rgba(255, 255, 255, 0.9); width: 420px; padding: 48px; border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); }
+        .login-input { width: 100%; padding: 14px 18px; border: 2px solid transparent; border-radius: 12px; font-size: 0.95rem; background: #f3f4f6; margin-top: 8px; }
+        .login-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 24px; }
+        #app-container { display: none; width: 100vw; height: 100vh; overflow: hidden; flex-direction: row; }
+        .sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 32px 24px; display: flex; flex-direction: column; }
+        .main-content { flex: 1; height: 100%; overflow-y: auto; padding: 40px; }
+        .nav-item { padding: 14px 18px; border-radius: 12px; color: var(--text-muted); font-weight: 600; cursor: pointer; display: flex; gap: 14px; margin-bottom: 8px; }
+        .nav-item.active { background: var(--primary-light); color: var(--primary); border-left: 3px solid var(--primary); }
+        .card { background: #fff; border-radius: 16px; padding: 32px; margin-bottom: 24px; border: 1px solid var(--border); }
         .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
-        .page-title { font-size: 2rem; font-weight: 800; color: var(--text-main); margin: 0; }
-        .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; margin-bottom: 32px; }
-        .metric-card { background: white; padding: 24px; border-radius: var(--radius-lg); border: 1px solid var(--border); text-align: center; }
-        .metric-val { font-size: 2.5rem; font-weight: 800; }
-        .shared-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; }
-        .report-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
-        .report-table th { text-align: left; padding: 12px 20px; color: var(--text-muted); font-size: 0.8rem; }
-        .report-table td { padding: 20px; background: white; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-        .premium-team-card { background: white; border-radius: 20px; padding: 32px 24px; border: 1px solid var(--border); cursor: pointer; text-align: center; transition: var(--transition); }
-        .premium-team-card:hover { transform: translateY(-8px); box-shadow: var(--shadow-lg); }
-        .pt-avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; margin: 0 auto 20px auto; }
-        .hidden { display: none !important; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 4000; display: none; align-items: center; justify-content: center; }
+        .premium-team-card { background: white; border-radius: 20px; padding: 24px; border: 1px solid var(--border); cursor: pointer; text-align: center; }
+        .pt-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 15px auto; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 5000; display: none; align-items: center; justify-content: center; }
+        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+        .status-badge.submitted { background: #e0e7ff; color: #4338ca; }
     </style>
 </head>
 
 <body>
-    <div id="loading-overlay"><div class="spinner"></div><div style="font-weight:700; color:#592C82; margin-top:15px;">Initializing System...</div></div>
-    <div id="save-status"><div class="save-dot" id="save-dot"></div><span id="save-text">All changes saved</span></div>
+    <div id="loading-overlay"><div class="spinner"></div><div style="margin-top:15px; font-weight:700;">Loading PMS Suite...</div></div>
+    <div id="save-status"><div class="save-dot" id="save-dot"></div><span id="save-text">Ready</span></div>
 
     <div id="login-screen" class="hidden">
         <div id="view-id" class="login-card">
-            <div class="login-logo"><i class="fa-solid fa-rocket"></i></div>
-            <h2>Performance Management</h2>
-            <input type="text" id="inp-id" class="login-input" placeholder="Employee ID" onkeypress="if(event.key==='Enter') checkID()">
-            <button onclick="checkID()" class="login-btn" id="btn-check">Continue</button>
-            <p id="err-id" style="color:var(--danger); margin-top:10px; display:none;">ID not found</p>
+            <h2>Sign In</h2>
+            <input type="text" id="inp-id" class="login-input" placeholder="Employee ID">
+            <button onclick="checkID()" class="login-btn">Continue</button>
+            <p id="err-id" style="color:var(--danger); display:none; margin-top:10px;">ID not found</p>
         </div>
         <div id="view-pass" class="login-card hidden">
-            <div class="login-logo"><i class="fa-solid fa-lock"></i></div>
             <h2 id="lbl-welcome">Welcome</h2>
-            <input type="password" id="inp-pass" class="login-input" placeholder="Password" onkeypress="if(event.key==='Enter') doLogin()">
+            <input type="password" id="inp-pass" class="login-input" placeholder="Password">
             <div id="grp-confirm" class="hidden">
                 <input type="password" id="inp-confirm" class="login-input" placeholder="Confirm Password">
             </div>
-            <button onclick="doLogin()" class="login-btn" id="btn-login">Log In</button>
-            <div onclick="location.reload()" style="margin-top:15px; cursor:pointer; color:var(--text-muted);">Switch Account</div>
-            <p id="err-pass" style="color:var(--danger); margin-top:10px; display:none;">Incorrect Password</p>
+            <button onclick="doLogin()" class="login-btn">Enter System</button>
         </div>
     </div>
 
     <div id="app-container">
         <aside class="sidebar">
-            <div class="brand"><i class="fa-solid fa-bolt"></i> PMS Suite</div>
+            <div class="brand"><i class="fa-solid fa-bolt"></i> ZAIN PMS</div>
             <nav id="nav-menu" style="flex:1;"></nav>
             <div class="user-panel">
                 <div id="disp-user" style="font-weight:700;">User</div>
-                <div id="disp-role" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:15px;">Role</div>
-                <button class="login-btn" style="margin:0; background:var(--danger);" onclick="logout()">Log Out</button>
+                <div id="disp-role" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">Role</div>
+                <button class="login-btn" style="background:var(--danger); margin:0;" onclick="logout()">Log Out</button>
             </div>
         </aside>
         <main class="main-content" id="main-view"></main>
     </div>
 
     <script>
+        // --- CONFIG & GLOBALS ---
         const API_URL = 'https://pms-back-production-b693.up.railway.app';
         const API_HEADERS = {
             'Content-Type': 'application/json',
             get 'Authorization'() { return 'Bearer ' + (localStorage.getItem('zpms_token') || ''); }
         };
-
-        const COL = { id: 'id', name: 'name', lvl: 'level', job: 'job', div: 'division', dept: 'department', mgr: 'manager_id', stat: 'status', goals: 'goals', role: 'access_role', pass: 'password' };
-        const IDLE_LIMIT = 3600000;
-        const SHARED_GOALS_ID = 'shared_goals_v1';
-        const ratingLabels = { 1: "IDLE", 2: "STAGNANT", 3: "WALKER", 4: "RUNNER", 5: "FLYER", 6: "ASTRONAUT" };
-
-        let user, targetUser, isManager, isDirectSupervisor;
+        const COL = { id: 'id', name: 'name', lvl: 'level', job: 'job', div: 'division', dept: 'department', mgr: 'manager_id', stat: 'status', goals: 'goals', role: 'access_role' };
+        
+        let user, targetUser, chart1;
         let masterData = { rating: 0, goals: [] };
-        let allCompanyData = []; 
-        let chart1, chartAdmin;
 
-        window.onload = async function () {
-            const { data: sg } = await db_fetch_settings(SHARED_GOALS_ID);
-            if (sg) masterData = sg;
-            
+        window.onload = async () => {
             const uid = localStorage.getItem('zpms_uid');
-            if (uid && (Date.now() - localStorage.getItem('zpms_time') < IDLE_LIMIT)) restoreSession(uid);
+            const token = localStorage.getItem('zpms_token');
+            if (uid && token) restoreSession(uid);
             else showLogin();
         };
 
-        async function db_fetch_settings(id) {
-            try {
-                const res = await fetch(`${API_URL}?action=getSettings&id=${id}`, { headers: API_HEADERS });
-                return { data: await res.json() };
-            } catch (e) { return { data: null }; }
-        }
-
         async function restoreSession(id) {
-            const res = await fetch(`${API_URL}?action=checkID`, { method: 'POST', body: JSON.stringify({ id: id }) });
-            const data = await res.json();
-            if (data) { user = data; launchApp(); } else showLogin();
+            try {
+                const res = await fetch(`${API_URL}?action=checkID`, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ id: id }) 
+                });
+                const data = await res.json();
+                if (data) { user = data; launchApp(); } else logout();
+            } catch (e) { showLogin(); }
         }
 
-        function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
+        function showLogin() { 
+            document.getElementById('loading-overlay').classList.add('hidden'); 
+            document.getElementById('login-screen').classList.remove('hidden'); 
+        }
+
         function logout() { localStorage.clear(); location.reload(); }
 
+        // --- AUTH FEATURES ---
         async function checkID() {
             const id = document.getElementById('inp-id').value.trim();
             if (!id) return;
@@ -165,7 +138,7 @@
                 document.getElementById('view-id').classList.add('hidden');
                 document.getElementById('view-pass').classList.remove('hidden');
                 if (data.needs_setup) {
-                    document.getElementById('lbl-welcome').innerText = "Create Password";
+                    document.getElementById('lbl-welcome').innerText = "Set Your Password";
                     document.getElementById('grp-confirm').classList.remove('hidden');
                 }
             } else { document.getElementById('err-id').style.display = 'block'; }
@@ -175,7 +148,6 @@
             const p1 = document.getElementById('inp-pass').value;
             const res = await fetch(`${API_URL}?action=login`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: user.id, password: p1 })
             });
             const result = await res.json();
@@ -184,9 +156,10 @@
                 localStorage.setItem('zpms_uid', result.user.id);
                 localStorage.setItem('zpms_time', Date.now());
                 location.reload();
-            } else { document.getElementById('err-pass').style.display = 'block'; }
+            } else { alert("Login failed: " + result.message); }
         }
 
+        // --- APP FEATURES ---
         async function launchApp() {
             if (!user) return;
             document.getElementById('loading-overlay').classList.add('hidden');
@@ -198,6 +171,7 @@
             const role = getRole(user);
             renderNav(role);
             
+            // Default View
             if (role === 'Master') loadHRAdmin();
             else if (['Chief', 'Director', 'Manager'].includes(role)) loadTeam();
             else loadEval(user[COL.id]);
@@ -209,7 +183,6 @@
             const lvl = (u[COL.lvl] || "").toUpperCase();
             if (lvl.includes("L1")) return 'Chief';
             if (lvl.includes("L2")) return 'Director';
-            if (lvl.includes("L4")) return 'Manager';
             return 'Staff';
         }
 
@@ -217,7 +190,7 @@
             let h = '';
             const mkItem = (lbl, icon, fn) => `<div class="nav-item" onclick="loadPage('${fn}')"><i class="${icon}"></i> <span>${lbl}</span></div>`;
             if (r === 'Master') h += mkItem('HR Portal', 'fa-solid fa-user-shield', 'loadHRAdmin');
-            if (['Chief', 'Director', 'Manager', 'Master'].includes(r)) {
+            if (['Chief', 'Director', 'Master'].includes(r)) {
                 h += mkItem('My Team', 'fa-solid fa-users', 'loadTeam');
                 h += mkItem('Analytics', 'fa-solid fa-chart-line', 'loadReports');
             }
@@ -227,127 +200,89 @@
 
         function loadPage(fn) {
             if (fn === 'loadMyEval') loadEval(user[COL.id]);
-            else window[fn]();
+            else if (typeof window[fn] === 'function') window[fn]();
         }
 
+        // --- TEAM & REPORT FEATURES ---
         async function loadTeam() {
             const res = await fetch(`${API_URL}?action=getMyTeam`, { headers: API_HEADERS });
             const data = await res.json();
-            let h = `<div class="header-bar"><h2 class="page-title">My Team</h2></div><div class="team-grid">`;
+            let h = `<div class="header-bar"><h2 class="page-title">Direct Reports</h2></div><div class="shared-grid">`;
             data.forEach(e => {
                 h += `<div class="premium-team-card" onclick="loadEval('${e.id}')">
                     <div class="pt-avatar">${e.name.charAt(0)}</div>
-                    <div class="pt-name">${e.name}</div>
-                    <div class="pt-role">${e.job}</div>
+                    <div style="font-weight:700;">${e.name}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">${e.job}</div>
+                    <div style="margin-top:10px;"><span class="status-badge submitted">${e.status || 'Draft'}</span></div>
                 </div>`;
             });
             document.getElementById('main-view').innerHTML = h + `</div>`;
         }
 
         async function loadReports() {
-            if (!user) return;
             const res = await fetch(`${API_URL}?action=getMyTeam`, { headers: API_HEADERS });
             const reports = await res.json();
-            const globalRating = masterData.rating || 0;
+            
+            let d = [0,0,0,0,0,0];
+            reports.forEach(u => {
+                let goals = u[COL.goals];
+                if (typeof goals === 'string') goals = JSON.parse(goals);
+                let score = 0;
+                (goals || []).forEach(g => score += (g.rating || 0) * (g.weight || 0));
+                let b = Math.min(5, Math.floor(score));
+                d[b]++;
+            });
 
-            const calcDist = (list) => {
-                let d = [0, 0, 0, 0, 0, 0];
-                list.forEach(u => {
-                    let userGoals = u[COL.goals] || [];
-                    if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
-                    let weightFactor = getW(u[COL.lvl], u[COL.job]);
-                    let score = 0;
-                    userGoals.forEach(g => score += (g.rating || 0) * (g.weight || 0));
-                    let total = (globalRating * (weightFactor.s/100)) + (score * (weightFactor.i/100));
-                    let b = 0;
-                    if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
-                    d[b]++;
-                });
-                return d;
-            };
-
-            const dist = calcDist(reports);
-            document.getElementById('main-view').innerHTML = `<div class="card"><h3>Team Distribution</h3><div style="height:350px;"><canvas id="chartDirect"></canvas></div></div>`;
+            document.getElementById('main-view').innerHTML = `
+                <div class="card">
+                    <h3>Team Distribution</h3>
+                    <div style="height:350px;"><canvas id="chartDirect"></canvas></div>
+                </div>`;
             
             new Chart(document.getElementById('chartDirect'), {
                 type: 'bar',
-                data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ data: dist, backgroundColor: '#592C82' }] },
+                data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Team Member Count', data: d, backgroundColor: '#6366f1' }] },
                 options: { maintainAspectRatio: false }
             });
         }
 
+        // --- EVALUATION FEATURES ---
         async function loadEval(tid) {
             const res = await fetch(`${API_URL}?action=checkID`, { method: 'POST', body: JSON.stringify({ id: tid }) });
             const data = await res.json();
             targetUser = data;
-            document.getElementById('main-view').innerHTML = `<div class="header-bar"><h2 class="page-title">Scorecard: ${data.name}</h2></div><div class="card"><h3>Status: ${data.status || 'Draft'}</h3><p>Job: ${data.job}</p></div>`;
+            document.getElementById('main-view').innerHTML = `
+                <div class="header-bar"><h2 class="page-title">${data.name}</h2></div>
+                <div class="metrics-row">
+                    <div class="metric-card"><h3>Scorecard Status</h3><div class="badge-rating lvl-4">${data.status || 'Draft'}</div></div>
+                    <div class="metric-card"><h3>Division</h3><div style="font-weight:700;">${data.division || 'N/A'}</div></div>
+                </div>
+                <div class="card"><h3>Performance Goals</h3><p>Individual goals and achievements listed here.</p></div>
+            `;
         }
 
-        function getW(l, j) {
-            if ((j||"").toLowerCase().includes('ceo')) return { s: 100, i: 0 };
-            return { s: 10, i: 90 };
+        // --- ADMIN FEATURES ---
+        async function loadHRAdmin() {
+            try {
+                const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
+                const data = await res.json();
+                document.getElementById('main-view').innerHTML = `
+                    <div class="header-bar"><h2 class="page-title">HR Portal</h2></div>
+                    <div class="dash-grid">
+                        <div class="card"><h3>Company Distribution</h3><div style="height:300px;"><canvas id="chartAdmin"></canvas></div></div>
+                        <div class="card"><h3>Active Evaluations</h3><div class="metric-val">${data.totalCount}</div></div>
+                    </div>
+                `;
+                new Chart(document.getElementById('chartAdmin'), {
+                    type: 'bar',
+                    data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ data: data.distribution, backgroundColor: '#592C82' }] },
+                    options: { maintainAspectRatio: false }
+                });
+            } catch(e) { alert("Admin access denied"); }
         }
 
-        function showToast(msg, type='success') { alert(msg); }
+        function showToast(m, t='success') { console.log(m); }
         function render(h) { document.getElementById('main-view').innerHTML = h; }
-        // --- ADD THESE MISSING FUNCTIONS ---
-
-async function loadHRAdmin() {
-    // 1. Set the sidebar active state
-    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-    
-    // 2. Render the HR Portal Shell
-    let h = `
-    <div class="animate-in">
-        <div class="header-bar">
-            <div>
-                <h2 class="page-title">HR Portal</h2>
-                <p class="page-sub">System Administration</p>
-            </div>
-        </div>
-        <div class="card">
-            <h3>Shared Goals Configuration</h3>
-            <p>Use this section to manage company-wide objectives.</p>
-            <button class="login-btn" onclick="loadAnalyticsDashboard()">View Analytics</button>
-        </div>
-        <div id="admin-content"></div>
-    </div>`;
-    render(h);
-}
-
-async function loadAnalyticsDashboard() {
-    try {
-        const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
-        if (!res.ok) throw new Error("Unauthorized");
-        const data = await res.json();
-
-        render(`<div class="card"><h3>Global Distribution</h3><div style="height:400px;"><canvas id="chartAdmin"></canvas></div></div>`);
-
-        new Chart(document.getElementById('chartAdmin'), {
-            type: 'bar',
-            data: {
-                labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
-                datasets: [{ 
-                    label: 'Employees', 
-                    data: data.distribution, 
-                    backgroundColor: '#6366f1' 
-                }]
-            },
-            options: { maintainAspectRatio: false }
-        });
-    } catch (e) {
-        alert("Error loading analytics: " + e.message);
-    }
-}
-
-// Ensure the loadPage helper handles string names correctly
-function loadPage(fnName) {
-    if (fnName === 'loadHRAdmin') loadHRAdmin();
-    else if (fnName === 'loadTeam') loadTeam();
-    else if (fnName === 'loadReports') loadReports();
-    else if (fnName === 'loadMyEval') loadEval(user[COL.id]);
-    else console.error("Function " + fnName + " not found.");
-}
     </script>
 </body>
 </html>
