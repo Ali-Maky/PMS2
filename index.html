@@ -19,7 +19,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-        /* ... Keep your existing CSS here ... */
     <style>
         :root {
             /* Modern Palette - High Contrast & Accessibility */
@@ -2867,239 +2866,259 @@ function closeUserModal() {
             return [...new Map(total.map(item => [item[COL.id], item])).values()];
         }
         // --- SHARED GOALS SECTION ---
-                const userDiv = (data[COL.div] || "").trim();
-                const userId = (data[COL.id] || "").trim();
-                const userComp = getCompany(userId); 
+             // --- 9. SCORECARD (Fixed) ---
+async function loadEval(tid, isSearchMode = false) {
+    try {
+        // 1. Fetch Data
+        const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
 
-                // Filter applicable Shared Goals
-                const applicableSharedGoals = (masterData.goals || []).filter(g => {
-                    // Check Context First
-                    const context = g.company_context || 'ALL';
-                    if (context !== 'ALL' && context !== userComp) return false;
+        if (error || !data) {
+            console.error("Load Error:", error);
+            alert("Could not load employee data. Please refresh.");
+            return;
+        }
 
-                    // Check Assignments
-                    if (!g.assignments || g.assignments.length === 0) return false; // Inactive goal
+        // 2. Setup Context
+        targetUser = data;
+        const uRole = getRole(user);
+        const myId = (user[COL.id] || '').toString();
+        const targetId = (targetUser[COL.id] || '').toString();
+        const viewingSelf = (myId === targetId);
 
-                    return g.assignments.some(a => {
-                        if (a.target === 'GLOBAL_ALL') return true;
-                        if (a.target === `COMP_${userComp}`) return true;
-                        if (a.target === `DIV_${userDiv}`) return true;
-                        if (a.target === `ID_${userId}`) return true;
-                        return false;
-                    });
-                });
+        // Manager Detection
+        const mgrStr = (data[COL.mgr] || "").toString().toLowerCase();
+        const myName = (user[COL.name] || "").toString().toLowerCase();
+        isDirectSupervisor = (mgrStr.includes(myId.toLowerCase()) || (myName.length > 3 && mgrStr.includes(myName)));
+        
+        isManager = !viewingSelf && (isDirectSupervisor || (uRole === 'Admin' || uRole === 'Master'));
 
-                if (w.s > 0) {
-                    h += `
-                    <div class="card">
-                        <div class="header-bar" style="margin-bottom:20px;">
-                            <h3 style="margin:0;">Shared Objectives</h3>
-                            <div class="pro-unit-badge" style="background:#e0e7ff; color:#4338ca; border-color:#c7d2fe;">
-                                <i class="fa-solid fa-scale-balanced"></i> Weight: ${w.s}%
-                            </div>
-                        </div>`;
+        // Weighting & Goals Setup
+        const w = getW(data[COL.lvl], data[COL.job]);
+        let userGoals = targetUser[COL.goals];
+        if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = []; } }
+        if (!userGoals || !Array.isArray(userGoals)) userGoals = [];
+        targetUser[COL.goals] = userGoals;
 
-                    if (applicableSharedGoals.length === 0) {
-                        h += `<div style="text-align:center; padding:30px; color:var(--text-muted); font-style:italic;">No shared goals assigned to your Division/Company.</div>`;
-                    } else {
-                        h += `<div class="shared-grid">`;
-                        applicableSharedGoals.forEach(g => {
-                            // Find specific weight for this user
-                            const specificAssign = g.assignments.find(a => 
-                                a.target === `ID_${userId}` || 
-                                a.target === `DIV_${userDiv}` || 
-                                a.target === `COMP_${userComp}` || 
-                                a.target === 'GLOBAL_ALL'
-                            ); 
-                            // Default to first match (Hierarchy logic can be improved later)
-                            
-                            // Visibility Check
-                            const showScore = canSeeScore; 
-                            const rating = g.rating || 0;
-                            let badgeClass = "lvl-0";
-                            let badgeText = "PENDING";
+        const stat = data[COL.stat] || 'Draft';
 
-                            if (showScore) {
-                                if (rating >= 5.5) { badgeClass = "lvl-6"; badgeText = "ASTRO"; }
-                                else if (rating >= 4.5) { badgeClass = "lvl-5"; badgeText = "FLYER"; }
-                                else if (rating >= 3.5) { badgeClass = "lvl-4"; badgeText = "RUNNER"; }
-                                else if (rating >= 2.5) { badgeClass = "lvl-3"; badgeText = "WALKER"; }
-                                else if (rating >= 1.5) { badgeClass = "lvl-2"; badgeText = "STAG"; }
-                                else if (rating > 0) { badgeClass = "lvl-1"; badgeText = "IDLE"; }
-                            }
+        // 3. Permissions
+        let canEdit = false;
+        if (viewingSelf) {
+            canEdit = (stat === 'Draft' || stat === 'Returned' || stat === 'Draft (Returned by Manager)');
+        } else if (isDirectSupervisor) {
+            canEdit = (stat === 'Submitted to Manager');
+        }
+        if (isSearchMode) canEdit = false;
 
-                            h += `
-                            <div class="shared-card">
-                                <div class="shared-header" style="display:flex; justify-content:space-between; align-items:center;">
-                                    <span>${g.title}</span>
-                                    ${showScore ? `<span class="badge-rating ${badgeClass}" style="font-size:0.65rem; padding:4px 8px;">${badgeText}</span>` : '<i class="fa-solid fa-lock" style="color:var(--text-light); font-size:0.8rem;"></i>'}
-                                </div>
-                                <div class="segment-bar">
-                                    ${g.targets.map((t, i) => {
-                                        let activeClass = "";
-                                        if (showScore) {
-                                            // Highlight logic matches PHP/Admin logic
-                                            if (rating >= 6 && i === 5) activeClass = "active";
-                                            else if (rating >= 5 && i === 4) activeClass = "active";
-                                            else if (rating >= 4 && i === 3) activeClass = "active";
-                                            else if (rating >= 3 && i === 2) activeClass = "active";
-                                            else if (rating >= 2 && i === 1) activeClass = "active";
-                                            else if (rating >= 1 && i === 0) activeClass = "active";
-                                        }
-                                        
-                                        const label = i===3 ? 'RUNNER' : (i===5 ? 'ASTRO' : 'L'+(i+1));
-                                        
-                                        return `
-                                        <div class="segment ${activeClass} ${i===3 ? 'is-target' : ''}">
-                                            ${i===3 ? '<div class="target-badge">Target</div>' : ''}
-                                            <div class="seg-num">${label}</div>
-                                            <div class="seg-val">${t || '-'}</div>
-                                        </div>`;
-                                    }).join('')}
-                                </div>
-                            </div>`;
-                        });
-                        h += `</div>`;
-                    }
-                    h += `</div>`;
-                }
+        const statClean = (data[COL.stat] || '').trim().toLowerCase();
+        const canSeeScore = (statClean === 'published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
 
-                // --- INDIVIDUAL GOALS SECTION ---
-                if (w.i > 0) {
-                    h += `
-                    <div class="card">
-                        <div class="header-bar" style="margin-bottom:20px;">
-                            <h3 style="margin:0;">Individual Objectives</h3>
-                            <div class="pro-unit-badge">
-                                <i class="fa-solid fa-user-tag"></i> Weight: ${w.i}%
-                            </div>
-                        </div>
-                        <div id="goals-container">`;
+        // 4. UI Prep
+        let mName = (data[COL.mgr] || '-').split('(')[0].trim();
+        let comp = getCompany(data[COL.id]);
 
-                    targetUser[COL.goals].forEach((g, i) => {
-                        const readOnlyAttr = canEdit ? '' : 'readonly disabled';
-                        const hideInputClass = canEdit ? '' : 'hidden-input'; 
-                        // Note: CSS class .hidden-input { background: transparent; border: none; } can be added to clean up UI
-
-                        h += `
-                        <div class="goal-card">
-                            <div class="goal-header-row">
-                                <input class="goal-input-title" placeholder="Objective Title..." value="${escapeHTML(g.title)}" 
-                                    onchange="updateGoal(${i}, 'title', this.value)" ${readOnlyAttr}>
-                                
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    ${canEdit ? `<button class="btn-delete" onclick="removeGoal(${i})"><i class="fa-solid fa-trash"></i></button>` : ''}
-                                    <div class="chip">
-                                        <span>Weight:</span>
-                                        <input type="number" value="${Math.round(g.weight * 100)}" 
-                                            onchange="updateGoal(${i}, 'weight', this.value)" ${readOnlyAttr}>%
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="goal-body">
-                                <textarea class="goal-desc" placeholder="Description / KPI Details..." 
-                                    onchange="updateGoal(${i}, 'desc', this.value)" ${readOnlyAttr}>${g.desc || ''}</textarea>
-                                
-                                <div style="overflow-x:auto;">
-                                    <table class="target-table">
-                                        <thead>
-                                            <tr>
-                                                <th>L1 (Idle)</th>
-                                                <th>L2</th>
-                                                <th>L3</th>
-                                                <th class="runner-col">TARGET (Runner)</th>
-                                                <th>L5</th>
-                                                <th>L6 (Astro)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                ${[0,1,2,3,4,5].map(ti => `
-                                                <td>
-                                                    <input class="target-input ${ti===3?'active-highlight':''}" 
-                                                        value="${g.targets ? g.targets[ti] : ''}" 
-                                                        placeholder="${ti===3 ? 'Target' : '-'}" 
-                                                        onchange="updateGoalTarget(${i}, ${ti}, this.value)" ${readOnlyAttr}>
-                                                </td>`).join('')}
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                ${(isManager || ['Admin', 'Master'].includes(uRole)) ? `
-                                <div style="margin-top:24px; padding-top:16px; border-top:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
-                                    <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">EVALUATION</div>
-                                    <div style="display:flex; align-items:center; gap:12px;">
-                                        <label style="font-size:0.85rem; font-weight:600;">Achievement:</label>
-                                        <select onchange="rateGoal(${i}, this.value)" ${!canSeeScore && !isManager ? 'disabled' : ''} 
-                                            style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); font-weight:700; cursor:pointer; background:white;">
-                                            <option value="0" ${g.rating == 0 ? 'selected' : ''}>Not Rated</option>
-                                            <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
-                                            <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
-                                            <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
-                                            <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
-                                            <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
-                                            <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
-                                        </select>
-                                    </div>
-                                </div>` : ''}
-                            </div>
-                        </div>`;
-                    });
-
-                    h += `</div>`;
-                    
-                    if (canEdit) {
-                        h += `
-                        <button class="btn btn-outline" style="width:100%; justify-content:center; border-style:dashed; margin-top:16px;" onclick="addGoal()">
-                            <i class="fa-solid fa-plus"></i> &nbsp; Add Individual Objective
-                        </button>`;
-                    }
-                    h += `</div>`;
-                }
-
-                // --- ACTION BAR ---
-                h += `<div id="action-bar" style="position:fixed; bottom:0; left:280px; right:0; background:white; padding:20px 40px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px; box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05); z-index:90;">`;
-
-                if (viewingSelf) {
-                    if (stat === 'Draft' || stat === 'Returned') {
-                        h += `<div id="save-msg" style="margin-right:auto; align-self:center; font-size:0.85rem; color:var(--text-light); font-weight:600;"><i class="fa-regular fa-circle-check"></i> Changes saved locally</div>`;
-                        h += `<button onclick="submitScorecard()" class="btn btn-primary" style="padding:12px 32px; font-size:1rem;">Submit to Manager</button>`;
-                    } else {
-                        h += `<div style="margin-right:auto; align-self:center; color:var(--text-muted);">Status: <strong>${stat}</strong> (Read Only)</div>`;
-                    }
-                } 
-                else if (isManager) {
-                    if (stat === 'Submitted to Manager') {
-                        h += `
-                        <button onclick="rejectToUser()" class="btn btn-outline" style="color:#ef4444; border-color:#fee2e2;">Return for Revision</button>
-                        <button onclick="approveToHR()" class="btn btn-primary">Approve & Submit to HR</button>`;
-                    } else {
-                        h += `<div style="align-self:center; color:var(--text-muted);">Currently: <strong>${stat}</strong></div>`;
-                        // Admins can force edit
-                        if (['Admin', 'Master'].includes(uRole)) {
-                            h += `<button onclick="forceUnlock()" class="btn btn-outline" style="font-size:0.8rem;"><i class="fa-solid fa-lock-open"></i> Unlock</button>`;
-                        }
-                    }
-                }
-                
-                h += `</div></div>`; // Close animate-in and action bar container
-
-            render(h);
-            calc(); // Recalculate scores on load
+        let h = `
+        <div class="animate-in">
+            <div class="header-bar">
+                <div>
+                    <h2 class="page-title">${isManager ? 'Evaluation Portal' : 'My Scorecard'}</h2>
+                    <p class="page-sub">
+                        <span style="font-weight:700; color:var(--text-main);">${data[COL.name].split('(')[0]}</span>
+                        <span style="margin:0 8px; color:var(--text-light);">•</span>
+                        <span class="status-badge ${stat === 'Approved' || stat === 'Published' ? 'approved' : 'submitted'}">${stat}</span>
+                    </p>
+                </div>
+                ${isManager ? `<button onclick="${isDirectSupervisor ? 'loadTeam()' : "loadHRAdmin()"}" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</button>` : ''}
+            </div>
             
-            // Auto-save setup
-            if (canEdit && viewingSelf) {
-                document.querySelectorAll('input, textarea').forEach(el => {
-                    el.addEventListener('input', autoSave);
-                });
+            <div class="metrics-row">
+                <div class="metric-card highlight">
+                    <div class="metric-val" id="score">--</div>
+                    <div class="metric-lbl">Final Score</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-val" id="rating">--</div>
+                    <div class="metric-lbl">Rating</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-val">${w.s}%</div>
+                    <div class="metric-lbl">Shared Goals <span class="metric-sub-val" id="shared-contrib-val">0.00</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-val">${w.i}%</div>
+                    <div class="metric-lbl">Individual Goals <span class="metric-sub-val" id="indiv-contrib-val">0.00</span></div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-item"><label>Name</label><div class="info-value">${data[COL.name]}</div></div>
+                <div class="info-item"><label>Job Title</label><div class="info-value">${data[COL.job] || '-'}</div></div>
+                <div class="info-item"><label>Division</label><div class="info-value">${data[COL.div] || '-'}</div></div>
+                <div class="info-item"><label>Manager</label><div class="info-value">${mName}</div></div>
+                <div class="info-item"><label>Company</label><div class="info-value" style="color:var(--primary); font-weight:700;">${comp}</div></div>
+            </div>`;
+
+        // 5. Shared Goals Logic
+        const userDiv = (data[COL.div] || "").trim();
+        const userId = (data[COL.id] || "").trim();
+        const userComp = getCompany(userId); 
+
+        const relevantShared = (masterData.goals || []).filter(g => {
+            const context = g.company_context || 'ALL';
+            if (context !== 'ALL' && context !== userComp) return false;
+            
+            if (!g.assignments || g.assignments.length === 0) return false;
+            
+            return g.assignments.some(a => 
+                a.target === 'GLOBAL_ALL' || 
+                a.target === `COMP_${userComp}` || 
+                a.target === `DIV_${userDiv}` || 
+                a.target === `ID_${userId}`
+            );
+        });
+
+        if (w.s > 0) {
+            h += `
+            <div class="card">
+                <div class="header-bar" style="margin-bottom:20px;">
+                    <h3 style="margin:0;">Shared Objectives</h3>
+                    <div class="pro-unit-badge" style="background:#e0e7ff; color:#4338ca; border-color:#c7d2fe;">Weight: ${w.s}%</div>
+                </div>
+                <div class="shared-grid">`;
+                
+            if (relevantShared.length === 0) {
+                h += `<div style="grid-column:1/-1; text-align:center; padding:20px; color:var(--text-muted);">No shared goals assigned.</div>`;
             }
 
-        } catch (e) {
-            console.error("Critical Error in loadEval:", e);
-            document.getElementById('main-view').innerHTML = `<div style="padding:40px; color:red;">Application Error: ${e.message}</div>`;
+            relevantShared.forEach(g => {
+                const showScore = canSeeScore; 
+                const rating = g.rating || 0;
+                let badgeClass = "lvl-0";
+                let badgeText = "PENDING";
+
+                if (showScore) {
+                    if (rating >= 5.5) { badgeClass = "lvl-6"; badgeText = "ASTRO"; }
+                    else if (rating >= 4.5) { badgeClass = "lvl-5"; badgeText = "FLYER"; }
+                    else if (rating >= 3.5) { badgeClass = "lvl-4"; badgeText = "RUNNER"; }
+                    else if (rating >= 2.5) { badgeClass = "lvl-3"; badgeText = "WALKER"; }
+                    else if (rating >= 1.5) { badgeClass = "lvl-2"; badgeText = "STAG"; }
+                    else if (rating > 0) { badgeClass = "lvl-1"; badgeText = "IDLE"; }
+                }
+
+                h += `
+                <div class="shared-card">
+                    <div class="shared-header" style="display:flex; justify-content:space-between;">
+                        <span>${g.title}</span>
+                        ${showScore ? `<span class="badge-rating ${badgeClass}" style="font-size:0.65rem;">${badgeText}</span>` : '<i class="fa-solid fa-lock"></i>'}
+                    </div>
+                    <div class="segment-bar">
+                        ${g.targets.map((t, i) => {
+                            let active = "";
+                            if (showScore && rating >= (i+1)) active = "active";
+                            const label = i===3 ? 'RUNNER' : (i===5 ? 'ASTRO' : 'L'+(i+1));
+                            return `<div class="segment ${active} ${i===3?'is-target':''}">
+                                ${i===3?'<div class="target-badge">TARGET</div>':''}
+                                <div class="seg-num">${label}</div>
+                                <div class="seg-val">${t || '-'}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            });
+            h += `</div></div>`;
         }
+
+        // 6. Individual Goals Logic
+        if (w.i > 0) {
+            h += `
+            <div class="card">
+                <div class="header-bar" style="margin-bottom:20px;">
+                    <h3 style="margin:0;">Individual Objectives</h3>
+                    <div class="pro-unit-badge">Weight: ${w.i}%</div>
+                </div>
+                <div id="goals-container">`;
+
+            targetUser[COL.goals].forEach((g, i) => {
+                const readOnly = canEdit ? '' : 'readonly disabled';
+                h += `
+                <div class="goal-card">
+                    <div class="goal-header-row">
+                        <input class="goal-input-title" value="${escapeHTML(g.title)}" onchange="updateGoal(${i}, 'title', this.value)" ${readOnly}>
+                        <div style="display:flex; gap:10px;">
+                            ${canEdit ? `<button class="btn-delete" onclick="removeGoal(${i})"><i class="fa-solid fa-trash"></i></button>` : ''}
+                            <div class="chip"><span>Weight:</span><input type="number" value="${Math.round(g.weight * 100)}" onchange="updateGoal(${i}, 'weight', this.value)" ${readOnly}>%</div>
+                        </div>
+                    </div>
+                    <div class="goal-body">
+                        <textarea class="goal-desc" onchange="updateGoal(${i}, 'desc', this.value)" ${readOnly}>${g.desc || ''}</textarea>
+                        <div style="overflow-x:auto;">
+                            <table class="target-table">
+                                <thead><tr><th>L1</th><th>L2</th><th>L3</th><th class="runner-col">TARGET</th><th>L5</th><th>L6</th></tr></thead>
+                                <tbody><tr>
+                                    ${[0,1,2,3,4,5].map(ti => `<td><input class="target-input ${ti===3?'active-highlight':''}" value="${g.targets?g.targets[ti]:''}" onchange="updateGoalTarget(${i}, ${ti}, this.value)" ${readOnly}></td>`).join('')}
+                                </tr></tbody>
+                            </table>
+                        </div>
+                        ${(isManager || ['Admin', 'Master'].includes(uRole)) ? `
+                        <div style="margin-top:20px; padding-top:15px; border-top:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.8rem; font-weight:700; color:#888;">EVALUATION</span>
+                            <select onchange="rateGoal(${i}, this.value)" ${!canSeeScore && !isManager ? 'disabled' : ''} style="padding:8px; border-radius:8px; font-weight:700;">
+                                <option value="0" ${g.rating == 0 ? 'selected' : ''}>Not Rated</option>
+                                <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
+                                <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
+                                <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
+                                <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
+                                <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
+                                <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
+                            </select>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+            });
+            
+            h += `</div>
+            ${canEdit ? `<button class="btn btn-outline" style="width:100%; border-style:dashed; margin-top:15px;" onclick="addGoal()">+ Add Objective</button>` : ''}
+            </div>`;
+        }
+
+        // 7. Footer Actions
+        h += `<div id="action-bar" style="position:fixed; bottom:0; left:280px; right:0; background:white; padding:20px 40px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:16px; z-index:90;">`;
+
+        if (viewingSelf) {
+            if (stat === 'Draft' || stat === 'Returned' || stat === 'Draft (Returned by Manager)') {
+                h += `<div style="margin-right:auto; align-self:center; font-size:0.85rem; color:#aaa;">Changes saved</div>`;
+                h += `<button onclick="submitScorecard()" class="btn btn-primary">Submit to Manager</button>`;
+            } else {
+                h += `<div style="margin-right:auto; align-self:center; color:#aaa;">Status: <strong>${stat}</strong></div>`;
+            }
+        } else if (isManager) {
+            if (stat === 'Submitted to Manager') {
+                h += `<button onclick="rejectToUser()" class="btn btn-outline" style="color:red; border-color:red;">Return</button>`;
+                h += `<button onclick="approveToHR()" class="btn btn-primary">Approve & Submit to HR</button>`;
+            } else if (['Admin', 'Master'].includes(uRole)) {
+                h += `<div style="align-self:center; color:#aaa;">Status: <strong>${stat}</strong></div>`;
+                h += `<button onclick="forceUnlock()" class="btn btn-outline">Unlock</button>`;
+                if (stat === 'Approved') h += `<button onclick="publishSingle('${targetId}')" class="btn btn-primary">Publish</button>`;
+            }
+        }
+        h += `</div></div>`;
+
+        render(h);
+        calc();
+
+        // Enforce Visibility
+        const scoreEl = document.getElementById('score');
+        const ratingEl = document.getElementById('rating');
+        if (!canSeeScore) {
+            if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="opacity:0.3;"></i>';
+            if (ratingEl) ratingEl.innerText = "Pending";
+        }
+
+    } catch (e) {
+        console.error("LoadEval Error:", e);
+        document.getElementById('main-view').innerHTML = `<div style="padding:40px; color:red;">Error: ${e.message}</div>`;
+    }
+}
     
         // --- 16. SUBMISSION WORKFLOWS ---
 
