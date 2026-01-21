@@ -2835,11 +2835,24 @@ function refreshGlobalAdminRating() {
 
      async function saveDraftToDB() {
     // 1. Send data to database
-    await db.from('company_settings').upsert({ id: 'shared_goals_draft', data: masterData });
+    // Using upsert to either insert a new draft or update the existing one
+    const { error } = await db.from('company_settings').upsert({ id: 'shared_goals_draft', data: masterData });
     
-    // 2. Update flag, but DO NOT reload the data (loadAdminSharedGoals)
-    if (!hasDraft) { 
-        hasDraft = true; 
+    if (error) {
+        console.error("Error saving draft:", error);
+        // Optional: Show an error toast here
+    } else {
+        // 2. Update flag, but DO NOT reload the data (loadAdminSharedGoals)
+        // This prevents the UI from resetting to the old DB state
+        if (!hasDraft) { 
+            hasDraft = true; 
+        }
+        // Optional: Show a "Saved" indicator that fades out
+        const saveStatus = document.getElementById('save-status');
+        if (saveStatus) {
+             // You might need to add a class or style to show it briefly
+             // For now, relying on your existing showSaved() if used elsewhere
+        }
     }
 }
         async function discardDraft() {
@@ -2855,7 +2868,7 @@ function refreshGlobalAdminRating() {
             renderMasterGoals();
         }
 
- function renderMasterGoals() {
+function renderMasterGoals() {
     const container = document.getElementById('master-goals-list');
     
     // Helper to get companies list
@@ -2995,6 +3008,7 @@ function refreshGlobalAdminRating() {
 
     container.innerHTML = htmlParts.join('');
 }
+		
 function renderMasterGoals() {
     const c = document.getElementById('master-goals-list');
     
@@ -3123,6 +3137,7 @@ function renderMasterGoals() {
 }
 // Helper to add a Division or Chief ID to a specific Shared Goal
 // Helper to add a Division or Chief ID to a specific Shared Goal
+// Helper to add a Division, Chief, Company, or Global assignment to a specific Shared Goal
 function updateGoalAssignment(goalIndex, value) {
     if (!value) return;
     
@@ -4290,6 +4305,7 @@ async function loadEval(tid, isSearchMode = false) {
         } else {
             // SHARED GOALS SECTION
            // SHARED GOALS SECTION
+           // SHARED GOALS SECTION
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
@@ -4297,18 +4313,16 @@ async function loadEval(tid, isSearchMode = false) {
 
                 // UPDATED LOGIC: Check for Global, Company, Division, OR Personal assignments
                 const relevantShared = (masterData.goals || []).map(g => {
-                    // We sum up weights if multiple assignments match (e.g. Company + Division)
-                    // or just take the first match. Let's sum them to be consistent with calc().
                     let totalWeight = 0;
                     let isAssigned = false;
 
                     (g.assignments || []).forEach(a => {
                         if (a.target === 'GLOBAL_ALL' || 
                             a.target === `COMP_${userComp}` || 
-                            a.target === `DIV_${userDiv}` || // Note: Added DIV_ prefix support if used
-                            a.target === userDiv ||          // Legacy support for plain Division names
+                            a.target === `DIV_${userDiv}` || // Note: Added DIV_ prefix support
+                            a.target === userDiv ||          // Legacy support
                             a.target === `ID_${userId}` ||   // Note: Added ID_ prefix support
-                            a.target === userId)             // Legacy support for plain IDs
+                            a.target === userId)             // Legacy support
                         {
                             totalWeight += Number(a.weight);
                             isAssigned = true;
@@ -4661,19 +4675,13 @@ function calc() {
     const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
     const userDiv = (targetUser[COL.div] || "").trim();
     const userId = (targetUser[COL.id] || "").trim();
-    const userComp = getCompany(userId); // Uses your existing helper
+    const userComp = getCompany(userId); 
 
     // 2. Calculate Shared Goal Score (CASCADING LOGIC)
     let totalSharedWeightedScore = 0;
 
     (masterData.goals || []).forEach(g => {
         const rating = Number(g.rating) || 0;
-        
-        // Loop through assignments to find a match for THIS user
-        // If multiple matches exist (e.g. assigned to Company AND Division), 
-        // we typically take the HIGHEST weight or SUM them. 
-        // Logic below: We take the FIRST match found (or SUM if you prefer). 
-        // Let's do SUM to allow stacking (e.g. Base 10% + Extra 5% for Div).
         
         let goalWeightForUser = 0;
 
@@ -4690,11 +4698,11 @@ function calc() {
                 goalWeightForUser += weight;
             }
             // CHECK 3: DIVISION ASSIGNMENT
-            else if (t === `DIV_${userDiv}`) {
+            else if (t === `DIV_${userDiv}` || t === userDiv) { // Support legacy division names
                 goalWeightForUser += weight;
             }
             // CHECK 4: SPECIFIC USER/CHIEF ASSIGNMENT
-            else if (t === `ID_${userId}`) {
+            else if (t === `ID_${userId}` || t === userId) { // Support legacy IDs
                 goalWeightForUser += weight;
             }
         });
