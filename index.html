@@ -1997,7 +1997,6 @@ async function checkID() {
     
     btn.innerText = "Checking...";
     
-    // This now calls the "Safe" checkID (no password returned)
     try {
         const res = await fetch(`${API_URL}?action=checkID`, {
             method: 'POST',
@@ -2011,13 +2010,20 @@ async function checkID() {
             return;
         }
 
-        user = data; // Store public user info
+        user = data; 
         document.getElementById('view-id').classList.add('hidden');
         document.getElementById('view-pass').classList.remove('hidden');
 
-        // Note: We can't check if password exists client-side anymore
-        // We assume they need to login.
-        document.getElementById('lbl-welcome').innerText = "Welcome Back";
+        // --- NEW: Detect if user needs to create a password ---
+        if (data.needs_setup) {
+            document.getElementById('lbl-welcome').innerText = "Create Your Password";
+            document.getElementById('grp-confirm').classList.remove('hidden');
+            document.getElementById('btn-login').innerText = "Set Password & Login";
+        } else {
+            document.getElementById('lbl-welcome').innerText = "Welcome Back";
+            document.getElementById('grp-confirm').classList.add('hidden');
+            document.getElementById('btn-login').innerText = "Log In";
+        }
         
     } catch (e) {
         console.error(e);
@@ -2026,13 +2032,19 @@ async function checkID() {
 }
 async function doLogin() {
     const p1 = document.getElementById('inp-pass').value;
+    const p2 = document.getElementById('inp-confirm').value;
     const btn = document.getElementById('btn-login');
     
+    // Validation for new setup
+    if (!document.getElementById('grp-confirm').classList.contains('hidden')) {
+        if (p1.length < 4) { showToast("Password too short", "error"); return; }
+        if (p1 !== p2) { showToast("Passwords do not match", "error"); return; }
+    }
+
     btn.innerText = "Verifying...";
     btn.disabled = true;
 
     try {
-        // AUTHENTICATE WITH SERVER
         const res = await fetch(`${API_URL}?action=login`, {
             method: 'POST',
             body: JSON.stringify({ 
@@ -2044,25 +2056,18 @@ async function doLogin() {
         const result = await res.json();
 
         if (result.success) {
-            // LOGIN SUCCESS!
-            // 1. Save the Secure Token
             localStorage.setItem('zpms_token', result.token);
             localStorage.setItem('zpms_uid', result.user.id);
             localStorage.setItem('zpms_time', Date.now());
-
-            // 2. Proceed
-            document.getElementById('loading-overlay').classList.remove('hidden');
             location.reload(); 
         } else {
-            // LOGIN FAILED
             document.getElementById('err-pass').style.display = 'block';
             document.getElementById('err-pass').innerText = result.message || "Incorrect Password";
             btn.innerText = "Log In";
             btn.disabled = false;
         }
     } catch (e) {
-        alert("Server connection failed.");
-        btn.innerText = "Log In";
+        showToast("Server connection failed", "error");
         btn.disabled = false;
     }
 }
