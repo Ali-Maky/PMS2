@@ -2833,19 +2833,15 @@ function refreshGlobalAdminRating() {
     }
 }
 
-      async function saveDraftToDB() {
+     async function saveDraftToDB() {
     // 1. Send data to database
     await db.from('company_settings').upsert({ id: 'shared_goals_draft', data: masterData });
     
-    // 2. If this is the first edit, update the 'hasDraft' flag, 
-    // but DO NOT reload the whole page (loadAdminSharedGoals).
+    // 2. Update flag, but DO NOT reload the data (loadAdminSharedGoals)
     if (!hasDraft) { 
         hasDraft = true; 
-        // Optional: You could manually inject the "Unsaved Draft" banner here if you wanted,
-        // but for now, just setting the flag ensures logic consistency.
     }
 }
-
         async function discardDraft() {
             showConfirm("Discard Draft", "Discard draft and reload live data?", "Discard", "danger", async () => {
                 await db.from('company_settings').delete().eq('id', 'shared_goals_draft');
@@ -2865,13 +2861,11 @@ function refreshGlobalAdminRating() {
     // Helper to get companies list
     const companies = ["Zain Iraq", "Horizon", "Next Generation"];
 
-    // Handle empty state
     if (!masterData.goals || masterData.goals.length === 0) {
         container.innerHTML = '<div style="padding:20px; text-align:center; color:#aaa;">No shared goals defined. Click "Create New" below.</div>';
         return;
     }
 
-    // Generate HTML for all goals
     const htmlParts = masterData.goals.map((g, i) => {
         // 1. Setup Context Variables
         const context = g.company_context || 'ALL';
@@ -2890,7 +2884,7 @@ function refreshGlobalAdminRating() {
             return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER'));
         }).sort((a, b) => a[COL.name].localeCompare(b[COL.name]));
 
-        const allOptionText = context === 'ALL' ? "Assign to ALL Companies (Global)" : `Assign to ALL ${context} Employees`;
+        const allOptionText = context === 'ALL' ? "Assign to ALL Global Employees" : `Assign to ALL ${context} Employees`;
         const allOptionVal = context === 'ALL' ? "GLOBAL_ALL" : `COMP_${context}`;
 
         // 3. Generate Sub-HTML for Assignments
@@ -2973,7 +2967,7 @@ function refreshGlobalAdminRating() {
             <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
                 <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px;">ACTIVE ASSIGNMENTS & WEIGHTS</div>
                 ${assignmentsHtml}
-                ${(!g.assignments || g.assignments.length === 0) ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic;">No assignments yet.</div>' : ''}
+                ${(!g.assignments || g.assignments.length === 0) ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic;">No active assignments.</div>' : ''}
             </div>
 
             <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; margin-bottom:15px;">
@@ -4295,12 +4289,33 @@ async function loadEval(tid, isSearchMode = false) {
                 </div>`;
         } else {
             // SHARED GOALS SECTION
+           // SHARED GOALS SECTION
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
+                const userComp = getCompany(userId); // Determine Company (e.g. "Zain Iraq")
+
+                // UPDATED LOGIC: Check for Global, Company, Division, OR Personal assignments
                 const relevantShared = (masterData.goals || []).map(g => {
-                    const myAssign = (g.assignments || []).find(a => a.target === userDiv || a.target === userId);
-                    return myAssign ? { ...g, myWeight: myAssign.weight } : null;
+                    // We sum up weights if multiple assignments match (e.g. Company + Division)
+                    // or just take the first match. Let's sum them to be consistent with calc().
+                    let totalWeight = 0;
+                    let isAssigned = false;
+
+                    (g.assignments || []).forEach(a => {
+                        if (a.target === 'GLOBAL_ALL' || 
+                            a.target === `COMP_${userComp}` || 
+                            a.target === `DIV_${userDiv}` || // Note: Added DIV_ prefix support if used
+                            a.target === userDiv ||          // Legacy support for plain Division names
+                            a.target === `ID_${userId}` ||   // Note: Added ID_ prefix support
+                            a.target === userId)             // Legacy support for plain IDs
+                        {
+                            totalWeight += Number(a.weight);
+                            isAssigned = true;
+                        }
+                    });
+
+                    return isAssigned ? { ...g, myWeight: totalWeight } : null;
                 }).filter(Boolean);
 
                 h += `
@@ -4326,7 +4341,7 @@ async function loadEval(tid, isSearchMode = false) {
                                     }).join('')}
                                 </div>
                             </div>`).join('')}
-                        ${relevantShared.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:20px;">No shared goals assigned to this division.</div>' : ''}
+                        ${relevantShared.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:20px;">No shared goals assigned to this division or company.</div>' : ''}
                     </div>
                 </div>`;
             }
