@@ -4274,14 +4274,16 @@ async function loadEval(tid, isSearchMode = false) {
 
         // 3. Permissions Logic
         let canEdit = false;
-        if (viewingSelf) {
-            canEdit = (stat === 'Draft' || stat === 'Returned');
-        } else if (isDirectSupervisor) {
-            canEdit = (stat === 'Submitted to Manager');
-        }
-        
-        if (isSearchMode) canEdit = false;
+const currentStat = data[COL.stat] || 'Draft';
 
+if (viewingSelf) {
+    // ALLOW EDITING IF: Status is Draft, basic Returned, or the specific Manager Rejection status
+    canEdit = (currentStat === 'Draft' || currentStat === 'Returned' || currentStat === 'Draft (Returned by Manager)');
+} else if (isDirectSupervisor) {
+    canEdit = (currentStat === 'Submitted to Manager');
+}
+
+if (isSearchMode) canEdit = false;
         // --- VISIBILITY RULE: Only show scores if 'Published' or if user is Reviewer ---
         const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
 
