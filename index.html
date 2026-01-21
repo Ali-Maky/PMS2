@@ -2261,339 +2261,60 @@ function getCompany(id) {
         // --- 5. MASTER ADMIN PORTAL ---
       
      
- async function loadHRAdmin() {
-    const mainView = document.getElementById('main-view') || document.getElementById('app-container');
-    
-    // Set the Layout
-    mainView.innerHTML = `
-    <div class="animate-in container-fluid p-4">
-        <div class="header-bar mb-4">
+  async function loadHRAdmin() {
+    document.getElementById('main-view').innerHTML = `
+    <div class="animate-in">
+        <div class="header-bar">
             <div>
-                <h2 class="page-title fw-bold">HR Portal</h2>
-                <p class="text-muted">Master Administration & Analytics</p>
+                <h2 class="page-title">HR Portal</h2>
+                <p class="page-sub">Master Administration & Analytics</p>
             </div>
         </div>
         
-        <div class="card shadow-sm mb-4" style="border-radius: 12px; overflow: hidden;">
-            <div class="d-flex overflow-auto border-bottom">
-                <div class="admin-tab active" id="tab-shared" onclick="switchAdminTab('shared')">
-                    <i class="fa-solid fa-bullseye me-2"></i> Shared Goals
+        <div class="card" style="padding: 0; margin-bottom: 32px; border-radius: 12px; background: white; overflow: hidden;">
+            <div style="display: flex; overflow-x: auto; border-bottom: 1px solid var(--border);">
+                <div class="admin-tab active" id="tab-shared" onclick="switchAdminTab('shared')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-bullseye"></i> <span>Shared Goals</span>
                 </div>
-                <div class="admin-tab" id="tab-directory" onclick="switchAdminTab('directory')">
-                    <i class="fa-solid fa-address-book me-2"></i> Directory
+                <div class="admin-tab" id="tab-directory" onclick="switchAdminTab('directory')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-address-book"></i> <span>Directory</span>
                 </div>
-                <div class="admin-tab" id="tab-analytics" onclick="switchAdminTab('analytics')">
-                    <i class="fa-solid fa-chart-pie me-2"></i> Analytics
+                <div class="admin-tab" id="tab-analytics" onclick="switchAdminTab('analytics')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-chart-pie"></i> <span>Analytics</span>
                 </div>
-                <div class="admin-tab" id="tab-app" onclick="switchAdminTab('app')">
-                    <i class="fa-solid fa-list-check me-2"></i> Approvals
+                <div class="admin-tab" id="tab-app" onclick="switchAdminTab('app')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-list-check"></i> <span>Approvals</span>
                 </div>
-                <div class="admin-tab" id="tab-bulk" onclick="switchAdminTab('bulk')">
-                    <i class="fa-solid fa-file-csv me-2"></i> Bulk Import
+                <div class="admin-tab" id="tab-bulk" onclick="switchAdminTab('bulk')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-file-csv"></i> <span>Bulk Import</span>
                 </div>
-                <div class="admin-tab" id="tab-perm" onclick="switchAdminTab('perm')">
-                    <i class="fa-solid fa-shield-halved me-2"></i> Admins
+                <div class="admin-tab" id="tab-perm" onclick="switchAdminTab('perm')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-shield-halved"></i> <span>Admins</span>
+                </div>
+                <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
                 </div>
             </div>
         </div>
 
-        <div id="admin-content" class="animate-in">
-            <div class="text-center p-5"><div class="spinner-border text-primary"></div></div>
-        </div>
+        <div id="admin-content" class="animate-in"></div>
     </div>
     `;
     
-    // Inject Styles for the Tabs
-    const styleId = 'admin-tab-styles';
-    if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = `
-            .admin-tab { 
-                padding: 15px 25px; 
-                cursor: pointer; 
-                color: #64748b; 
-                font-weight: 600; 
-                border-bottom: 3px solid transparent; 
-                transition: all 0.2s; 
-                white-space: nowrap;
-            }
-            .admin-tab:hover { background: #f8fafc; color: #1e293b; }
-            .admin-tab.active { color: #4f46e5; border-bottom: 3px solid #4f46e5; background: #eff6ff; }
-        `;
-        document.head.appendChild(style);
-    }
+    // Ensure styles for the active tab match the screenshot (Blue Underline)
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .admin-tab { color: var(--text-muted); font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .admin-tab:hover { background: #f8fafc; color: var(--text-main); }
+        .admin-tab.active { color: #4f46e5; border-bottom: 3px solid #4f46e5; background: #eff6ff; }
+        .admin-tab i { font-size: 1.1rem; }
+    `;
+    document.head.appendChild(style);
 
-    // Load Default Tab
+    // Default to Approvals if that is the focus, or Shared
     switchAdminTab('shared');
 }
 
-// --- 2. Tab Switcher Logic ---
-window.switchAdminTab = async function(tabName) {
-    // 1. Update Active Class
-    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-    const activeTab = document.getElementById(`tab-${tabName}`);
-    if (activeTab) activeTab.classList.add('active');
-
-    const container = document.getElementById('admin-content');
-    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
-
-    // 2. Route to correct content
-    if (tabName === 'shared') {
-        await renderSharedGoalsTab(container);
-    } else if (tabName === 'directory') {
-        // ... (Existing directory logic)
-        container.innerHTML = `<div class="alert alert-info">Directory Management Loaded</div>`;
-        // You can call your existing directory render function here
-    } else {
-        // Placeholder for other tabs
-        container.innerHTML = `<div class="p-5 text-center text-muted"><h4><i class="fa-solid fa-tools"></i> ${tabName.charAt(0).toUpperCase() + tabName.slice(1)} Module</h4><p>This module is ready to be connected.</p></div>`;
-    }
-};// --- 3. Shared Goals Feature (Fixed Layout & Cascading Filters) ---
-async function renderSharedGoalsTab(container) {
-    // 1. Inject Styles for the "Clean Card" Look
-    const styleId = 'shared-goals-css';
-    if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = `
-            .goal-card { border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-            .goal-header { background: #f8fafc; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
-            .goal-title-input { border: none; background: transparent; font-size: 1.1rem; font-weight: 600; color: #1e293b; width: 100%; outline: none; }
-            .goal-title-input:focus { background: #fff; box-shadow: 0 0 0 2px #4f46e5; border-radius: 4px; }
-            .goal-body { padding: 24px; }
-            .scale-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; flex: 1; min-width: 100px; }
-            .scale-label { font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; display: block; }
-            .scale-input { text-align: center; font-weight: bold; width: 100%; border: none; border-bottom: 2px solid transparent; outline: none; color: #0f172a; }
-            .scale-input:focus { border-bottom-color: #4f46e5; }
-            .assign-select { min-width: 250px; padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight: 500; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // 2. Fetch Data & Prepare Layout
-    let settings = { goals: [] };
-    try {
-        const res = await db.from('company_settings').select('data').eq('id', 'shared_goals_v1').single();
-        if (res.data && res.data.data) settings = res.data.data;
-    } catch (e) { console.error("Settings error:", e); }
-
-    // Header & Filter Bar
-    container.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-            <div>
-                <label class="small text-muted fw-bold d-block mb-1">FILTER CONTEXT</label>
-                <select id="admin-company-filter" class="form-select shadow-sm" style="min-width: 280px; font-weight: 600;">
-                    <option value="ALL">Show All Contexts</option>
-                    <option value="Zain Iraq">Zain Iraq</option>
-                    <option value="Horizon">Horizon</option>
-                    <option value="Next Generation">Next Generation</option>
-                </select>
-            </div>
-            <div class="d-flex gap-2">
-                 <button class="btn btn-primary" onclick="publishChanges()" style="background: #4f46e5;">
-                    <i class="fa-solid fa-cloud-arrow-up"></i> Publish Changes
-                </button>
-            </div>
-        </div>
-
-        <div id="unsaved-banner" class="alert alert-warning d-none mb-4">
-            <i class="fa-solid fa-triangle-exclamation"></i> You have unsaved changes. Click "Publish Changes" to make them live.
-        </div>
-
-        <div class="mb-4">
-             <button class="btn btn-success w-100 py-2" onclick="addNewSharedGoal()" style="border-style: dashed; background: #f0fdf4; color: #15803d; border-color: #86efac;">
-                <i class="fa-solid fa-plus"></i> Add New Shared Objective
-            </button>
-        </div>
-
-        <div id="goals-list-area"></div>
-    `;
-
-    const filterDropdown = document.getElementById('admin-company-filter');
-    const listArea = document.getElementById('goals-list-area');
-
-    // 3. Render Function (The Logic Core)
-    const renderList = () => {
-        const contextFilter = filterDropdown.value; // e.g., "Zain Iraq"
-        listArea.innerHTML = '';
-
-        // If filtering by company, only show goals that are RELEVANT to that company (or unassigned)
-        const visibleGoals = settings.goals.filter(g => {
-            if (contextFilter === 'ALL') return true;
-            if (!g.assignments || g.assignments.length === 0) return true;
-            // Show if it has at least one assignment matching the filter
-            return g.assignments.some(a => 
-                a.target === 'ALL_COMPANY' || 
-                JSON.stringify(a.target).includes(contextFilter) ||
-                (contextFilter === 'Zain Iraq' && a.target.includes('ZIQ')) ||
-                (contextFilter === 'Horizon' && a.target.includes('HOR'))
-            );
-        });
-
-        if (visibleGoals.length === 0) {
-            listArea.innerHTML = '<div class="text-center text-muted p-5">No goals found for this filter context.</div>';
-            return;
-        }
-
-        visibleGoals.forEach((goal, idx) => {
-            const card = document.createElement('div');
-            card.className = 'goal-card animate-in';
-            
-            // --- CASCADING DROPDOWN GENERATOR ---
-            // Only show options relevant to the selected "Company Filter"
-            let dropdownOptions = `<option value="" disabled selected>+ Assign Division/Chief</option>`;
-            
-            // 1. Whole Company (Always visible if ALL is selected)
-            if (contextFilter === 'ALL') {
-                dropdownOptions += `<option value="ALL_COMPANY">🌍 Whole Company (All Employees)</option>`;
-            }
-
-            // 2. Filtered Options
-            const companyMap = {
-                'Zain Iraq': { code: 'COMP_ZIQ', prefix: 'ZIQ' },
-                'Horizon': { code: 'COMP_HOR', prefix: 'HOR' },
-                'Next Generation': { code: 'COMP_NG', prefix: 'NG' }
-            };
-
-            // If "ALL" or specific company is selected, add its Entity Option
-            Object.keys(companyMap).forEach(compName => {
-                if (contextFilter === 'ALL' || contextFilter === compName) {
-                    dropdownOptions += `<optgroup label="${compName}">
-                        <option value="${companyMap[compName].code}">Entire Entity (${compName})</option>
-                        ${getDivisionsForCompany(compName).map(d => `<option value="${d}">${d}</option>`).join('')}
-                    </optgroup>`;
-                }
-            });
-
-            // --- HTML TEMPLATE ---
-            card.innerHTML = `
-                <div class="goal-header">
-                    <input type="text" class="goal-title-input" 
-                        value="${goal.title}" 
-                        onchange="updateSharedGoalTitle(${idx}, this.value)"
-                        placeholder="Goal Title (e.g., Consolidated Revenue)">
-                    
-                    <div class="d-flex gap-2">
-                        <select id="assign-select-${idx}" class="assign-select" onchange="addAssignment(${idx})">
-                            ${dropdownOptions}
-                        </select>
-                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSharedGoal(${idx})">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="goal-body">
-                    <label class="small text-muted fw-bold mb-2 d-block">ASSIGNMENTS & CUSTOM WEIGHTS</label>
-                    <div class="d-flex flex-wrap gap-2 mb-4 p-3 bg-light rounded border-0" style="min-height: 50px;">
-                        ${renderAssignmentsTags(goal.assignments, idx)}
-                    </div>
-
-                    <label class="small text-muted fw-bold mb-2 d-block">ACHIEVEMENT SCALES</label>
-                    <div class="d-flex gap-3 overflow-auto">
-                        ${['idle','stagnant','walker','runner','flyer','astronaut'].map(level => `
-                            <div class="scale-box">
-                                <span class="scale-label">${level}</span>
-                                <div class="d-flex align-items-center justify-content-center">
-                                    <span class="text-muted small me-1">>=</span>
-                                    <input type="text" class="scale-input" 
-                                        value="${goal.levels ? goal.levels[level] : ''}" 
-                                        placeholder="%"
-                                        onchange="updateSharedGoalLevel(${idx}, '${level}', this.value)">
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-            listArea.appendChild(card);
-        });
-    };
-
-    filterDropdown.onchange = renderList;
-    renderList();
-
-    // --- LOGIC HELPERS ---
-    // 1. Fake Helper to simulate Divisions per company (Since real data might be messy)
-    function getDivisionsForCompany(compName) {
-        const uniqueDivs = new Set();
-        if (typeof allCompanyData !== 'undefined') {
-            allCompanyData.forEach(row => {
-                const div = row.division || row.department;
-                if (!div) return;
-                
-                // Heuristic: Check ID prefix to guess company
-                const id = (row.id || '').toString().toUpperCase();
-                let belongs = false;
-                if (compName === 'Zain Iraq' && id.startsWith('ZIQ')) belongs = true;
-                if (compName === 'Horizon' && (id.startsWith('H') || id.startsWith('AWO'))) belongs = true;
-                if (compName === 'Next Generation' && id.startsWith('NG')) belongs = true;
-
-                if (belongs) uniqueDivs.add(div);
-            });
-        }
-        return Array.from(uniqueDivs).sort();
-    }
-
-    // 2. Global Event Handlers
-    window.updateSharedGoalTitle = (idx, val) => { settings.goals[idx].title = val; saveDraft(); };
-    window.updateSharedGoalLevel = (idx, lvl, val) => { 
-        if(!settings.goals[idx].levels) settings.goals[idx].levels = {};
-        settings.goals[idx].levels[lvl] = val; 
-        saveDraft(); 
-    };
-    window.addAssignment = (idx) => {
-        const sel = document.getElementById(`assign-select-${idx}`);
-        if (!sel.value) return;
-        if (!settings.goals[idx].assignments) settings.goals[idx].assignments = [];
-        if (settings.goals[idx].assignments.some(a => a.target === sel.value)) return;
-        settings.goals[idx].assignments.push({ target: sel.value });
-        sel.value = ""; // Reset dropdown
-        saveDraft();
-        renderList();
-    };
-    window.removeAssignment = (gIdx, aIdx) => {
-        settings.goals[gIdx].assignments.splice(aIdx, 1);
-        saveDraft();
-        renderList();
-    };
-    window.deleteSharedGoal = (idx) => {
-        if(confirm('Delete this goal?')) {
-            settings.goals.splice(idx, 1);
-            saveDraft();
-            renderList();
-        }
-    };
-    window.addNewSharedGoal = () => {
-        settings.goals.unshift({ title: "", levels: {}, assignments: [] });
-        renderList();
-    };
-    window.publishChanges = async () => {
-        const btn = document.querySelector('button[onclick="publishChanges()"]');
-        const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-        await db.from('company_settings').upsert({ id: 'shared_goals_v1', data: settings });
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Published!';
-        document.getElementById('unsaved-banner').classList.add('d-none');
-        setTimeout(() => btn.innerHTML = oldHtml, 2000);
-    };
-
-    function saveDraft() {
-        document.getElementById('unsaved-banner').classList.remove('d-none');
-        // In a real app, you might save to localStorage here
-    }
-}
-
-function renderAssignmentsTags(assignments, gIdx) {
-    if (!assignments || assignments.length === 0) return '<small class="text-muted fst-italic">Unassigned (Not visible to anyone)</small>';
-    return assignments.map((a, i) => `
-        <span class="badge bg-info text-dark d-flex align-items-center p-2">
-            ${a.target === 'ALL_COMPANY' ? '🌍 Whole Company' : a.target}
-            <i class="fa-solid fa-times ms-2 cursor-pointer" onclick="removeAssignment(${gIdx}, ${i})"></i>
-        </span>
-    `).join('');
-}
    function switchAdminTab(t) {
     // 1. Update Visual Active State
     document.querySelectorAll('.admin-tab').forEach(btn => {
@@ -3008,76 +2729,51 @@ async function loadAdminSharedGoals() {
         if (sg && sg.data) masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
     }
 
-    // 2. Render Layout
-    const content = `
-    <div class="animate-in" style="padding: 0;">
-        
-        <div style="margin-bottom: 24px;">
-            <h2 style="font-size: 1.5rem; font-weight: 800; color: #111827; margin: 0;">HR Portal</h2>
-            <p style="color: #6b7280; font-size: 0.9rem; margin-top: 4px;">Master Administration & Analytics</p>
-        </div>
-
-        <div style="display: flex; gap: 24px; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px; padding-bottom: 12px;">
-            <div class="admin-tab active" style="color: #4f46e5; border-bottom: 2px solid #4f46e5; font-weight: 600; padding-bottom: 12px; cursor: pointer;">
-                <i class="fa-solid fa-bullseye"></i> Shared Goals
-            </div>
-            </div>
-
+    // 2. Construct UI
+    const h = `
+    <div class="animate-in">
         ${hasDraft ? `
-        <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center; gap: 12px; color: #c2410c; font-weight: 700; font-size: 0.9rem;">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <span>Unsaved Draft • Changes visible only to you</span>
-            </div>
-            <button onclick="discardDraft()" class="btn btn-outline" style="color: #c2410c; border-color: #c2410c; padding: 6px 16px; font-size: 0.85rem; background: white; font-weight: 600;">
-                Discard Draft
-            </button>
+        <div style="background:#fff7ed; color:#b45309; padding:16px 24px; border-radius:12px; border:1px solid #fed7aa; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="display:flex; align-items:center; gap:12px; font-weight:600;"><i class="fa-solid fa-triangle-exclamation" style="font-size:1.2rem;"></i> Unsaved Draft &bull; Changes visible only to you</span>
+            <button onclick="discardDraft()" class="btn btn-outline" style="border-color:#b45309; color:#b45309; height:auto; padding:6px 16px;">Discard Draft</button>
         </div>` : ''}
 
-        <div class="card" style="border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 32px; background: white; border-left: 4px solid #4f46e5;">
-            
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; border-bottom: 1px solid #f3f4f6; padding-bottom: 24px;">
+        <div class="card" style="background: linear-gradient(to right, #ffffff, #f8fafc); border-left: 6px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; border-bottom:1px solid var(--border); padding-bottom:24px;">
                 <div>
-                    <h3 style="margin: 0 0 6px 0; font-size: 1.1rem; font-weight: 700; color: #111827;">Calculated Company Performance</h3>
-                    <p style="margin: 0; color: #6b7280; font-size: 0.85rem;">Aggregated status based on individual shared goal achievements.</p>
+                    <h3 style="margin:0 0 4px 0; font-size:1.1rem; font-weight:700;">Calculated Company Performance</h3>
+                    <p style="margin:0; color:var(--text-muted); font-size:0.9rem;">Aggregated status based on individual shared goal achievements.</p>
                 </div>
-                <div style="text-align: right;">
-                    <div id="global-calc-label" class="badge-rating lvl-0" style="font-size: 0.85rem; margin-bottom: 4px;">PENDING</div>
-                    <div id="global-calc-note" style="font-size: 0.75rem; color: #9ca3af; font-style: italic;">Awaiting ratings</div>
+                <div style="text-align:right; display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+                    <div id="global-calc-label" class="badge-rating lvl-0">PENDING</div>
+                    <div id="global-calc-note" style="font-size:0.85rem; font-weight:600; color:var(--text-muted); font-style:italic; max-width:350px; line-height:1.4;">
+                        Rate individual goals below to determine the company status.
+                    </div>
                 </div>
             </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <label style="font-size: 0.7rem; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Filter Context</label>
-                    <select id="admin-context-filter" onchange="renderMasterGoals()" 
-                        style="padding: 10px 32px 10px 12px; border-radius: 6px; border: 1px solid #d1d5db; font-weight: 600; color: #111827; background: #fff; min-width: 220px; cursor: pointer;">
-                        <option value="ALL">Show All Contexts</option>
-                        <option value="Zain Iraq">Zain Iraq</option>
-                        <option value="Horizon">Horizon</option>
-                        <option value="Next Generation">Next Generation</option>
-                    </select>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h4 style="margin:0; font-size:1rem; font-weight:700;">Shared Objectives & Cascading Weights</h4>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-primary" onclick="saveMasterGoals()"><i class="fa-regular fa-floppy-disk"></i> &nbsp; Publish Changes</button>
                 </div>
-                <button class="btn btn-primary" onclick="saveMasterGoals()" style="background: #4f46e5; border: none; padding: 10px 20px;">
-                    <i class="fa-solid fa-cloud-arrow-up"></i> &nbsp; Publish Changes
-                </button>
             </div>
-
-            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 16px;">Shared Objectives & Cascading Weights</h3>
-
-            <div id="master-goals-list" style="display: flex; flex-direction: column; gap: 24px;"></div>
-
-            <button onclick="addMasterGoal()" style="width: 100%; margin-top: 24px; padding: 14px; border: 2px dashed #e5e7eb; border-radius: 8px; background: #f9fafb; color: #4f46e5; font-weight: 600; cursor: pointer; transition: all 0.2s;">
-                <i class="fa-solid fa-plus"></i> &nbsp; Add New Shared Objective
+            
+            <div id="master-goals-list" style="display:grid; gap:20px;"></div>
+            
+            <button class="btn btn-outline" style="margin-top:24px; width:100%; justify-content:center; border-style:dashed;" onclick="addMasterGoal()">
+                <i class="fa-solid fa-plus"></i> &nbsp; Create New Shared Objective
             </button>
-
         </div>
     </div>`;
 
-    document.getElementById('admin-content').innerHTML = content;
+    document.getElementById('admin-content').innerHTML = h;
+    
+    // 3. Render Items & Initial Calculation
+    renderMasterGoals();
     refreshGlobalAdminRating();
-    renderMasterGoals(); // Initial Render
 }
+
 /**
  * UPDATED HELPER: Calculates the status from individual ratings
  * Displays the Rate Badge and Note, hides the raw numerical score
@@ -3155,132 +2851,101 @@ function refreshGlobalAdminRating() {
             renderMasterGoals();
         }
 
- function renderMasterGoals() {
-    const listContainer = document.getElementById('master-goals-list');
-    if (!listContainer) return;
-
-    const contextFilter = document.getElementById('admin-context-filter').value; // Get selected Company
-
-    // --- CASCADING LOGIC START ---
-    // We build the dropdown options based strictly on the selected "Context Filter"
-    let companyOptions = '';
+   function renderMasterGoals() {
+    const c = document.getElementById('master-goals-list');
     
-    // Helper to get divisions/chiefs for a specific company prefix
-    const getOptions = (compName, prefix) => {
-        // Filter global data for this company
-        const relevantRows = allCompanyData.filter(u => getCompany(u.id) === compName);
-        // Get Unique Divisions
-        const divs = [...new Set(relevantRows.map(u => (u.division || u.department || '').trim()).filter(Boolean))].sort();
-        // Get Chiefs/Directors (L1/L2)
-        const chiefs = relevantRows.filter(u => {
-            const lvl = (u.level || '').toUpperCase();
-            return lvl.includes('L1') || lvl.includes('L2');
-        }).sort((a,b) => a.name.localeCompare(b.name));
+    // 1. Get unique Divisions
+    const allDivs = [...new Set(allCompanyData.map(u => u[COL.div]).filter(Boolean))].sort();
+    
+    // 2. STRICTER CHIEF FILTER
+    // We filter strictly for 'L1' or specific C-Suite titles to exclude 'L10', 'L12', etc.
+    const chiefs = allCompanyData.filter(u => {
+        const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
+        const j = (u[COL.job] || "").toString().trim().toUpperCase();
         
-        return `
-            <optgroup label="${compName} - Entities">
-                <option value="COMP_${prefix}">Entire Entity (${compName})</option>
-            </optgroup>
-            <optgroup label="${compName} - Divisions">
-                ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
-            </optgroup>
-            <optgroup label="${compName} - Leaders">
-                ${chiefs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-            </optgroup>
-        `;
-    };
-
-    if (contextFilter === 'ALL') {
-        companyOptions += `<option value="ALL_COMPANY">🌍 Whole Group (All Companies)</option>`;
-        companyOptions += getOptions('Zain Iraq', 'ZIQ');
-        companyOptions += getOptions('Horizon', 'HOR');
-        companyOptions += getOptions('Next Generation', 'NG');
-    } else if (contextFilter === 'Zain Iraq') {
-        companyOptions += getOptions('Zain Iraq', 'ZIQ');
-    } else if (contextFilter === 'Horizon') {
-        companyOptions += getOptions('Horizon', 'HOR');
-    } else if (contextFilter === 'Next Generation') {
-        companyOptions += getOptions('Next Generation', 'NG');
-    }
-    // --- CASCADING LOGIC END ---
-
-    listContainer.innerHTML = (masterData.goals || []).map((g, idx) => {
+        // Condition A: Level is STRICTLY "L1" (prevents matching L10, L12)
+        if (l === 'L1') return true;
         
-        // Filter assignments visualization based on context
-        const visibleAssignments = (g.assignments || []).filter(a => {
-            if (contextFilter === 'ALL') return true;
-            // Basic heuristic: if target string implies a different company, hide it visually (but keep in data)
-            // Ideally, your assignment object should store 'companyContext', but for now we show all
-            return true; 
-        });
+        // Condition B: Job Title is explicit C-Suite
+        if (j === 'CEO' || j === 'CHIEF EXECUTIVE OFFICER') return true;
+        if (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) return true; // e.g., Chief Financial Officer
+        
+        return false;
+    }).sort((a, b) => a[COL.name].localeCompare(b[COL.name]));
 
-        return `
-        <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #fff;">
-            <div style="padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px;">
-                <div style="flex: 1;">
-                    <input type="text" 
-                        value="${g.title}" 
-                        onchange="masterData.goals[${idx}].title=this.value; saveDraftToDB();" 
-                        placeholder="Goal Title (e.g. Consolidated Revenue - % of budget)"
-                        style="width: 100%; font-size: 0.95rem; font-weight: 600; color: #1f2937; border: 1px solid #d1d5db; padding: 10px; border-radius: 6px; outline: none;">
-                </div>
-                <div style="width: 300px;">
-                    <select onchange="updateGoalAssignment(${idx}, this.value); this.value='';" 
-                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #6366f1; color: #4338ca; font-weight: 600; background: #e0e7ff; cursor: pointer;">
-                        <option value="" selected disabled>+ Assign Division/Chief</option>
-                        ${companyOptions}
-                    </select>
-                </div>
-                <button onclick="masterData.goals.splice(${idx},1); saveDraftToDB(); renderMasterGoals();" 
-                    style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: none; background: #fee2e2; color: #ef4444; border-radius: 6px; cursor: pointer;">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-            </div>
+    // 3. Render HTML
+    c.innerHTML = (masterData.goals || []).map((g, i) => `
+    <div class="card" style="border-left: 5px solid var(--primary); background: #fff;">
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:15px; margin-bottom:15px;">
+            <input class="login-input" value="${g.title}" onchange="masterData.goals[${i}].title=this.value; saveDraftToDB();" placeholder="Goal Title">
+            
+            <select class="login-input" onchange="updateGoalAssignment(${i}, this.value)" style="margin:0;">
+                <option value="">+ Assign Division/Chief</option>
+                <optgroup label="Divisions">
+                    ${allDivs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Specific Chiefs">
+                    ${chiefs.map(u => `<option value="${u[COL.id]}">${u[COL.name]} (${u[COL.id]})</option>`).join('')}
+                </optgroup>
+            </select>
+        </div>
 
-            <div style="padding: 16px 16px 8px 16px;">
-                <label style="font-size: 0.7rem; font-weight: 800; color: #9ca3af; margin-bottom: 8px; display: block;">ASSIGNMENTS & CUSTOM WEIGHTS</label>
-                <div style="background: #f8fafc; border: 1px dashed #e5e7eb; border-radius: 6px; padding: 12px; min-height: 40px; display: flex; flex-wrap: wrap; gap: 8px;">
-                    ${visibleAssignments.length === 0 ? '<span style="color:#d1d5db; font-style:italic; font-size:0.85rem;">No assignments yet.</span>' : ''}
-                    ${visibleAssignments.map((a, aIdx) => `
-                        <div style="display: flex; align-items: center; gap: 8px; background: white; border: 1px solid #e5e7eb; padding: 4px 10px; border-radius: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <span style="font-weight: 600; font-size: 0.8rem; color: #374151;">${a.target}</span>
-                            <div style="height: 12px; width: 1px; background: #e5e7eb;"></div>
-                            <input type="number" value="${(a.weight * 100).toFixed(0)}" 
-                                onchange="updateAssignmentWeight(${idx}, '${a.target}', this.value)"
-                                style="width: 30px; border: none; text-align: right; font-weight: 700; color: #4f46e5; outline: none; font-size: 0.8rem;">
-                            <span style="font-size: 0.7rem; color: #9ca3af;">%</span>
-                            <i class="fa-solid fa-xmark" onclick="removeAssignment(${idx}, ${aIdx})" style="cursor: pointer; color: #ef4444; font-size: 0.8rem; margin-left: 4px;"></i>
-                        </div>
-                    `).join('')}
+        <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
+            <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px;">ASSIGNMENTS & CUSTOM WEIGHTS</div>
+            ${(g.assignments || []).map((assign, ai) => `
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px; border-radius:8px; border:1px solid var(--border);">
+                    <span style="flex:1; font-weight:600; font-size:0.85rem;">${assign.target}</span>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Weight:</span>
+                        <input type="number" value="${(assign.weight * 100) || 0}" 
+                            style="width:50px; border:1px solid var(--primary); border-radius:4px; text-align:center; font-weight:700;"
+                            onchange="masterData.goals[${i}].assignments[${ai}].weight=(this.value/100); saveDraftToDB();">
+                        <span style="font-size:0.75rem;">%</span>
+                    </div>
+                    <button class="btn-delete" onclick="removeAssignment(${i}, ${ai})" style="color:var(--danger);"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-            </div>
+            `).join('')}
+            ${(!g.assignments || g.assignments.length === 0) ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic;">No assignments yet.</div>' : ''}
+        </div>
 
-            <div style="padding: 0 16px 16px 16px;">
-                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">
-                    ${['IDLE', 'STAGNANT', 'WALKER', 'RUNNER', 'FLYER', 'ASTRONAUT'].map((lvl, i) => `
-                        <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
-                            <div style="background: #f9fafb; font-size: 0.65rem; font-weight: 700; color: #6b7280; text-align: center; padding: 4px; border-bottom: 1px solid #e5e7eb;">${lvl}</div>
-                            <div style="position: relative;">
-                                <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 0.7rem; color: #9ca3af;">>=</span>
-                                <input type="text" value="${g.targets[i] || ''}" 
-                                    onchange="masterData.goals[${idx}].targets[${i}]=this.value; saveDraftToDB();"
-                                    style="width: 100%; border: none; padding: 8px 8px 8px 24px; font-size: 0.85rem; font-weight: 600; text-align: center; outline: none;">
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
+        <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; margin-bottom:15px;">
+            ${g.targets.map((t, ti) => `<input class="target-input" value="${t}" placeholder="L${ti+1}" onchange="masterData.goals[${i}].targets[${ti}]=this.value; saveDraftToDB();">`).join('')}
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid #eee;">
+           <div style="display:flex; align-items:center; gap:15px;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">SET ACHIEVEMENT:</span>
+                <select onchange="masterData.goals[${i}].rating=parseInt(this.value); refreshGlobalAdminRating(); saveDraftToDB(); renderMasterGoals();" 
+                    style="padding:6px 12px; border-radius:8px; border:2px solid var(--primary); font-weight:700; background:white; cursor:pointer;">
+                    <option value="0">Not Rated</option>
+                    <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
+                    <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
+                    <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
+                    <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
+                    <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
+                    <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
+                </select>
             </div>
-        </div>`;
-    }).join('');
+            <button class="btn btn-outline" style="color:var(--danger); padding:4px 10px;" onclick="masterData.goals.splice(${i},1); saveDraftToDB(); renderMasterGoals();"><i class="fa-solid fa-trash"></i> Delete Goal</button>
+        </div>
+    </div>`).join('');
 }
+
 // Helper to add a Division or Chief ID to a specific Shared Goal
-function updateAssignmentWeight(goalIdx, targetName, newVal) {
-    const goal = masterData.goals[goalIdx];
-    const assign = goal.assignments.find(a => a.target === targetName);
-    if (assign) {
-        assign.weight = parseFloat(newVal) / 100;
+function updateGoalAssignment(goalIndex, value) {
+    if (!value) return;
+    if (!masterData.goals[goalIndex].assignments) masterData.goals[goalIndex].assignments = [];
+
+    // Check if target already exists
+    if (!masterData.goals[goalIndex].assignments.find(a => a.target === value)) {
+        masterData.goals[goalIndex].assignments.push({ 
+            target: value, 
+            weight: 0 // Admin will set this manually in the UI
+        });
         saveDraftToDB();
+        renderMasterGoals();
     }
+
 }
 
 // Helper to remove an assignment when the 'X' is clicked
