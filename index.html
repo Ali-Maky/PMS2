@@ -290,6 +290,64 @@
 
         function showToast(msg, type='success') { alert(msg); }
         function render(h) { document.getElementById('main-view').innerHTML = h; }
+        // --- ADD THESE MISSING FUNCTIONS ---
+
+async function loadHRAdmin() {
+    // 1. Set the sidebar active state
+    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+    
+    // 2. Render the HR Portal Shell
+    let h = `
+    <div class="animate-in">
+        <div class="header-bar">
+            <div>
+                <h2 class="page-title">HR Portal</h2>
+                <p class="page-sub">System Administration</p>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Shared Goals Configuration</h3>
+            <p>Use this section to manage company-wide objectives.</p>
+            <button class="login-btn" onclick="loadAnalyticsDashboard()">View Analytics</button>
+        </div>
+        <div id="admin-content"></div>
+    </div>`;
+    render(h);
+}
+
+async function loadAnalyticsDashboard() {
+    try {
+        const res = await fetch(`${API_URL}?action=getAnalytics`, { headers: API_HEADERS });
+        if (!res.ok) throw new Error("Unauthorized");
+        const data = await res.json();
+
+        render(`<div class="card"><h3>Global Distribution</h3><div style="height:400px;"><canvas id="chartAdmin"></canvas></div></div>`);
+
+        new Chart(document.getElementById('chartAdmin'), {
+            type: 'bar',
+            data: {
+                labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"],
+                datasets: [{ 
+                    label: 'Employees', 
+                    data: data.distribution, 
+                    backgroundColor: '#6366f1' 
+                }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+    } catch (e) {
+        alert("Error loading analytics: " + e.message);
+    }
+}
+
+// Ensure the loadPage helper handles string names correctly
+function loadPage(fnName) {
+    if (fnName === 'loadHRAdmin') loadHRAdmin();
+    else if (fnName === 'loadTeam') loadTeam();
+    else if (fnName === 'loadReports') loadReports();
+    else if (fnName === 'loadMyEval') loadEval(user[COL.id]);
+    else console.error("Function " + fnName + " not found.");
+}
     </script>
 </body>
 </html>
