@@ -2041,7 +2041,6 @@ async function doLogin() {
     const p2 = document.getElementById('inp-confirm').value;
     const btn = document.getElementById('btn-login');
     
-    // Validation for new setup
     if (!document.getElementById('grp-confirm').classList.contains('hidden')) {
         if (p1.length < 4) { showToast("Password too short", "error"); return; }
         if (p1 !== p2) { showToast("Passwords do not match", "error"); return; }
@@ -2051,7 +2050,6 @@ async function doLogin() {
     btn.disabled = true;
 
     try {
-        // AUTHENTICATE WITH SERVER
         const res = await fetch(`${API_URL}?action=login`, {
             method: 'POST',
             body: JSON.stringify({ 
@@ -2063,29 +2061,24 @@ async function doLogin() {
         const result = await res.json();
 
         if (result.success) {
-            // LOGIN SUCCESS!
             localStorage.setItem('zpms_token', result.token);
             localStorage.setItem('zpms_uid', result.user.id);
             localStorage.setItem('zpms_time', Date.now());
-
             document.getElementById('loading-overlay').classList.remove('hidden');
             location.reload(); 
         } else {
-            // LOGIN FAILED
             document.getElementById('err-pass').style.display = 'block';
             document.getElementById('err-pass').innerText = result.message || "Incorrect Password";
             btn.innerText = "Log In";
             btn.disabled = false;
         }
-    } // <--- This correctly closes the 'try' block
-    catch (e) {
+    } catch (e) {
         console.error(e);
         showToast("Server connection failed", "error");
         btn.innerText = "Log In";
         btn.disabled = false;
-    } // <--- This correctly closes the 'catch' block
-} // <--- This correctly closes the 'doLogin' function
-		
+    }
+}
 // Separate function for the final step
 function completeLoginProcess() {
     localStorage.setItem('zpms_uid', user[COL.id]); 
