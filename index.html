@@ -1587,7 +1587,6 @@ const API_KEY = 'Z@!nR@ndomized999555';
 // REPLACE THIS BLOCK
 const API_HEADERS = {
     'Content-Type': 'application/json',
-    // Dynamically grab the token from storage for every request
     get 'Authorization'() {
         return 'Bearer ' + (localStorage.getItem('zpms_token') || '');
     }
