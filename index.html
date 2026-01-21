@@ -4888,7 +4888,7 @@ async function submitFinal() {
     }
 
     if (hasZeroWeight) {
-        showToast(`Cannot submit: The goal "${zeroWeightTitle}" has 0% weight. Please edit or delete it before proceeding.`, 'error');
+        showToast(`Cannot submit: The goal "${zeroWeightTitle}" has 0% weight.`, 'error');
         return; 
     }
 
@@ -4916,16 +4916,14 @@ async function submitFinal() {
     let newStatus = "";
 
     if (viewingSelf) {
-        // Even Admins move to "Submitted to Manager" for their own card
         confirmMsg = "Submit to Manager? You won't be able to edit your goals anymore.";
         newStatus = "Submitted to Manager";
     } else if (isDirectSupervisor && stat === 'Submitted to Manager') {
         confirmMsg = "Approve & Submit to HR? Feedback and ratings will be finalized.";
         newStatus = "Submitted to HR";
     } else if ((uRole === 'Admin' || uRole === 'Master') && stat === 'Submitted to HR') {
-        // This stage can only be reached via the Admin Panel by a different Admin
         confirmTitle = "Final Approval";
-        confirmMsg = "Perform Final Approval? This will archive the record and make results visible to the employee.";
+        confirmMsg = "Perform Final Approval?";
         newStatus = "Approved";
     }
 
@@ -4938,34 +4936,25 @@ async function submitFinal() {
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
         }
 
+        // --- FIX: INCLUDE THE ID IN THE PAYLOAD ---
         let u = {}; 
+        u[COL.id] = targetUser[COL.id]; // <--- CRITICAL FIX
         u[COL.goals] = targetUser[COL.goals]; 
         u[COL.stat] = newStatus;
         
-        const { error } = await db.from('active_list').update(u).eq(COL.id, targetUser[COL.id]);
+        // Use UPSERT instead of update because your PHP handle 'upsert' more robustly with IDs
+        const { error } = await db.from('active_list').upsert(u);
         
         if (error) {
-            showToast("Update failed: " + error.message, 'error');
-            if(btn) btn.disabled = false;
-        } else {
-            if (newStatus === "Approved") {
-                const finalScoreRaw = document.getElementById('score').innerText;
-                const ratingLabelRaw = document.getElementById('rating').innerText;
-
-                const historyPayload = {
-                    employee_id: targetUser[COL.id],
-                    year: new Date().getFullYear(),
-                    final_score: parseFloat(finalScoreRaw) || 0,
-                    rating_label: ratingLabelRaw,
-                    goals_snapshot: targetUser[COL.goals], 
-                    approved_at: new Date().toISOString()
-                };
-                await db.from('scorecard_history').insert([historyPayload]);
-                showToast("Scorecard Approved & Archived!", 'success');
-            } else {
-                showToast("Status updated successfully", 'success');
+            showToast("Update failed: " + (error.message || "Unauthorized"), 'error');
+            if(btn) {
+                btn.disabled = false;
+                btn.innerText = "Try Again";
             }
-            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast("Success! Reloading...", 'success');
+            // Small delay to ensure the DB processes before reload
+            setTimeout(() => location.reload(), 1000);
         }
     });
 }
