@@ -2986,9 +2986,8 @@ function refreshGlobalAdminRating() {
                 </div>
                 <button class="btn btn-outline" style="color:var(--danger); padding:6px 12px; font-size:0.8rem; border-color:#fee2e2;" onclick="masterData.goals.splice(${i},1); saveDraftToDB(); renderMasterGoals();"><i class="fa-solid fa-trash"></i> Delete Goal</button>
             </div>
-        </div>`;
-    });
-
+       </div>`; // End of the HTML string
+}).join(''); // Close the map function and join the array
     container.innerHTML = htmlParts.join('');
 }
 function renderMasterGoals() {
