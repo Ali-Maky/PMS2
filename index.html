@@ -2072,8 +2072,11 @@ async function doLogin() {
             btn.innerText = "Log In";
             btn.disabled = false;
         }
-    } catch (e) {
+    } // <--- THIS BRACE IS USUALLY MISSING OR MISPLACED
+    catch (e) {
+        console.error(e);
         showToast("Server connection failed", "error");
+        btn.innerText = "Log In";
         btn.disabled = false;
     }
 }
