@@ -3752,34 +3752,85 @@ function filterAdminTable() {
             document.getElementById('search-results').innerHTML = results.map(r => `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);"><div><div style="font-weight:700;">${r[COL.name]}</div><div style="font-size:0.8rem; color:var(--text-muted);">${r[COL.id]} | ${r[COL.job] || 'Staff'}</div></div><button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px;" onclick="loadEval('${r[COL.id]}', true)">Open Scorecard</button></div>`).join('');
         }
 
- async function approveSingle(id) {
+async function approveSingle(id) {
+    if (!id) return;
     showSaving();
-    const { error } = await db.from('active_list').update({ [COL.stat]: 'Approved' }).eq(COL.id, id);
-    if (error) showToast(error.message, 'error');
-    else {
-        showToast("Approved (Ready to Publish)", 'success');
-        refreshLocalData(id, 'Approved');
-    }
-    showSaved();
-}
-    async function approveBulk() {
-    const ids = adminCache.filter(u => u[COL.stat] === 'Submitted to HR').map(u => u[COL.id]);
-    if(ids.length === 0) { showToast("No pending requests to approve.", "info"); return; }
     
-    if(!confirm(`Approve ${ids.length} requests? They will move to the 'Ready to Publish' state.`)) return;
-    
-    showSaving();
-    const { error } = await db.from('active_list').update({ [COL.stat]: 'Approved' }).in(COL.id, ids);
-    if (error) showToast(error.message, 'error');
-    else {
-        showToast("Bulk Approved successfully", 'success');
-        // Update local cache manually to avoid full reload
-        adminCache.forEach(u => { if(ids.includes(u[COL.id])) u[COL.stat] = 'Approved'; });
-        filterAdminTable();
-    }
-    showSaved();
-}
+    try {
+        // Prepare secure payload including ID
+        const payload = { 
+            [COL.id]: id, 
+            [COL.stat]: 'Approved' 
+        };
 
+        // Use UPSERT to ensure the ID is sent in the body for the PHP backend
+        const { error } = await db.from('active_list').upsert(payload);
+
+        if (error) throw new Error(error.message || "Unauthorized");
+
+        showToast("Approved (Ready to Publish)", 'success');
+        
+        // Update the local cache so the UI updates without a full reload
+        const item = adminCache.find(x => x[COL.id].toString() === id.toString());
+        if (item) item[COL.stat] = 'Approved';
+        
+        // Refresh the table view
+        filterAdminTable();
+
+    } catch (err) {
+        console.error("Approval Error:", err);
+        showToast("Approval Failed: " + err.message, 'error');
+    } finally {
+        showSaved();
+    }
+}
+   async function approveBulk() {
+    const ids = adminCache
+        .filter(u => u[COL.stat] === 'Submitted to HR')
+        .map(u => u[COL.id]);
+
+    if (ids.length === 0) { 
+        showToast("No pending requests to approve.", "info"); 
+        return; 
+    }
+    
+    if (!confirm(`Approve ${ids.length} requests?`)) return;
+    
+    showSaving();
+    
+    try {
+        // We must process these in a loop or a specialized batch upsert 
+        // to ensure each record includes its own ID for the PHP backend.
+        const promises = ids.map(id => {
+            return db.from('active_list').upsert({
+                [COL.id]: id,
+                [COL.stat]: 'Approved'
+            });
+        });
+
+        const results = await Promise.all(promises);
+        const errors = results.filter(r => r.error);
+
+        if (errors.length > 0) {
+            throw new Error(`${errors.length} items failed to update.`);
+        }
+
+        showToast("Bulk Approved successfully", 'success');
+        
+        // Update local cache manually
+        adminCache.forEach(u => { 
+            if (ids.includes(u[COL.id])) u[COL.stat] = 'Approved'; 
+        });
+        
+        filterAdminTable();
+
+    } catch (err) {
+        console.error("Bulk Approval Error:", err);
+        showToast("Bulk Update Failed: " + err.message, 'error');
+    } finally {
+        showSaved();
+    }
+}
 		async function publishSingle(id) {
     showConfirm("Publish Scorecard", "This will make the score visible to the employee. Proceed?", "Publish", "success", async () => {
         showSaving();
