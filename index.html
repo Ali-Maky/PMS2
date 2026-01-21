@@ -2862,10 +2862,9 @@ function saveDraftToDB() {
     // 2. Clear existing timer (Debounce)
     clearTimeout(draftSaveTimer);
 
-    // 3. Set new timer
+    // 3. Set new timer (Waits 1 second after you stop typing)
     draftSaveTimer = setTimeout(async () => {
         try {
-            // Send data to database
             const { error } = await db.from('company_settings').upsert({ 
                 id: 'shared_goals_draft', 
                 data: masterData 
@@ -2876,14 +2875,13 @@ function saveDraftToDB() {
                 if(textEl) textEl.innerText = "Save Failed";
                 if(dotEl) dotEl.style.background = "red";
             } else {
-                // Update flag
                 hasDraft = true; 
-                showSaved(); // Use your existing helper to show green dot
+                showSaved(); 
             }
         } catch (e) {
             console.error("Draft Save Exception:", e);
         }
-    }, 1000); // Wait 1 second after last change
+    }, 1000);
 }
 		
         async function discardDraft() {
@@ -3266,18 +3264,17 @@ function refreshGlobalAdminRating() {
         noteEl.innerText = note;
     }
 }
-       async function saveMasterGoals() {
+async function saveMasterGoals() {
     showConfirm("Publish Shared Goals", "This will update goals for ALL employees. Proceed?", "Publish", "primary", async () => {
         showSaving();
 
         let myId = user[COL.id] || user['id'] || user['Employee Number'];
         if (myId) myId = myId.toString().trim();
 
-        // 1. Prepare Data
-        // Ensure masterData is a clean object
+        // 1. Prepare Data clean copy
         const payloadData = JSON.parse(JSON.stringify(masterData));
 
-        // 2. SAVE LIVE VERSION FIRST
+        // 2. SAVE LIVE VERSION FIRST (Critical Fix)
         const { error: settingsError } = await db.from('company_settings')
             .upsert({ id: SHARED_GOALS_ID, data: payloadData });
 
@@ -3285,41 +3282,35 @@ function refreshGlobalAdminRating() {
             console.error("Settings Save Error:", settingsError);
             showToast("Error saving settings: " + settingsError.message, 'error');
             document.getElementById('save-status').classList.remove('show');
-            return; // STOP HERE if save failed
+            return; 
         }
 
-        // 3. RUN RPC (Optional logic)
+        // 3. Optional RPC Call
         try {
             await db.rpc('publish_goals', {
                 operator_id: myId,
                 new_goals: payloadData
             });
         } catch (err) {
-            console.warn("RPC execution skipped or failed (Data was still saved to settings).");
+            console.warn("RPC execution skipped or failed.");
         }
 
         // 4. WAIT & DELETE DRAFT
-        // We wait slightly to ensure the upsert completes on the DB side
         await new Promise(r => setTimeout(r, 500));
         
+        // Only delete draft if live save was successful
         const { error: deleteError } = await db.from('company_settings').delete().eq('id', 'shared_goals_draft');
         
         if(!deleteError) {
             hasDraft = false;
         }
 
-        // 5. RELOAD FROM SOURCE OF TRUTH
-        // This ensures the UI reflects exactly what was saved to the 'Live' ID
+        // 5. RELOAD FROM DB (Source of Truth)
+        // This stops the UI from showing empty data if the browser cache is stale
         const { data: verifyData } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
         
         if (verifyData && verifyData.data) {
-            if (Array.isArray(verifyData.data)) {
-                masterData = { rating: 0, goals: verifyData.data };
-            } else {
-                masterData = verifyData.data;
-            }
-            
-            // Re-render specifically to remove the "Unsaved Draft" banner
+            masterData = Array.isArray(verifyData.data) ? { rating: 0, goals: verifyData.data } : verifyData.data;
             loadAdminSharedGoals(); 
         }
 
@@ -3327,7 +3318,6 @@ function refreshGlobalAdminRating() {
         showToast("Saved & Published Permanently!", 'success');
     });
 }
-
         // --- ADMIN PERMISSIONS ---
         async function loadAdminPerms() {
             const { data: admins } = await db.from('active_list').select('*').eq(COL.role, 'admin');
