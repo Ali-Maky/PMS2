@@ -4835,31 +4835,37 @@ function calc() {
         if (ratingEl) ratingEl.innerText = "Pending HR";
     }
 }
-   function autoSave() {
-    // 1. Show the "Saving..." indicator
-    showSaving(); 
+ function autoSave() {
+    showSaving();
     clearTimeout(saveTimer);
 
-    // 2. Wait 500ms (debounce) to avoid spamming the server while typing
     saveTimer = setTimeout(async () => {
         try {
-            // Prepare the data to update (Goals only)
-            let u = {}; 
+            // Prepare the data
+            let u = {};
             u[COL.goals] = targetUser[COL.goals];
+            
+            // --- FIX: ALWAYS INCLUDE THE ID ---
+            // The secure backend needs this to verify permissions!
+            u[COL.id] = targetUser[COL.id]; 
 
             // Send to Backend
-            const { error } = await db.from('active_list')
-                .update(u)
-                .eq(COL.id, targetUser[COL.id]);
+            // We use .upsert() here because it's safer for our new PHP logic
+            // than the old .update() wrapper.
+            const { error } = await db.from('active_list').upsert(u);
 
             if (error) {
                 console.error("AutoSave Error:", error);
-                // Optional: Show error toast here if needed
+                showToast("Save Failed: " + error.message, 'error');
+                // Visual feedback that it failed
+                document.getElementById('save-text').innerText = "Save Failed";
+                document.getElementById('save-dot').style.background = "#ef4444"; // Red
             } else {
                 showSaved();
             }
         } catch (err) {
             console.error("AutoSave Crash:", err);
+            showToast("Connection Error", 'error');
         }
     }, 500);
 }
