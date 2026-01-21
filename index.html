@@ -231,7 +231,7 @@
     
     <script>
         // --- 1. CONFIGURATION ---
-        // IMPORTANT: CHANGE THIS TO YOUR ACTUAL PHP FILE LOCATION
+        // !!! FIXED: Added 'https://' to ensure connection to backend !!!
         const API_URL = 'https://pms-back-production-b693.up.railway.app'; 
 
         // --- 2. GLOBAL STATE ---
@@ -332,7 +332,7 @@
                     btn.innerText = "Continue";
                 }
             } catch(e) {
-                alert("Connection Error");
+                alert("Connection Error. Please check if PHP Backend is running.");
                 btn.innerText = "Continue";
             }
         }
