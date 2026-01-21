@@ -4505,6 +4505,11 @@ async function loadEval(tid, isSearchMode = false) {
     }
 }
 async function rejectToManager(id) {
+    if (!id) {
+        showToast("Error: No Employee ID provided.", "error");
+        return;
+    }
+
     showConfirm(
         "Return to Manager", 
         "This will move the scorecard back to 'Submitted to Manager' for editing. Continue?", 
@@ -4513,47 +4518,46 @@ async function rejectToManager(id) {
         async () => {
             showSaving();
 
-            // 1. Database Update
-            const { error } = await db.from('active_list')
-                .update({ [COL.stat]: 'Submitted to Manager' })
-                .eq(COL.id, id);
+            try {
+                // --- FIX: INCLUDE THE ID IN THE PAYLOAD ---
+                const payload = {
+                    [COL.id]: id,
+                    [COL.stat]: 'Submitted to Manager'
+                };
 
-            if (error) {
-                showToast("Update Failed: " + error.message, 'error');
-            } else {
+                // Use UPSERT so the ID is sent in the body to satisfy the PHP backend
+                const { error } = await db.from('active_list').upsert(payload);
+
+                if (error) {
+                    throw new Error(error.message || "Unauthorized or Connection Failed");
+                }
+
                 showToast("Returned to Manager", 'success');
 
-                // 2. Update Global Memory
-                const globalItem = allCompanyData.find(u => u[COL.id] == id);
+                // 1. Update Global Memory immediately
+                const globalItem = allCompanyData.find(u => u[COL.id].toString() === id.toString());
                 if (globalItem) globalItem[COL.stat] = 'Submitted to Manager';
 
-                // 3. Update Admin Cache
-                // We filter it OUT because "Submitted to Manager" does not belong in the Admin Queue
+                // 2. Update Admin Cache if it exists
                 if (typeof adminCache !== 'undefined' && Array.isArray(adminCache)) {
-                    adminCache = adminCache.filter(u => u[COL.id] != id);
-                    // Refresh Table
+                    adminCache = adminCache.filter(u => u[COL.id].toString() !== id.toString());
                     if (typeof filterAdminTable === 'function') filterAdminTable();
                 }
 
-                // 4. Handle "Detailed View" Scenario
-                // If we are currently looking at the scorecard (not the list), reload view or go back
-                if (typeof targetUser !== 'undefined' && targetUser && targetUser[COL.id] === id) {
-                    const myRole = getRole(user);
-                    if (['Admin', 'Master'].includes(myRole)) {
-                        // If Admin, go back to the Approvals Tab
-                        loadHRAdmin(); 
-                        setTimeout(() => switchAdminTab('app'), 10);
-                    } else {
-                        // If Manager, just reload the scorecard view to show new status
-                        loadEval(id);
-                    }
-                }
+                // 3. Reload after a brief delay so the user sees the "Success" toast
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+
+            } catch (err) {
+                console.error("Rejection Error:", err);
+                showToast("Update Failed: " + err.message, 'error');
+            } finally {
+                showSaved();
             }
-            showSaved();
         }
     );
 }
-
         let editingGoalIndex = null;
 
       function renderGoals(edit) {
