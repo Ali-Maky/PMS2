@@ -4194,7 +4194,7 @@ let tableRows = scoredReports.map(r => `
         if (chartOrg) chartOrg.destroy();
         chartOrg = new Chart(document.getElementById('chartOrg'), { type: 'bar', data: { labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], datasets: [{ label: 'Total Org', data: distOrg, backgroundColor: '#10b981', borderRadius: 4 }] }, options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } } });
     }
-}
+
 
 // --- NEW FUNCTION: Cascade Filters (Comp -> Div/Mgr) ---
 function cascadeFilters() {
