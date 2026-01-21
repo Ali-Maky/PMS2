@@ -14,11 +14,12 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" integrity="sha512-ZwR1/gSZM3aiq37fOS79dbPTT535+Y4P+Av01x0WAQ0B1H8b0d/ZcK6P1jRzi8dS0U1F0b1k8k1g5k/1k5k1g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3GVrFCxJ4Mfe4re0OdBt4f1X7x9d7xYk8/4/k/g/k/1k5k1g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+        /* ... Keep your existing CSS here ... */
     <style>
         :root {
             /* Modern Palette - High Contrast & Accessibility */
@@ -1601,41 +1602,6 @@
             location.reload();
         }
         
-        // --- 5. LOGIN LOGIC (Split Flow) ---
-        async function checkID() {
-            const idInput = document.getElementById('inp-id');
-            const id = idInput.value.trim();
-            const btn = document.getElementById('btn-check');
-            const err = document.getElementById('err-id');
-
-            if (!id) return;
-            
-            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...`;
-            err.style.display = 'none';
-
-            // Check if user exists & if setup is needed
-            const { data } = await db.from('active_list').select('*').eq('id', id).single();
-
-            if (data) {
-                // User found, show password screen
-                document.getElementById('view-id').classList.add('hidden');
-                document.getElementById('view-pass').classList.remove('hidden');
-                
-                // If needs setup (no password set), show confirm field
-                if (data.needs_setup) {
-                    document.getElementById('grp-confirm').classList.remove('hidden');
-                    document.getElementById('lbl-welcome').innerText = "Account Setup";
-                }
-                
-                // Store temp ID for the next step
-                localStorage.setItem('temp_login_id', id);
-                setTimeout(() => document.getElementById('inp-pass').focus(), 100);
-            } else {
-                btn.innerHTML = `Continue <i class="fa-solid fa-arrow-right"></i>`;
-                err.style.display = 'block';
-                idInput.classList.add('error');
-            }
-        }
         // --- 5. AUTHENTICATION LOGIC ---
 
 // Step 1: Check ID and Determine User Status
