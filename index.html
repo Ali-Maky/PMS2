@@ -2165,24 +2165,30 @@ async function fetchAllData() {
     return allRows;
 }
 
-function getCompany(id) {
+function getCompany(id, division = "") {
     if (!id) return "Unknown";
-    const clean = id.toString().toUpperCase().trim();
+    const cleanId = id.toString().toUpperCase().trim();
+    const cleanDiv = (division || "").toString().toUpperCase().trim();
 
-    // 1. Horizon Check (HISP, HCS, HSC, AWO)
-    if (clean.startsWith("HISP") || clean.startsWith("HCS") || clean.startsWith("HSC") || clean.startsWith("AWO")) {
+    // 1. Check ID Prefixes (Standard Method)
+    if (cleanId.startsWith("HISP") || cleanId.startsWith("HCS") || cleanId.startsWith("HSC") || cleanId.startsWith("AWO")) {
         return "Horizon";
     }
-
-    // 2. Next Generation Check (NG, NGM, NGT)
-    if (clean.startsWith("NG") || clean.startsWith("NGM") || clean.startsWith("NGT") ) {
+    if (cleanId.startsWith("NG") || cleanId.startsWith("NGM") || cleanId.startsWith("NGT")) {
         return "Next Generation";
     }
-
-    // 3. Zain Iraq Check (ZIQ & ZIQT)
-    if (clean.startsWith("ZIQ") || clean.startsWith("ZIQT")) {
+    if (cleanId.startsWith("ZIQ") || cleanId.startsWith("ZIQT")) {
+        // EDGE CASE: If ID is ZIQ but Division says "Next Gen", trust the Division
+        if (cleanDiv.includes("NEXT GENERATION") || cleanDiv.includes("NXG")) {
+            return "Next Generation";
+        }
         return "Zain Iraq";
     }
+
+    // 2. Fallback: Check Division Name if ID is weird
+    if (cleanDiv.includes("HORIZON")) return "Horizon";
+    if (cleanDiv.includes("NEXT GENERATION")) return "Next Generation";
+    if (cleanDiv.includes("ZAIN IRAQ")) return "Zain Iraq";
 
     return "Other";
 }
@@ -4111,7 +4117,7 @@ function updateOrgChart() {
 
     // Filter 1: Company
     if (compVal !== 'ALL') {
-        filteredData = filteredData.filter(u => getCompany(u[COL.id]) === compVal);
+      filteredData = filteredData.filter(u => getCompany(u[COL.id], u[COL.div]) === compVal);
     }
 
     // Filter 2: Manager (Recursive Downstream)
