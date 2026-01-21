@@ -4374,7 +4374,8 @@ if (viewingSelf) {
 
 if (isSearchMode) canEdit = false;
         // --- VISIBILITY RULE: Only show scores if 'Published' or if user is Reviewer ---
-        const canSeeScore = (stat === 'Published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
+       const currentStatClean = (data[COL.stat] || '').trim().toLowerCase();
+const canSeeScore = (currentStatClean === 'published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
 
         // 4. UI Preparation (Manager Name, Company)
         let mName = data[COL.mgr] || '-';
@@ -4583,12 +4584,16 @@ if (isSearchMode) canEdit = false;
         calc();
 
         // Enforce Visibility Masking
-        const scoreEl = document.getElementById('score');
-        const ratingEl = document.getElementById('rating');
-        if (!canSeeScore) {
-            if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
-            if (ratingEl) ratingEl.innerText = "Pending Publish";
-        }
+     const scoreEl = document.getElementById('score');
+const ratingEl = document.getElementById('rating');
+       if (canSeeScore) {
+    // Show the actual numbers
+    calc(); 
+} else {
+    // Keep it locked
+    if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
+    if (ratingEl) ratingEl.innerText = "Pending Publish";
+}
 
     } catch (err) {
         console.error(err);
@@ -4900,20 +4905,21 @@ function calc() {
     const total = sContrib + iContrib;
 
     // 5. Update UI (Masking Logic kept from your original code)
-    const currentUid = (user[COL.id] || '').toString();
+const currentUid = (user[COL.id] || '').toString();
     const profileUid = (targetUser[COL.id] || '').toString();
     const viewingSelf = (currentUid === profileUid);
     const uRole = getRole(user);
     const status = targetUser[COL.stat] || 'Draft';
     const canSeeScore = (status === 'Approved') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
-
+const statusClean = (targetUser[COL.stat] || '').trim().toLowerCase();
+    const canSeeScore = (statusClean === 'published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
     const scoreEl = document.getElementById('score');
     const ratingEl = document.getElementById('rating');
     const sharedScoreEl = document.getElementById('shared-contrib-val');
     const indivScoreEl = document.getElementById('indiv-contrib-val');
 
     if (canSeeScore) {
-        if (scoreEl) scoreEl.innerText = total.toFixed(2);
+       if (scoreEl) scoreEl.innerText = total.toFixed(2);
         if (sharedScoreEl) sharedScoreEl.innerText = sContrib.toFixed(2);
         if (indivScoreEl) indivScoreEl.innerText = iContrib.toFixed(2);
 
@@ -4927,7 +4933,7 @@ function calc() {
         
         if (ratingEl) ratingEl.innerText = lbl;
     } else {
-        if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
+       if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
         if (ratingEl) ratingEl.innerText = "Pending HR";
     }
 }
