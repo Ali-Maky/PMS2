@@ -2236,6 +2236,10 @@ function getCompany(id, division = "") {
     return "Other";
 }
    async function launchApp() {
+	   if (!user) {
+        showLogin();
+        return;
+    }
     document.getElementById('loading-overlay').classList.add('hidden');
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app-container').style.display = 'flex';
@@ -4037,7 +4041,6 @@ async function loadAnalyticsDashboard() {
     }
 } // <--- This closing bracket was likely missing or misplaced
     // 4. Calculate Org Data
-    globalReports = getDownstream(user[COL.id], allCompanyData);
     
     // CCO Logic (Optional: Keep if needed)
     const myJob = (user[COL.job] || "").toUpperCase();
