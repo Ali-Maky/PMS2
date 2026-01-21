@@ -2004,10 +2004,16 @@ async function checkID() {
         });
         const data = await res.json();
         
-        if (!data) {
-            btn.innerText = "Continue";
-            document.getElementById('err-id').style.display = 'block';
-            return;
+      if (data) {
+        user = data; 
+        if (data.needs_setup) {
+            // Show Create Password UI
+            document.getElementById('lbl-welcome').innerText = "Create Your Password";
+            document.getElementById('grp-confirm').classList.remove('hidden');
+        } else {
+            // Show Standard Login UI
+            document.getElementById('lbl-welcome').innerText = "Welcome Back";
+            document.getElementById('grp-confirm').classList.add('hidden');
         }
 
         user = data; 
