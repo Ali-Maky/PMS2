@@ -4004,46 +4004,74 @@ async function publishBulk() {
 // --- FIXED: LOAD ANALYTICS DASHBOARD ---
 // --- FIXED: LEADERSHIP REPORTS ---
 async function loadReports() {
-    if (!user) return; // Prevent "undefined id" crash
+    // Safety check to prevent the 'undefined' error
+    if (!user) {
+        showToast("Session error, please re-login", "error");
+        return;
+    }
 
-    document.getElementById('main-view').innerHTML = `<div class="spinner"></div>`;
+    document.getElementById('main-view').innerHTML = `
+        <div style="padding:60px; text-align:center; color:var(--text-muted);">
+            <div class="spinner" style="width:30px; height:30px; margin:0 auto 10px auto;"></div>
+            <div>Generating leadership reports...</div>
+        </div>`;
 
     try {
-        // 1. Fetch only relevant data from server (Item #9)
+        // 1. Fetch data from the new secure backend action
         const res = await fetch(`${API_URL}?action=getMyTeam`, { headers: API_HEADERS });
         const directReports = await res.json();
 
-        // 2. NOW calculate Hierarchy inside this function ONLY
-        globalReports = getDownstream(user[COL.id], directReports); 
-
-        // CCO Logic
-        const myJob = (user[COL.job] || "").toUpperCase();
-        if (myJob.includes('COMMERCIAL') || myJob.includes('CCO')) {
-            globalReports = globalReports.filter(u => !((u[COL.div] || "").toUpperCase().includes('SECURITY')));
-        }
-
-        const showOrgChart = (globalReports.length > directReports.length);
+        // 2. Local variables moved inside for safety
         const globalRating = masterData.rating || 0;
+        
+        // 3. Define the calculation helper inside the function
+        const calcDist = (list) => {
+            let d = [0, 0, 0, 0, 0, 0];
+            list.forEach(u => {
+                let userGoals = u[COL.goals] || [];
+                if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = [] } }
+                let w = getW(u[COL.lvl], u[COL.job]);
+                let sScore = globalRating * (w.s / 100);
+                let iScore = 0; 
+                if(Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
+                let total = sScore + (iScore * (w.i / 100));
+                let b = 0; 
+                if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
+                d[b]++;
+            });
+            return d;
+        };
 
-        // Render your view normally using 'directReports' instead of a global 'allCompanyData'
-        let tableRows = directReports.map(r => `<tr><td>${r.name}</td><td>${r.status}</td></tr>`).join('');
+        const distDirect = calcDist(directReports);
         
+        // 4. Render the UI
         let h = `
-            <div class="header-bar"><h2 class="page-title">Leadership Reports</h2></div>
-            <div class="dash-grid" style="grid-template-columns: ${showOrgChart ? '1fr 1fr' : '1fr'};">
-                <div class="card"><h3>Direct Reports</h3><canvas id="chartDirect"></canvas></div>
-                ${showOrgChart ? '<div class="card"><h3>Total Org</h3><canvas id="chartOrg"></canvas></div>' : ''}
-            </div>
-            <div class="card"><table>${tableRows}</table></div>
-        `;
+            <div class="animate-in">
+                <div class="header-bar"><div><h2 class="page-title">Leadership Reports</h2></div></div>
+                <div class="card">
+                    <h3 style="text-align:center; font-weight:700; margin-bottom:20px;">Direct Reports (${directReports.length})</h3>
+                    <div style="height:350px;"><canvas id="chartDirect"></canvas></div>
+                </div>
+            </div>`;
+
         render(h);
-        
-        // Initialize Charts...
+
+        // 5. Initialize Charts
+        if (chart1) chart1.destroy();
+        chart1 = new Chart(document.getElementById('chartDirect'), { 
+            type: 'bar', 
+            data: { 
+                labels: ["IDLE", "STAGNANT", "WALKER", "RUNNER", "FLYER", "ASTRONAUT"], 
+                datasets: [{ label: 'Direct Reports', data: distDirect, backgroundColor: '#592C82', borderRadius: 4 }] 
+            }, 
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } } } 
+        });
+
     } catch (err) {
         console.error("Report Error:", err);
+        showToast("Failed to load team reports", "error");
     }
 }
-
 // --- FIXED: ANALYTICS DASHBOARD ---
 async function loadAnalyticsDashboard() {
     try {
@@ -4072,26 +4100,8 @@ async function loadAnalyticsDashboard() {
         globalReports = globalReports.filter(u => !((u[COL.div] || "").toUpperCase().includes('SECURITY')));
     }
 
-    let showOrgChart = (globalReports.length > directReports.length);
-    const globalRating = masterData.rating || 0;
 
     // --- CHART CALCULATION HELPER ---
-    const calcDist = (list) => {
-        let d = [0, 0, 0, 0, 0, 0];
-        list.forEach(u => {
-            let userGoals = u[COL.goals] || [];
-            if (typeof userGoals === 'string') { try { userGoals = JSON.parse(userGoals); } catch (e) { userGoals = [] } }
-            let w = getW(u[COL.lvl], u[COL.job]);
-            let sScore = globalRating * (w.s / 100);
-            let iScore = 0; 
-            if(Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
-            let total = sScore + (iScore * (w.i / 100));
-            let b = 0; 
-            if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
-            d[b]++;
-        });
-        return d;
-    };
 
     const distDirect = calcDist(directReports);
     let distOrg = showOrgChart ? calcDist(globalReports) : null;
