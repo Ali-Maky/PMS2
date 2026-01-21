@@ -1847,7 +1847,21 @@ function resendOTP() {
         let hasDraft = false;
         let saveTimer;
         let chart1, chartAdmin, chartOrg;
-        let COL = { id: 'id', name: 'name', lvl: 'level', job: 'job', mgr: 'manager_id', stat: 'status', goals: 'goals', div: 'division', dept: 'department', pass: 'password', role: 'access_role', phone: 'phone_number', email: 'email' };
+    const COL = {
+    id: 'id',
+    name: 'name',
+    lvl: 'level',       // This fixes "undefined" in the sidebar
+    job: 'job',
+    div: 'division',
+    dept: 'department',
+    mgr: 'manager_id',  // This fixes the "-" Manager Name
+    stat: 'status',
+    goals: 'goals',
+    role: 'access_role',
+    email: 'email',
+    phone: 'phone_number',
+    pass: 'password'
+};
         let adminCache = [];
         let allCompanyData = [];
         let globalReports = [];
