@@ -1584,9 +1584,13 @@ const API_URL = 'https://pms-back-production-b693.up.railway.app';
 const API_KEY = 'Z@!nR@ndomized999555'; 
 
 // Shared Headers Helper (Ensures every request is authorized)
+// REPLACE THIS BLOCK
 const API_HEADERS = {
     'Content-Type': 'application/json',
-    'X-Api-Key': API_KEY 
+    // Dynamically grab the token from storage for every request
+    get 'Authorization'() {
+        return 'Bearer ' + (localStorage.getItem('zpms_token') || '');
+    }
 };
 
 // --- 2. THE BRIDGE (Connects Frontend to PHP) ---
@@ -1602,7 +1606,10 @@ const db = {
                             try {
                                 const res = await fetch(`${API_URL}?action=${action}`, {
                                     method: 'POST', 
-                                    headers: API_HEADERS,
+                                    headers: {
+    'Content-Type': 'application/json',
+    'Authorization': API_HEADERS.Authorization // Access the getter
+},
                                     body: JSON.stringify({ id: val }) 
                                 });
                                 if (!res.ok) return { data: null, error: { message: "Server Error: " + res.status } };
@@ -1982,63 +1989,84 @@ async function loadHRApprovals() {
         function logout() { localStorage.clear(); location.reload(); }
 
         // --- 3. AUTH & ROUTING ---
-       async function checkID() {
+    // --- NEW SECURE LOGIN LOGIC ---
+
+async function checkID() {
     const id = document.getElementById('inp-id').value.trim();
     const btn = document.getElementById('btn-check');
     if (!id) return;
+    
     btn.innerText = "Checking...";
+    
+    // This now calls the "Safe" checkID (no password returned)
+    try {
+        const res = await fetch(`${API_URL}?action=checkID`, {
+            method: 'POST',
+            body: JSON.stringify({ id: id })
+        });
+        const data = await res.json();
+        
+        if (!data) {
+            btn.innerText = "Continue";
+            document.getElementById('err-id').style.display = 'block';
+            return;
+        }
 
-    // UPDATED SELECT: No 'from' variable needed here
-   // Inside checkID - NO 'from' or 'range' here
-const { data, error } = await db.from('active_list')
-    .select('id, name, level, job, manager_id, status, goals, division, department, password, access_role')
-    .eq(COL.id, id)
-    .maybeSingle(); // Better than .single() to avoid console errors if ID is missing
+        user = data; // Store public user info
+        document.getElementById('view-id').classList.add('hidden');
+        document.getElementById('view-pass').classList.remove('hidden');
 
-    if (error || !data) { 
-        btn.innerText = "Continue"; 
-        document.getElementById('err-id').innerText = "ID not found"; 
-        document.getElementById('err-id').style.display = 'block'; 
-        return; 
-    }
-
-    user = data;
-    document.getElementById('view-id').classList.add('hidden');
-    document.getElementById('view-pass').classList.remove('hidden');
-
-    if (!(user[COL.pass] || user['password'])) {
-        isRegistering = true;
-        document.getElementById('lbl-welcome').innerText = "Set Password";
-        document.getElementById('grp-confirm').classList.remove('hidden');
-        document.getElementById('btn-login').innerText = "Create & Login";
+        // Note: We can't check if password exists client-side anymore
+        // We assume they need to login.
+        document.getElementById('lbl-welcome').innerText = "Welcome Back";
+        
+    } catch (e) {
+        console.error(e);
+        btn.innerText = "Continue";
     }
 }
-   async function doLogin() {
+async function doLogin() {
     const p1 = document.getElementById('inp-pass').value;
-    const storedPass = (user[COL.pass] || user['password'] || "").toString().trim();
+    const btn = document.getElementById('btn-login');
+    
+    btn.innerText = "Verifying...";
+    btn.disabled = true;
 
-    if (isRegistering) {
-        if (p1 !== document.getElementById('inp-confirm').value) { 
-            alert("Passwords match error"); 
-            return; 
-        }
-        const { error } = await db.from('active_list').update({ password: p1 }).eq(COL.id, user[COL.id]);
-        if (error) { alert("Save error: " + error.message); return; }
-        
-        // Registration successful, proceed immediately
-        completeLoginProcess(); 
-    } else {
-        if (p1 !== storedPass) { 
+    try {
+        // AUTHENTICATE WITH SERVER
+        const res = await fetch(`${API_URL}?action=login`, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                id: user.id || document.getElementById('inp-id').value, 
+                password: p1 
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            // LOGIN SUCCESS!
+            // 1. Save the Secure Token
+            localStorage.setItem('zpms_token', result.token);
+            localStorage.setItem('zpms_uid', result.user.id);
+            localStorage.setItem('zpms_time', Date.now());
+
+            // 2. Proceed
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            location.reload(); 
+        } else {
+            // LOGIN FAILED
             document.getElementById('err-pass').style.display = 'block';
-            return; 
+            document.getElementById('err-pass').innerText = result.message || "Incorrect Password";
+            btn.innerText = "Log In";
+            btn.disabled = false;
         }
-        
-        // --- OTP INTERCEPTION ---
-        // Password is correct. Now trigger OTP instead of logging in directly.
-        triggerOTP();
+    } catch (e) {
+        alert("Server connection failed.");
+        btn.innerText = "Log In";
+        btn.disabled = false;
     }
 }
-
 // Separate function for the final step
 function completeLoginProcess() {
     localStorage.setItem('zpms_uid', user[COL.id]); 
