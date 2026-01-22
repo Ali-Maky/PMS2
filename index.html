@@ -3155,7 +3155,7 @@ function renderMasterGoals() {
               onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
               title="Organizational Weight (per assignment)">
 			  
-	const isDiv = target.startsWith('DIV_');
+const isDiv = target.startsWith('DIV_');
 const divName = isDiv ? target.replace('DIV_', '') : '';
 
 const divBtn = isDiv ? `
