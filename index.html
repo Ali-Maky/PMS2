@@ -3072,222 +3072,164 @@ function saveDraftToDB() {
         }
 
 function renderMasterGoals() {
-  const container = document.getElementById('master-goals-list');
+    const container = document.getElementById('master-goals-list');
+    const companies = ["Zain Iraq", "Horizon", "Next Generation"];
 
-  // Companies list (keep as you already use)
-  const companies = ["Zain Iraq", "Horizon", "Next Generation"];
-
-  if (!masterData.goals || masterData.goals.length === 0) {
-    container.innerHTML =
-      '<div style="padding:20px; text-align:center; color:#aaa;">No shared goals defined. Click "Create New" below.</div>';
-    return;
-  }
-
-  container.innerHTML = (masterData.goals || []).map((g, i) => {
-    // Ensure defaults
-    if (!Array.isArray(g.targets)) g.targets = ["", "", "", "", "", ""];
-    if (!Array.isArray(g.assignments)) g.assignments = [];
-
-    // 1) Context (company filter)
-    const context = g.company_context || 'ALL';
-
-    // 2) Filter employee directory for valid Divisions/Chiefs in this context
-    let contextData = allCompanyData;
-    if (context !== 'ALL') {
-      contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
+    if (!masterData.goals || masterData.goals.length === 0) {
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:#aaa;">No shared goals defined. Click "Create New" below.</div>';
+        return;
     }
 
-    // 3) Divisions + Chiefs
-    const availDivs = [...new Set(contextData.map(u => (u[COL.div] || "").trim()).filter(Boolean))].sort();
+    container.innerHTML = (masterData.goals || []).map((g, i) => {
+        if (!Array.isArray(g.targets)) g.targets = ["", "", "", "", "", ""];
+        if (!Array.isArray(g.assignments)) g.assignments = [];
 
-    const availChiefs = contextData
-      .filter(u => {
-        const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
-        const j = (u[COL.job] || "").toString().trim().toUpperCase();
-        return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER'));
-      })
-      .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
+        const context = g.company_context || 'ALL';
+        let contextData = allCompanyData;
+        if (context !== 'ALL') {
+            contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
+        }
 
-    // 4) "All" assignment option
-    const allOptionText = context === 'ALL'
-      ? "Assign to ALL Global Employees"
-      : `Assign to ALL ${context} Employees`;
-    const allOptionVal = context === 'ALL' ? "GLOBAL_ALL" : `COMP_${context}`;
+        const availDivs = [...new Set(contextData.map(u => (u[COL.div] || "").trim()).filter(Boolean))].sort();
+        
+        const availChiefs = contextData
+            .filter(u => {
+                const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
+                const j = (u[COL.job] || "").toString().trim().toUpperCase();
+                return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER'));
+            })
+            .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
 
- // 5) Assignments UI
-    const assignmentsHtml = (g.assignments || []).map((assign, ai) => {
-      const target = (assign && assign.target) ? String(assign.target) : '';
-      if (!target) return '';
+        const allOptionText = context === 'ALL' ? "Assign to ALL Global Employees" : `Assign to ALL ${context} Employees`;
+        const allOptionVal = context === 'ALL' ? "GLOBAL_ALL" : `COMP_${context}`;
 
-      let dispName = target;
-      let chipStyle = "background:#f1f5f9; border-color:#e2e8f0; color:#0f172a;";
+        // --- ASSIGNMENTS LOGIC ---
+        const assignmentsHtml = (g.assignments || []).map((assign, ai) => {
+            const target = (assign && assign.target) ? String(assign.target) : '';
+            if (!target) return '';
 
-      if (target === 'GLOBAL_ALL') {
-        dispName = "🌍 GLOBAL (All Employees)";
-        chipStyle = "background:#ecfdf5; border-color:#6ee7b7; color:#064e3b;";
-      } else if (target.startsWith('COMP_')) {
-        dispName = `🏢 ${target.replace('COMP_', '')} (Entire Company)`;
-        chipStyle = "background:#eff6ff; border-color:#93c5fd; color:#1e3a8a;";
-      } else if (target.startsWith('DIV_')) {
-        dispName = `📂 ${target.replace('DIV_', '')}`;
-        chipStyle = "background:#fff7ed; border-color:#fdba74; color:#7c2d12;";
-      } else if (target.startsWith('ID_')) {
-        const id = target.replace('ID_', '');
-        const u = contextData.find(x => String(x[COL.id]) === String(id));
-        dispName = u ? `👤 ${u[COL.name]} (${id})` : `👤 ${id}`;
-        chipStyle = "background:#fdf4ff; border-color:#f0abfc; color:#701a75;";
-      }
+            let dispName = target;
+            let chipStyle = "background:#f1f5f9; border-color:#e2e8f0; color:#0f172a;";
 
-      // Show a value even if weight is not set yet
-      const shownWeight =
-        (assign && typeof assign.weight !== 'undefined' && assign.weight !== null)
-          ? assign.weight
-          : (typeof g.weight !== 'undefined' && g.weight !== null ? g.weight : 0);
+            if (target === 'GLOBAL_ALL') {
+                dispName = "🌍 GLOBAL (All Employees)";
+                chipStyle = "background:#ecfdf5; border-color:#6ee7b7; color:#064e3b;";
+            } else if (target.startsWith('COMP_')) {
+                dispName = `🏢 ${target.replace('COMP_', '')} (Entire Company)`;
+                chipStyle = "background:#eff6ff; border-color:#93c5fd; color:#1e3a8a;";
+            } else if (target.startsWith('DIV_')) {
+                dispName = `📂 ${target.replace('DIV_', '')}`;
+                chipStyle = "background:#fff7ed; border-color:#fdba74; color:#7c2d12;";
+            } else if (target.startsWith('ID_')) {
+                const id = target.replace('ID_', '');
+                const u = contextData.find(x => String(x[COL.id]) === String(id));
+                dispName = u ? `👤 ${u[COL.name]} (${id})` : `👤 ${id}`;
+                chipStyle = "background:#fdf4ff; border-color:#f0abfc; color:#701a75;";
+            }
 
-      // --- FIXED LOGIC START ---
-      // Move logic OUTSIDE the return statement
-      const isDiv = target.startsWith('DIV_');
-      const divName = isDiv ? target.replace('DIV_', '') : '';
+            const shownWeight = (assign && typeof assign.weight !== 'undefined' && assign.weight !== null) 
+                                ? assign.weight 
+                                : (typeof g.weight !== 'undefined' && g.weight !== null ? g.weight : 0);
 
-      const divBtn = isDiv ? `
-        <button class="btn btn-outline div-weights-btn"
-                style="padding:6px 10px; font-size:0.8rem;"
-                data-goal="${i}"
-                data-assign="${ai}"
-                data-div="${escapeHTML(divName)}"
-                title="View managers and edit weights">
-          <i class="fa-solid fa-users"></i>
-        </button>
-      ` : '';
-      // --- FIXED LOGIC END ---
+            // --- LOGIC CALCULATED BEFORE HTML GENERATION ---
+            const isDiv = target.startsWith('DIV_');
+            const divName = isDiv ? target.replace('DIV_', '') : '';
+            
+            const divBtn = isDiv ? `
+                <button class="btn btn-outline div-weights-btn"
+                        style="padding:6px 10px; font-size:0.8rem;"
+                        data-goal="${i}"
+                        data-div="${escapeHTML(divName)}"
+                        title="View managers and edit weights">
+                  <i class="fa-solid fa-users"></i>
+                </button>` : '';
 
-      return `
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px; border:2px solid; border-radius:10px; margin-bottom:8px; ${chipStyle}">
-          <div style="font-weight:800; font-size:0.85rem; line-height:1.2;">${escapeHTML(dispName)}</div>
+            // --- RETURN PURE HTML STRING ---
+            return `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px; border:2px solid; border-radius:10px; margin-bottom:8px; ${chipStyle}">
+              <div style="font-weight:800; font-size:0.85rem; line-height:1.2;">${escapeHTML(dispName)}</div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="number" min="0" max="100" step="1"
+                  value="${Number(shownWeight) || 0}"
+                  style="width:82px; padding:6px 8px; border-radius:8px; border:2px solid #e5e7eb; font-weight:800; text-align:center;"
+                  onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
+                  title="Organizational Weight (per assignment)">
+                
+                ${divBtn}
 
-          <div style="display:flex; align-items:center; gap:8px;">
-            <input type="number" min="0" max="100" step="1"
-              value="${Number(shownWeight) || 0}"
-              style="width:82px; padding:6px 8px; border-radius:8px; border:2px solid #e5e7eb; font-weight:800; text-align:center;"
-              onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
-              title="Organizational Weight (per assignment)">
+                <button class="btn-delete"
+                  onclick="removeAssignment(${i}, ${ai})"
+                  style="color:var(--danger); width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+
+        const targetsHtml = (g.targets || []).map((t, ti) => {
+            const label = (ti === 3) ? 'RUNNER' : (ti === 5) ? 'ASTRO' : ('L' + (ti + 1));
+            const highlight = (ti === 3) ? 'active-highlight' : '';
+            return `
+            <div style="position:relative;">
+              <div style="font-size:0.6rem; font-weight:800; color:var(--text-light); margin-bottom:2px; text-align:center;">${label}</div>
+              <input class="target-input ${highlight}"
+                value="${escapeHTML(String(t ?? ''))}"
+                placeholder="Target..."
+                onchange="masterData.goals[${i}].targets[${ti}] = this.value; saveDraftToDB();">
+            </div>`;
+        }).join('');
+
+        return `
+          <div class="card" style="border-left: 5px solid var(--primary); background: #fff; overflow:visible; margin-bottom:20px;">
+            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:15px; margin-bottom:15px;">
+              <input class="login-input" value="${escapeHTML(g.title || '')}" onchange="masterData.goals[${i}].title = this.value; saveDraftToDB();" placeholder="Goal Title" style="margin:0;">
               
-            ${divBtn}
+              <select class="login-input" style="margin:0; font-weight:700; color:var(--text-main);" onchange="masterData.goals[${i}].company_context = this.value; saveDraftToDB(); renderMasterGoals();">
+                <option value="ALL" ${context === 'ALL' ? 'selected' : ''}>🌍 All Companies</option>
+                ${companies.map(comp => `<option value="${escapeHTML(comp)}" ${context === comp ? 'selected' : ''}>🏢 ${escapeHTML(comp)}</option>`).join('')}
+              </select>
 
-            <button class="btn-delete"
-              onclick="removeAssignment(${i}, ${ai})"
-              style="color:var(--danger); width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-        </div>
-      `;
+              <select class="login-input" onchange="updateGoalAssignment(${i}, this.value); this.value='';" style="margin:0; border-color:var(--primary-light);">
+                <option value="" selected disabled>+ Assign Goal To...</option>
+                <option value="${escapeHTML(allOptionVal)}" style="font-weight:800; color:var(--primary);">${escapeHTML(allOptionText)}</option>
+                <optgroup label="Divisions (${escapeHTML(context)})">
+                  ${availDivs.map(d => `<option value="DIV_${escapeHTML(d)}">${escapeHTML(d)}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Chiefs / Hierarchy (${escapeHTML(context)})">
+                  ${availChiefs.map(u => `<option value="ID_${escapeHTML(String(u[COL.id]))}">${escapeHTML(String(u[COL.name] || ''))}</option>`).join('')}
+                </optgroup>
+              </select>
+            </div>
+
+            <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
+              <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px;">ACTIVE ASSIGNMENTS & WEIGHTS</div>
+              ${assignmentsHtml}
+              ${(!g.assignments || g.assignments.length === 0) ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic; padding:4px;">No assignments yet. Goal is inactive.</div>' : ''}
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; margin-bottom:15px;">${targetsHtml}</div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:12px; border-top:1px solid #f1f5f9;">
+              <div style="display:flex; align-items:center; gap:15px;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">ACHIEVEMENT:</span>
+                <select onchange="masterData.goals[${i}].rating = parseInt(this.value); refreshGlobalAdminRating(); saveDraftToDB(); renderMasterGoals();"
+                  style="padding:6px 12px; border-radius:8px; border:2px solid var(--primary); font-weight:700; background:white; cursor:pointer;">
+                  <option value="0">Not Rated</option>
+                  <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
+                  <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
+                  <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
+                  <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
+                  <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
+                  <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
+                </select>
+              </div>
+              <button class="btn btn-outline" style="color:var(--danger); padding:6px 12px; font-size:0.8rem; border-color:#fee2e2;" onclick="masterData.goals.splice(${i}, 1); saveDraftToDB(); renderMasterGoals();">
+                <i class="fa-solid fa-trash"></i> Delete Goal
+              </button>
+            </div>
+          </div>`;
     }).join('');
-
-    // 6) Targets UI
-    const targetsHtml = (g.targets || []).map((t, ti) => {
-      const label = (ti === 3) ? 'RUNNER' : (ti === 5) ? 'ASTRO' : ('L' + (ti + 1));
-      const highlight = (ti === 3) ? 'active-highlight' : '';
-      return `
-        <div style="position:relative;">
-          <div style="font-size:0.6rem; font-weight:800; color:var(--text-light); margin-bottom:2px; text-align:center;">${label}</div>
-          <input class="target-input ${highlight}"
-            value="${escapeHTML(String(t ?? ''))}"
-            placeholder="Target..."
-            onchange="masterData.goals[${i}].targets[${ti}] = this.value; saveDraftToDB();">
-        </div>
-      `;
-    }).join('');
-
-    // 7) Main card
-    return `
-      <div class="card" style="border-left: 5px solid var(--primary); background: #fff; overflow:visible; margin-bottom:20px;">
-
-        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:15px; margin-bottom:15px;">
-          <input class="login-input"
-            value="${escapeHTML(g.title || '')}"
-            onchange="masterData.goals[${i}].title = this.value; saveDraftToDB();"
-            placeholder="Goal Title (e.g. Revenue Growth)"
-            style="margin:0;">
-
-          <select class="login-input"
-            style="margin:0; font-weight:700; color:var(--text-main);"
-            onchange="masterData.goals[${i}].company_context = this.value; saveDraftToDB(); renderMasterGoals();">
-            <option value="ALL" ${context === 'ALL' ? 'selected' : ''}>🌍 All Companies</option>
-            ${companies.map(comp => `<option value="${escapeHTML(comp)}" ${context === comp ? 'selected' : ''}>🏢 ${escapeHTML(comp)}</option>`).join('')}
-          </select>
-
-          <select class="login-input"
-            onchange="updateGoalAssignment(${i}, this.value); this.value='';"
-            style="margin:0; border-color:var(--primary-light);">
-            <option value="" selected disabled>+ Assign Goal To...</option>
-
-            <option value="${escapeHTML(allOptionVal)}" style="font-weight:800; color:var(--primary);">
-              ${escapeHTML(allOptionText)}
-            </option>
-
-            <optgroup label="Divisions (${escapeHTML(context)})">
-              ${availDivs.map(d => `<option value="DIV_${escapeHTML(d)}">${escapeHTML(d)}</option>`).join('')}
-            </optgroup>
-
-            <optgroup label="Chiefs / Hierarchy (${escapeHTML(context)})">
-              ${availChiefs.map(u => `<option value="ID_${escapeHTML(String(u[COL.id]))}">${escapeHTML(String(u[COL.name] || ''))}</option>`).join('')}
-            </optgroup>
-          </select>
-        </div>
-
-        <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
-          <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px;">ACTIVE ASSIGNMENTS & WEIGHTS</div>
-          ${assignmentsHtml}
-          ${(!g.assignments || g.assignments.length === 0)
-            ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic; padding:4px;">No assignments yet. Goal is inactive.</div>'
-            : ''}
-        </div>
-
-        <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; margin-bottom:15px;">
-          ${targetsHtml}
-        </div>
-
-        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:12px; border-top:1px solid #f1f5f9;">
-          <div style="display:flex; align-items:center; gap:15px;">
-            <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">ACHIEVEMENT:</span>
-            <select
-              onchange="masterData.goals[${i}].rating = parseInt(this.value); refreshGlobalAdminRating(); saveDraftToDB(); renderMasterGoals();"
-              style="padding:6px 12px; border-radius:8px; border:2px solid var(--primary); font-weight:700; background:white; cursor:pointer;">
-              <option value="0">Not Rated</option>
-              <option value="1" ${g.rating == 1 ? 'selected' : ''}>1 - IDLE</option>
-              <option value="2" ${g.rating == 2 ? 'selected' : ''}>2 - STAGNANT</option>
-              <option value="3" ${g.rating == 3 ? 'selected' : ''}>3 - WALKER</option>
-              <option value="4" ${g.rating == 4 ? 'selected' : ''}>4 - RUNNER</option>
-              <option value="5" ${g.rating == 5 ? 'selected' : ''}>5 - FLYER</option>
-              <option value="6" ${g.rating == 6 ? 'selected' : ''}>6 - ASTRONAUT</option>
-            </select>
-          </div>
-
-          <button class="btn btn-outline"
-            style="color:var(--danger); padding:6px 12px; font-size:0.8rem; border-color:#fee2e2;"
-            onclick="masterData.goals.splice(${i}, 1); saveDraftToDB(); renderMasterGoals();">
-            <i class="fa-solid fa-trash"></i> Delete Goal
-          </button>
-        </div>
-
-      </div>
-    `;
-  }).join('');
 }
-
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.div-weights-btn');
-  if (!btn) return;
-
-  const goalIndex = Number(btn.getAttribute('data-goal'));
-  const assignIndex = Number(btn.getAttribute('data-assign'));
-  const divName = btn.getAttribute('data-div');
-
-});
-
-let activeDivWeightGoalIndex = null;
-
 function closeDivisionWeights() {
   const m = document.getElementById('div-weight-modal');
   if (m) m.classList.add('hidden');
@@ -3322,38 +3264,27 @@ function getDivisionManagers(divisionMembers) {
 }
 
 function openDivisionWeights(goalIndex, divisionName) {
-    // 1. Set active index
     activeDivWeightGoalIndex = goalIndex;
-    
-    // 2. Get the goal object
     const g = masterData.goals[goalIndex];
     if (!g) return;
 
-    // --- FIX: Calculate contextData internally ---
-    // We derive the correct list of employees based on the goal's company context
+    // --- FIX: Re-calculate contextData internally ---
     const context = g.company_context || 'ALL';
-    let contextData = allCompanyData; // Start with everyone
-
+    let contextData = allCompanyData;
+    
     if (context !== 'ALL') {
-        // Filter the global list based on the company context
         contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
     }
-    // ---------------------------------------------
 
-    // 3. Initialize division_weights object if missing
     if (!g.division_weights) g.division_weights = {};
     if (!g.division_weights[divisionName]) {
         g.division_weights[divisionName] = { default_weight: Number(g.weight) || 0, managers: {} };
     }
 
     const cfg = g.division_weights[divisionName];
-
-    // 4. Get Members & Managers using the calculated contextData
-    // contextData is now guaranteed to be an array, so .filter() will work inside getDivisionMembers
     const members = getDivisionMembers(contextData, divisionName);
     const managers = getDivisionManagers(members);
 
-    // 5. Update UI
     document.getElementById('div-weight-title').innerText = `Division Weights — ${divisionName}`;
     document.getElementById('div-weight-sub').innerText = `Goal: ${g.title || 'Shared Objective'} • ${members.length} employees`;
     document.getElementById('div-weight-default').value = Number(cfg.default_weight ?? (Number(g.weight) || 0)).toFixed(2);
@@ -3377,10 +3308,9 @@ function openDivisionWeights(goalIndex, divisionName) {
           </div>
         `;
         }).join('')
-        : `<div style="color:#6b7280; padding:12px;">No managers detected in this division (based on manager_id relationships).</div>`;
+        : `<div style="color:#6b7280; padding:12px;">No managers detected in this division.</div>`;
 
-    const modal = document.getElementById('div-weight-modal');
-    modal.classList.remove('hidden');
+    document.getElementById('div-weight-modal').classList.remove('hidden');
 }
 function saveDivisionWeights() {
   if (activeDivWeightGoalIndex == null) return;
