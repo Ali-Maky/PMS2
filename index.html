@@ -1572,6 +1572,38 @@
             <input type="file" id="file-bulk" hidden accept=".xlsx, .xls, .csv" onchange="processBulkImport(this)">
             <input type="file" id="file-users" hidden accept=".xlsx, .xls, .csv" onchange="processUserBulkImport(this)">
     </div>
+	<div id="div-weight-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
+  <div style="width:min(860px,92vw); background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden;">
+    <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div id="div-weight-title" style="font-weight:800; font-size:1.05rem;">Division Weights</div>
+        <div id="div-weight-sub" style="color:#6b7280; font-size:0.9rem; margin-top:4px;"></div>
+      </div>
+      <button class="btn btn-outline" onclick="closeDivisionWeights()">Close</button>
+    </div>
+
+    <div style="padding:18px 22px; max-height:70vh; overflow:auto;">
+      <div style="display:flex; gap:14px; align-items:center; margin-bottom:16px;">
+        <div style="flex:1;">
+          <div style="font-size:0.75rem; font-weight:800; color:#6b7280; text-transform:uppercase;">Employees Weight (Default)</div>
+          <input id="div-weight-default" type="number" step="0.01" min="0" max="1"
+                 style="width:220px; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-weight:800;">
+          <div style="color:#6b7280; font-size:0.85rem; margin-top:6px;">
+            Applies to all non-manager employees in this division.
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px; font-weight:800;">Managers (Overrides)</div>
+      <div id="div-weight-managers" style="display:grid; gap:10px; margin-top:10px;"></div>
+    </div>
+
+    <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn btn-primary" onclick="saveDivisionWeights()">Save</button>
+    </div>
+  </div>
+</div>
+
 
     <script>
 
@@ -3241,6 +3273,18 @@ function renderMasterGoals() {
                 </optgroup>
             </select>
         </div>
+const selectedDiv = g.division || 'ALL';
+
+// after your division <select>:
+<div style="margin-top:6px; font-size:0.85rem; color:var(--text-muted);">
+  Selected Division: <b>${selectedDiv === 'ALL' ? 'None' : selectedDiv}</b>
+</div>
+
+<button class="btn btn-outline"
+  ${selectedDiv === 'ALL' ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}
+  onclick="openDivisionWeights(${i}, '${selectedDiv.replace(/'/g,"\\'")}', contextData)">
+  <i class="fa-solid fa-users"></i> View Division Weights
+</button>
 
         <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
             <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px; display:flex; justify-content:space-between;">
@@ -3306,6 +3350,124 @@ function renderMasterGoals() {
   </div>`;
     }).join('');
 }
+let activeDivWeightGoalIndex = null;
+
+function closeDivisionWeights() {
+  const m = document.getElementById('div-weight-modal');
+  if (m) m.classList.add('hidden');
+  activeDivWeightGoalIndex = null;
+}
+
+function getDivisionMembers(contextData, divisionName) {
+  return contextData.filter(u => ((u[COL.div] || "").trim() === divisionName));
+}
+
+// Manager = anyone whose ID appears in other people's manager_id inside the division
+function getDivisionManagers(divisionMembers) {
+  const mgrIdSet = new Set();
+  divisionMembers.forEach(u => {
+    const raw = (u[COL.mgr] || "").toString().trim();
+    // manager_id can be ID or name; try to extract ID by matching against known IDs:
+    const match = divisionMembers.find(x => raw.includes(x[COL.id]));
+    if (match) mgrIdSet.add(match[COL.id]);
+    // also if it's exactly an ID:
+    const direct = divisionMembers.find(x => x[COL.id] === raw);
+    if (direct) mgrIdSet.add(direct[COL.id]);
+  });
+
+  // return manager objects
+  const mgrs = divisionMembers
+    .filter(u => mgrIdSet.has(u[COL.id]))
+    .map(u => ({ id: u[COL.id], name: u[COL.name], job: u[COL.job] || '', lvl: u[COL.lvl] || '' }));
+
+  // de-dupe by id
+  const seen = new Set();
+  return mgrs.filter(m => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+}
+
+function openDivisionWeights(goalIndex, divisionName, contextData) {
+  activeDivWeightGoalIndex = goalIndex;
+  const g = masterData.goals[goalIndex];
+  if (!g) return;
+
+  if (!g.division_weights) g.division_weights = {};
+  if (!g.division_weights[divisionName]) {
+    g.division_weights[divisionName] = { default_weight: Number(g.weight) || 0, managers: {} };
+  }
+
+  const cfg = g.division_weights[divisionName];
+  const members = getDivisionMembers(contextData, divisionName);
+  const managers = getDivisionManagers(members);
+
+  document.getElementById('div-weight-title').innerText = `Division Weights — ${divisionName}`;
+  document.getElementById('div-weight-sub').innerText = `Goal: ${g.title || 'Shared Objective'} • ${members.length} employees`;
+  document.getElementById('div-weight-default').value = Number(cfg.default_weight ?? (Number(g.weight) || 0)).toFixed(2);
+
+  const box = document.getElementById('div-weight-managers');
+  box.innerHTML = managers.length
+    ? managers.map(m => {
+        const current = (cfg.managers && cfg.managers[m.id] != null) ? Number(cfg.managers[m.id]) : Number(cfg.default_weight);
+        return `
+          <div style="display:flex; gap:12px; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${m.name} (${m.id})</div>
+              <div style="color:#6b7280; font-size:0.85rem; margin-top:4px;">${m.lvl} • ${m.job}</div>
+            </div>
+            <div style="width:160px;">
+              <div style="font-size:0.72rem; font-weight:800; color:#6b7280; text-transform:uppercase;">Override</div>
+              <input data-mgr="${m.id}" type="number" step="0.01" min="0" max="1"
+                     value="${Number(current).toFixed(2)}"
+                     style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-weight:800;">
+            </div>
+          </div>
+        `;
+      }).join('')
+    : `<div style="color:#6b7280; padding:12px;">No managers detected in this division (based on manager_id relationships).</div>`;
+
+  const modal = document.getElementById('div-weight-modal');
+  modal.classList.remove('hidden');
+}
+
+function saveDivisionWeights() {
+  if (activeDivWeightGoalIndex == null) return;
+  const g = masterData.goals[activeDivWeightGoalIndex];
+  if (!g) return;
+
+  // We stored divisionName in the title; safest: keep a hidden field if you prefer.
+  const title = document.getElementById('div-weight-title').innerText;
+  const divisionName = title.split('—').slice(1).join('—').trim();
+
+  if (!divisionName) return;
+
+  if (!g.division_weights) g.division_weights = {};
+  if (!g.division_weights[divisionName]) g.division_weights[divisionName] = { default_weight: Number(g.weight) || 0, managers: {} };
+
+  const cfg = g.division_weights[divisionName];
+
+  const def = Number(document.getElementById('div-weight-default').value || 0);
+  cfg.default_weight = def;
+
+  // Save manager overrides
+  cfg.managers = cfg.managers || {};
+  document.querySelectorAll('#div-weight-managers input[data-mgr]').forEach(inp => {
+    const id = inp.getAttribute('data-mgr');
+    const val = Number(inp.value || def);
+
+    // If override equals default, remove it (keeps data clean)
+    if (Math.abs(val - def) < 0.0001) delete cfg.managers[id];
+    else cfg.managers[id] = val;
+  });
+
+  cfg.updated_at = new Date().toISOString();
+
+  // persist and rerender
+  saveDraftToDB();
+  renderMasterGoals();
+  closeDivisionWeights();
+  showToast("Division weights saved.", "success");
+}
+
+		
 // Helper to add a Division or Chief ID to a specific Shared Goal
 // Helper to add a Division or Chief ID to a specific Shared Goal
 // Helper to add a Division, Chief, Company, or Global assignment to a specific Shared Goal
