@@ -3155,14 +3155,20 @@ function renderMasterGoals() {
               onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
               title="Organizational Weight (per assignment)">
 			  
-			${target.startsWith('DIV_') ? `
-  <button class="btn btn-outline"
-    style="padding:6px 10px; font-size:0.8rem;"
-    onclick="openDivisionWeights(${i}, ${ai}, ${JSON.stringify(target.replace('DIV_',''))})"
-    title="View managers and edit weights">
+	const isDiv = target.startsWith('DIV_');
+const divName = isDiv ? target.replace('DIV_', '') : '';
+
+const divBtn = isDiv ? `
+  <button class="btn btn-outline div-weights-btn"
+          style="padding:6px 10px; font-size:0.8rem;"
+          data-goal="${i}"
+          data-assign="${ai}"
+          data-div="${escapeHTML(divName)}"
+          title="View managers and edit weights">
     <i class="fa-solid fa-users"></i>
   </button>
-` : ''}
+` : '';
+
 
             <button class="btn-delete"
               onclick="removeAssignment(${i}, ${ai})"
@@ -3265,6 +3271,16 @@ function renderMasterGoals() {
     `;
   }).join('');
 }
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.div-weights-btn');
+  if (!btn) return;
+
+  const goalIndex = Number(btn.getAttribute('data-goal'));
+  const assignIndex = Number(btn.getAttribute('data-assign'));
+  const divName = btn.getAttribute('data-div');
+
+  openDivisionWeights(goalIndex, assignIndex, divName);
+});
 
 let activeDivWeightGoalIndex = null;
 
