@@ -3114,7 +3114,7 @@ function renderMasterGoals() {
       : `Assign to ALL ${context} Employees`;
     const allOptionVal = context === 'ALL' ? "GLOBAL_ALL" : `COMP_${context}`;
 
-    // 5) Assignments UI
+ // 5) Assignments UI
     const assignmentsHtml = (g.assignments || []).map((assign, ai) => {
       const target = (assign && assign.target) ? String(assign.target) : '';
       if (!target) return '';
@@ -3144,6 +3144,23 @@ function renderMasterGoals() {
           ? assign.weight
           : (typeof g.weight !== 'undefined' && g.weight !== null ? g.weight : 0);
 
+      // --- FIXED LOGIC START ---
+      // Move logic OUTSIDE the return statement
+      const isDiv = target.startsWith('DIV_');
+      const divName = isDiv ? target.replace('DIV_', '') : '';
+
+      const divBtn = isDiv ? `
+        <button class="btn btn-outline div-weights-btn"
+                style="padding:6px 10px; font-size:0.8rem;"
+                data-goal="${i}"
+                data-assign="${ai}"
+                data-div="${escapeHTML(divName)}"
+                title="View managers and edit weights">
+          <i class="fa-solid fa-users"></i>
+        </button>
+      ` : '';
+      // --- FIXED LOGIC END ---
+
       return `
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px; border:2px solid; border-radius:10px; margin-bottom:8px; ${chipStyle}">
           <div style="font-weight:800; font-size:0.85rem; line-height:1.2;">${escapeHTML(dispName)}</div>
@@ -3154,21 +3171,8 @@ function renderMasterGoals() {
               style="width:82px; padding:6px 8px; border-radius:8px; border:2px solid #e5e7eb; font-weight:800; text-align:center;"
               onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
               title="Organizational Weight (per assignment)">
-			  
-const isDiv = target.startsWith('DIV_');
-const divName = isDiv ? target.replace('DIV_', '') : '';
-
-const divBtn = isDiv ? `
-  <button class="btn btn-outline div-weights-btn"
-          style="padding:6px 10px; font-size:0.8rem;"
-          data-goal="${i}"
-          data-assign="${ai}"
-          data-div="${escapeHTML(divName)}"
-          title="View managers and edit weights">
-    <i class="fa-solid fa-users"></i>
-  </button>
-` : '';
-
+              
+            ${divBtn}
 
             <button class="btn-delete"
               onclick="removeAssignment(${i}, ${ai})"
