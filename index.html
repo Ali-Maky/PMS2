@@ -3323,41 +3323,47 @@ function getDivisionManagers(divisionMembers) {
 }
 
 function openDivisionWeights(goalIndex, divisionName) {
-  activeDivWeightGoalIndex = goalIndex;
-  const g = masterData.goals[goalIndex];
-  if (!g) return;
+    // 1. Set active index
+    activeDivWeightGoalIndex = goalIndex;
+    
+    // 2. Get the goal object
+    const g = masterData.goals[goalIndex];
+    if (!g) return;
 
-  // --- FIX START: Re-calculate contextData here ---
-  // We derive the correct list of employees based on the goal's company context
-  const context = g.company_context || 'ALL';
-  let contextData = allCompanyData;
-  
-  if (context !== 'ALL') {
-    // Re-use your getCompany logic to filter the global list
-    contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
-  }
-  // --- FIX END ---
+    // --- FIX: Calculate contextData internally ---
+    // We derive the correct list of employees based on the goal's company context
+    const context = g.company_context || 'ALL';
+    let contextData = allCompanyData; // Start with everyone
 
-  if (!g.division_weights) g.division_weights = {};
-  if (!g.division_weights[divisionName]) {
-    g.division_weights[divisionName] = { default_weight: Number(g.weight) || 0, managers: {} };
-  }
+    if (context !== 'ALL') {
+        // Filter the global list based on the company context
+        contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
+    }
+    // ---------------------------------------------
 
-  const cfg = g.division_weights[divisionName];
-  
-  // Now contextData is a valid Array, so .filter() inside getDivisionMembers will work
-  const members = getDivisionMembers(contextData, divisionName);
-  const managers = getDivisionManagers(members);
+    // 3. Initialize division_weights object if missing
+    if (!g.division_weights) g.division_weights = {};
+    if (!g.division_weights[divisionName]) {
+        g.division_weights[divisionName] = { default_weight: Number(g.weight) || 0, managers: {} };
+    }
 
-  document.getElementById('div-weight-title').innerText = `Division Weights — ${divisionName}`;
-  document.getElementById('div-weight-sub').innerText = `Goal: ${g.title || 'Shared Objective'} • ${members.length} employees`;
-  document.getElementById('div-weight-default').value = Number(cfg.default_weight ?? (Number(g.weight) || 0)).toFixed(2);
+    const cfg = g.division_weights[divisionName];
 
-  const box = document.getElementById('div-weight-managers');
-  box.innerHTML = managers.length
-    ? managers.map(m => {
-        const current = (cfg.managers && cfg.managers[m.id] != null) ? Number(cfg.managers[m.id]) : Number(cfg.default_weight);
-        return `
+    // 4. Get Members & Managers using the calculated contextData
+    // contextData is now guaranteed to be an array, so .filter() will work inside getDivisionMembers
+    const members = getDivisionMembers(contextData, divisionName);
+    const managers = getDivisionManagers(members);
+
+    // 5. Update UI
+    document.getElementById('div-weight-title').innerText = `Division Weights — ${divisionName}`;
+    document.getElementById('div-weight-sub').innerText = `Goal: ${g.title || 'Shared Objective'} • ${members.length} employees`;
+    document.getElementById('div-weight-default').value = Number(cfg.default_weight ?? (Number(g.weight) || 0)).toFixed(2);
+
+    const box = document.getElementById('div-weight-managers');
+    box.innerHTML = managers.length
+        ? managers.map(m => {
+            const current = (cfg.managers && cfg.managers[m.id] != null) ? Number(cfg.managers[m.id]) : Number(cfg.default_weight);
+            return `
           <div style="display:flex; gap:12px; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
             <div style="flex:1; min-width:0;">
               <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${m.name} (${m.id})</div>
@@ -3371,13 +3377,12 @@ function openDivisionWeights(goalIndex, divisionName) {
             </div>
           </div>
         `;
-      }).join('')
-    : `<div style="color:#6b7280; padding:12px;">No managers detected in this division (based on manager_id relationships).</div>`;
+        }).join('')
+        : `<div style="color:#6b7280; padding:12px;">No managers detected in this division (based on manager_id relationships).</div>`;
 
-  const modal = document.getElementById('div-weight-modal');
-  modal.classList.remove('hidden');
+    const modal = document.getElementById('div-weight-modal');
+    modal.classList.remove('hidden');
 }
-
 function saveDivisionWeights() {
   if (activeDivWeightGoalIndex == null) return;
   const g = masterData.goals[activeDivWeightGoalIndex];
