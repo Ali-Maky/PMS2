@@ -3276,6 +3276,7 @@ function renderMasterGoals() {
   }).join('');
 }
 
+document.addEventListener('click', (e) => {
   const btn = e.target.closest('.div-weights-btn');
   if (!btn) return;
 
@@ -3283,7 +3284,6 @@ function renderMasterGoals() {
   const assignIndex = Number(btn.getAttribute('data-assign'));
   const divName = btn.getAttribute('data-div');
 
-  openDivisionWeights(goalIndex, divName);
 });
 
 let activeDivWeightGoalIndex = null;
