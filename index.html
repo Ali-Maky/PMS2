@@ -3273,18 +3273,6 @@ function renderMasterGoals() {
                 </optgroup>
             </select>
         </div>
-const selectedDiv = g.division || 'ALL';
-
-// after your division <select>:
-<div style="margin-top:6px; font-size:0.85rem; color:var(--text-muted);">
-  Selected Division: <b>${selectedDiv === 'ALL' ? 'None' : selectedDiv}</b>
-</div>
-
-<button class="btn btn-outline"
-  ${selectedDiv === 'ALL' ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}
-  onclick="openDivisionWeights(${i}, '${selectedDiv.replace(/'/g,"\\'")}', contextData)">
-  <i class="fa-solid fa-users"></i> View Division Weights
-</button>
 
         <div style="background:#f8fafc; padding:12px; border-radius:10px; margin-bottom:15px;">
             <div style="font-size:0.7rem; font-weight:800; color:var(--text-muted); margin-bottom:8px; display:flex; justify-content:space-between;">
@@ -3305,17 +3293,39 @@ const selectedDiv = g.division || 'ALL';
                     const uObj = allCompanyData.find(x => x[COL.id] == uid);
                     dispName = `👤 ${uObj ? uObj[COL.name] : uid}`; 
                 }
+				const isDiv = assign.target.startsWith('DIV_');
+const divName = isDiv ? assign.target.replace('DIV_', '') : null;
 
-                return `
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px 12px; border-radius:8px; border:1px solid var(--border); ${styleClass}">
-                    <span style="flex:1; font-weight:600; font-size:0.85rem;">${dispName}</span>
-                    <div style="display:flex; align-items:center; gap:5px; background:white; padding:2px 6px; border-radius:6px; border:1px solid #e5e7eb;">
-                        <span style="font-size:0.7rem; color:var(--text-muted); font-weight:700;">WEIGHT:</span>
-                        <input type="number" value="${(assign.weight * 100) || 0}" 
-                            style="width:40px; border:none; text-align:right; font-weight:800; color:var(--primary); outline:none;"
-                            onchange="masterData.goals[${i}].assignments[${ai}].weight=(this.value/100); saveDraftToDB();">
-                        <span style="font-size:0.75rem; font-weight:700;">%</span>
-                    </div>
+// contextData exists in renderMasterGoals (you already compute availDivs from it)
+const divBtn = isDiv ? `
+  <button class="btn btn-outline"
+          style="padding:6px 10px; font-size:0.8rem;"
+          onclick='openDivisionWeights(${i}, ${JSON.stringify(divName)}, contextData)'>
+    <i class="fa-solid fa-users"></i>
+  </button>
+` : '';
+
+				
+
+              return `
+<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px 12px; border-radius:8px; border:1px solid var(--border); ${styleClass}">
+  <span style="flex:1; font-weight:600; font-size:0.85rem;">${dispName}</span>
+
+  <div style="display:flex; align-items:center; gap:5px; background:white; padding:2px 6px; border-radius:6px; border:1px solid #e5e7eb;">
+    <span style="font-size:0.7rem; color:var(--text-muted); font-weight:700;">WEIGHT:</span>
+    <input type="number" value="${(assign.weight * 100) || 0}"
+           style="width:40px; border:none; text-align:right; font-weight:800; color:var(--primary); outline:none;"
+           onchange="masterData.goals[${i}].assignments[${ai}].weight=(this.value/100); saveDraftToDB();">
+    <span style="font-size:0.75rem; font-weight:700;">%</span>
+  </div>
+
+  ${divBtn}
+
+  <button class="btn-delete" onclick="removeAssignment(${i}, ${ai})" style="color:var(--danger); width:24px; height:24px;">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
+</div>`;
+
                     <button class="btn-delete" onclick="removeAssignment(${i}, ${ai})" style="color:var(--danger); width:24px; height:24px;"><i class="fa-solid fa-xmark"></i></button>
                 </div>`;
             }).join('')}
