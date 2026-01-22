@@ -3154,6 +3154,15 @@ function renderMasterGoals() {
               style="width:82px; padding:6px 8px; border-radius:8px; border:2px solid #e5e7eb; font-weight:800; text-align:center;"
               onchange="masterData.goals[${i}].assignments[${ai}].weight = Number(this.value) || 0; saveDraftToDB();"
               title="Organizational Weight (per assignment)">
+			  
+			${target.startsWith('DIV_') ? `
+  <button class="btn btn-outline"
+    style="padding:6px 10px; font-size:0.8rem;"
+    onclick="openDivisionWeights(${i}, ${ai}, ${JSON.stringify(target.replace('DIV_',''))})"
+    title="View managers and edit weights">
+    <i class="fa-solid fa-users"></i>
+  </button>
+` : ''}
 
             <button class="btn-delete"
               onclick="removeAssignment(${i}, ${ai})"
