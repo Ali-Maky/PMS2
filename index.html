@@ -3304,9 +3304,6 @@ const divBtn = isDiv ? `
     <i class="fa-solid fa-users"></i>
   </button>
 ` : '';
-
-				
-
               return `
 <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px 12px; border-radius:8px; border:1px solid var(--border); ${styleClass}">
   <span style="flex:1; font-weight:600; font-size:0.85rem;">${dispName}</span>
@@ -3328,7 +3325,7 @@ const divBtn = isDiv ? `
 
                     <button class="btn-delete" onclick="removeAssignment(${i}, ${ai})" style="color:var(--danger); width:24px; height:24px;"><i class="fa-solid fa-xmark"></i></button>
                 </div>`;
-            }).join('')}
+            }).join('');
             ${(!g.assignments || g.assignments.length === 0) ? '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic; padding:4px;">No assignments yet. Goal is inactive.</div>' : ''}
         </div>
 
