@@ -1688,6 +1688,10 @@ const db = {
                     eq: (col, val) => {
                         const execute = async () => {
                             let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
+							if (action === 'getSettings' && !sessionStorage.getItem('zpms_token')) {
+  return { data: null, error: null };
+}
+
                             try {
                                 const res = await fetch(`${API_URL}?action=${action}`, {
                                     method: 'POST', 
@@ -1955,10 +1959,7 @@ function resendOTP() {
 		let draftSaveTimer; // <--- ADD THIS NEW VARIABLE for Shared Goals
         // --- 2. INIT ---
         window.onload = async function () {
-			
-if (action === 'getSettings' && !sessionStorage.getItem('zpms_token')) {
-  return { data: null, error: null };
-}
+	
 
             await mapColumns();
             const { data: sg } = await db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single();
