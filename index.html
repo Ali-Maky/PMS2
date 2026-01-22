@@ -3275,7 +3275,8 @@ function renderMasterGoals() {
     `;
   }).join('');
 }
-document.addEventListener('click', (e) => {
+const btn = e.target.closest('.div-weights-btn');
+  if (!btn) return;
   const btn = e.target.closest('.div-weights-btn');
   if (!btn) return;
 
@@ -3283,7 +3284,7 @@ document.addEventListener('click', (e) => {
   const assignIndex = Number(btn.getAttribute('data-assign'));
   const divName = btn.getAttribute('data-div');
 
-  openDivisionWeights(goalIndex, assignIndex, divName);
+  openDivisionWeights(goalIndex, divName);
 });
 
 let activeDivWeightGoalIndex = null;
@@ -3321,10 +3322,21 @@ function getDivisionManagers(divisionMembers) {
   return mgrs.filter(m => (seen.has(m.id) ? false : (seen.add(m.id), true)));
 }
 
-function openDivisionWeights(goalIndex, divisionName, contextData) {
+function openDivisionWeights(goalIndex, divisionName) {
   activeDivWeightGoalIndex = goalIndex;
   const g = masterData.goals[goalIndex];
   if (!g) return;
+
+  // --- FIX START: Re-calculate contextData here ---
+  // We derive the correct list of employees based on the goal's company context
+  const context = g.company_context || 'ALL';
+  let contextData = allCompanyData;
+  
+  if (context !== 'ALL') {
+    // Re-use your getCompany logic to filter the global list
+    contextData = allCompanyData.filter(u => getCompany(u[COL.id]) === context);
+  }
+  // --- FIX END ---
 
   if (!g.division_weights) g.division_weights = {};
   if (!g.division_weights[divisionName]) {
@@ -3332,6 +3344,8 @@ function openDivisionWeights(goalIndex, divisionName, contextData) {
   }
 
   const cfg = g.division_weights[divisionName];
+  
+  // Now contextData is a valid Array, so .filter() inside getDivisionMembers will work
   const members = getDivisionMembers(contextData, divisionName);
   const managers = getDivisionManagers(members);
 
