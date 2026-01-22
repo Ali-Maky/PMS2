@@ -3104,40 +3104,70 @@ function renderMasterGoals() {
         const allOptionVal = context === 'ALL' ? "GLOBAL_ALL" : `COMP_${context}`;
 
         // 3. Generate Sub-HTML for Assignments
-        const assignmentsHtml = (g.assignments || []).map((assign, ai) => {
-            let dispName = assign.target;
-            let styleClass = "";
+        // 3. Generate Sub-HTML for Assignments (FIXED + Division Weights button)
+let assignmentsHtml = (g.assignments || []).map((assign, ai) => {
 
-            if (assign.target === 'GLOBAL_ALL') { 
-                dispName = "🌍 GLOBAL (All Employees)"; 
-                styleClass="background:#ecfdf5; border-color:#6ee7b7; color:#064e3b;"; 
-            }
-            else if (assign.target.startsWith('COMP_')) { 
-                dispName = `🏢 ${assign.target.replace('COMP_', '')} (Entire Company)`; 
-                styleClass="background:#eff6ff; border-color:#93c5fd; color:#1e3a8a;"; 
-            }
-            else if (assign.target.startsWith('DIV_')) { 
-                dispName = `📂 ${assign.target.replace('DIV_', '')}`; 
-            }
-            else if (assign.target.startsWith('ID_')) { 
-                const uid = assign.target.replace('ID_', '');
-                const uObj = allCompanyData.find(x => x[COL.id] == uid);
-                dispName = `👤 ${uObj ? uObj[COL.name] : uid}`; 
-            }
+    let dispName = assign.target;
+    let styleClass = "";
 
-            return `
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px 12px; border-radius:8px; border:1px solid var(--border); ${styleClass}">
-                <span style="flex:1; font-weight:600; font-size:0.85rem;">${dispName}</span>
-                <div style="display:flex; align-items:center; gap:5px; background:white; padding:2px 6px; border-radius:6px; border:1px solid #e5e7eb;">
-                    <span style="font-size:0.7rem; color:var(--text-muted); font-weight:700;">WEIGHT:</span>
-                    <input type="number" value="${(assign.weight * 100) || 0}" 
-                        style="width:40px; border:none; text-align:right; font-weight:800; color:var(--primary); outline:none;"
-                        onchange="masterData.goals[${i}].assignments[${ai}].weight=(this.value/100); saveDraftToDB();">
-                    <span style="font-size:0.75rem; font-weight:700;">%</span>
-                </div>
-                <button class="btn-delete" onclick="removeAssignment(${i}, ${ai})" style="color:var(--danger); width:24px; height:24px;"><i class="fa-solid fa-xmark"></i></button>
-            </div>`;
-        }).join('');
+    if (assign.target === 'GLOBAL_ALL') {
+        dispName = "🌍 GLOBAL (All Employees)";
+        styleClass = "background:#ecfdf5; border-color:#6ee7b7; color:#064e3b;";
+    }
+    else if (assign.target.startsWith('COMP_')) {
+        dispName = `🏢 ${assign.target.replace('COMP_', '')} (Entire Company)`;
+        styleClass = "background:#eff6ff; border-color:#93c5fd; color:#1e3a8a;";
+    }
+    else if (assign.target.startsWith('DIV_')) {
+        dispName = `📂 ${assign.target.replace('DIV_', '')}`;
+    }
+    else if (assign.target.startsWith('ID_')) {
+        const uid = assign.target.replace('ID_', '');
+        const uObj = allCompanyData.find(x => x[COL.id] == uid);
+        dispName = `👤 ${uObj ? uObj[COL.name] : uid}`;
+    }
+
+    // Division weights button (only for DIV_)
+    const isDiv = assign.target.startsWith('DIV_');
+    const divName = isDiv ? assign.target.replace('DIV_', '') : "";
+    const divBtn = isDiv ? `
+        <button class="btn btn-outline"
+                style="padding:6px 10px; font-size:0.8rem;"
+                onclick="openDivisionWeights(${i}, ${ai}, ${JSON.stringify(divName)})"
+                title="View & edit division weights">
+            <i class="fa-solid fa-users"></i>
+        </button>
+    ` : "";
+
+    return `
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:white; padding:8px 12px; border-radius:8px; border:1px solid var(--border); ${styleClass}">
+            <span style="flex:1; font-weight:600; font-size:0.85rem;">${dispName}</span>
+
+            <div style="display:flex; align-items:center; gap:5px; background:white; padding:2px 6px; border-radius:6px; border:1px solid #e5e7eb;">
+                <span style="font-size:0.7rem; color:var(--text-muted); font-weight:700;">WEIGHT:</span>
+                <input type="number"
+                       value="${(Number(assign.weight) * 100) || 0}"
+                       style="width:40px; border:none; text-align:right; font-weight:800; color:var(--primary); outline:none;"
+                       onchange="masterData.goals[${i}].assignments[${ai}].weight=(this.value/100); saveDraftToDB();">
+                <span style="font-size:0.75rem; font-weight:700;">%</span>
+            </div>
+
+            ${divBtn}
+
+            <button class="btn-delete"
+                    onclick="removeAssignment(${i}, ${ai})"
+                    style="color:var(--danger); width:24px; height:24px;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    `;
+}).join('');
+
+// Keep your existing “no assignments” message safely (no `${}` outside template strings)
+if (!g.assignments || g.assignments.length === 0) {
+    assignmentsHtml += '<div style="font-size:0.8rem; color:var(--text-light); font-style:italic; padding:4px;">No assignments yet. Goal is inactive.</div>';
+}
+
 
         // 4. Generate Sub-HTML for Targets
         const targetsHtml = g.targets.map((t, ti) => {
