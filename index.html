@@ -3158,7 +3158,7 @@ let assignmentsHtml = (g.assignments || []).map((assign, ai) => {
                     onclick="removeAssignment(${i}, ${ai})"
                     style="color:var(--danger); width:24px; height:24px;">
                 <i class="fa-solid fa-xmark"></i>
-            </button>`;
+            </button>`
 }).join('');
 
 // Keep your existing “no assignments” message safely (no `${}` outside template strings)
