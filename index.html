@@ -5027,8 +5027,8 @@ function calc() {
 
     // ============================================================
     // STEP A: CALCULATE TOTAL ASSIGNED WEIGHT (Normalization Base)
-    // This loop counts how much weight is assigned to THIS user 
-    // to establish the "100%" baseline for their shared goals.
+    // Counts the total weight of goals assigned to THIS user to 
+    // establish the "100%" baseline for their specific scorecard.
     // ============================================================
     let totalAssignedWeight = 0;
 
@@ -5040,7 +5040,7 @@ function calc() {
             const t = a.target;
             let weight = Number(a.weight) || 0;
 
-            // Check Division Overrides
+            // 1. Check Division Overrides
             if (t.startsWith('DIV_') || t === userDiv) {
                  const divName = t.replace('DIV_', '');
                  if (g.division_weights && g.division_weights[divName]) {
@@ -5053,31 +5053,32 @@ function calc() {
                  }
             }
 
-            // Check Assignment Match
+            // 2. Check Assignment Match
             if (t === 'GLOBAL_ALL' || 
                 t === `COMP_${userComp}` || 
                 t === `DIV_${userDiv}` || t === userDiv || 
                 t === `ID_${userId}` || t === userId) 
             {
-                weightForGoal = weight; 
+                weightForGoal = weight; // Take the match
                 isAssigned = true;
             }
         });
 
         if (isAssigned) {
-            // Math Fix: Convert 5 to 0.05
+            // Math Fix: Standardization (Convert 5 to 0.05)
+            // This ensures we don't mix integers and decimals
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
             totalAssignedWeight += weightForGoal;
         }
     });
 
-    // Prevent division by zero
+    // Safety: Prevent division by zero
     if (totalAssignedWeight === 0) totalAssignedWeight = 1;
 
 
     // ============================================================
-    // STEP B: CALCULATE SHARED SCORE (Normalized)
-    // This loop calculates the weighted average rating (0-6 scale)
+    // STEP B: CALCULATE NORMALIZED SHARED SCORE
+    // Calculates the weighted average rating (Scale 0-6)
     // based on the normalization from Step A.
     // ============================================================
     let weightedAverageRating = 0;
@@ -5087,7 +5088,7 @@ function calc() {
         let weightForGoal = 0;
         let isAssigned = false;
 
-        // REPEAT MATCH LOGIC to get the specific weight for this goal
+        // REPEAT MATCH LOGIC to get specific weight for this goal
         (g.assignments || []).forEach(a => {
             const t = a.target;
             let weight = Number(a.weight) || 0;
@@ -5115,11 +5116,11 @@ function calc() {
         });
 
         if (isAssigned) {
+            // Same Standardization Match
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
 
             // *** NORMALIZATION MATH ***
-            // Example: If user has 2 goals (5% each), Total is 10%.
-            // Relative Weight = 5% / 10% = 0.5 (Each goal is 50% of the bucket)
+            // Calculates this goal's percentage of the user's total assigned bucket
             const relativeWeight = weightForGoal / totalAssignedWeight;
             
             weightedAverageRating += rating * relativeWeight;
@@ -5135,12 +5136,12 @@ function calc() {
     }
 
     // 4. Final Totals
-    // Multiply the normalized rating (0-6) by the category weight (w.s)
+    // Apply the Category Weights (e.g., 5% for Shared, 95% for Individual)
     const sContrib = weightedAverageRating * (w.s / 100);
     const iContrib = individualGoalScore * (w.i / 100);
     const total = sContrib + iContrib;
 
-    // 5. Update UI 
+    // 5. Update UI
     const currentUid = (user[COL.id] || '').toString();
     const profileUid = (targetUser[COL.id] || '').toString();
     const viewingSelf = (currentUid === profileUid);
