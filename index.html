@@ -5020,14 +5020,15 @@ function calc() {
     if (!targetUser) return;
 
     // 1. Get User Profile Data
-    // w.s is the Shared Bucket (e.g. 5% or 10%)
+    // w.s = Shared Goal Category Weight (e.g., 5% or 10%)
+    // w.i = Individual Goal Category Weight (e.g., 95% or 90%)
     const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
     const userDiv = (targetUser[COL.div] || "").trim();
     const userId = (targetUser[COL.id] || "").trim();
     const userComp = getCompany(userId);
 
     // ============================================================
-    // STEP 1: CALCULATE SHARED GOALS (Additive Mode with Cap)
+    // STEP 1: CALCULATE SHARED GOALS (Additive with Cap)
     // ============================================================
     let sContrib = 0;
 
@@ -5069,16 +5070,21 @@ function calc() {
             // Math Fix: Ensure weight is decimal (5 -> 0.05)
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
 
-            // Additive Sum: (Rating * Weight)
+            // *** ADDITIVE MATH ***
+            // We sum the weights directly. 
+            // Example: (6 rating * 0.05 weight) = 0.3. 
+            // If 2 goals: 0.3 + 0.3 = 0.6.
             sContrib += rating * weightForGoal;
         }
     });
 
     // --- CRITICAL FIX: CAP THE SCORE ---
-    // Ensure the result doesn't exceed the Employee's Category Weight.
-    // Example: For a Manager (10%), Max is 6 * 0.10 = 0.6.
-    // If goals add up to 0.7, it will stop at 0.6.
-    const sMax = 6 * (w.s / 100); 
+    // Calculate the mathematical maximum for this employee's level.
+    // Example (Manager 10%): Max is 6 rating * 0.10 = 0.60.
+    // Example (Staff 5%): Max is 6 rating * 0.05 = 0.30.
+    const sMax = 6 * (w.s / 100);
+    
+    // Guardrail: Do not exceed the level's max limit
     if (sContrib > sMax) {
         sContrib = sMax;
     }
@@ -5090,11 +5096,12 @@ function calc() {
     
     if (targetUser[COL.goals]) {
         targetUser[COL.goals].forEach(g => {
+            // Standard Weighted Rating Calculation
             individualGoalScore += (Number(g.rating) || 0) * (Number(g.weight) || 0);
         });
     }
 
-    // Apply the 95% scaling only to Individual Goals
+    // Apply the Individual Category Weight (e.g. 95%)
     const iContrib = individualGoalScore * (w.i / 100);
     
     // ============================================================
