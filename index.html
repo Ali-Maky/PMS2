@@ -5023,59 +5023,97 @@ function calc() {
     const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
     const userDiv = (targetUser[COL.div] || "").trim();
     const userId = (targetUser[COL.id] || "").trim();
-    const userComp = getCompany(userId); 
+    const userComp = getCompany(userId);
 
-    // 2. Calculate Shared Goal Score (CASCADING LOGIC)
-    let totalSharedWeightedScore = 0;
+    // ============================================================
+    // STEP A: CALCULATE TOTAL ASSIGNED WEIGHT (FOR NORMALIZATION)
+    // ============================================================
+    let totalRawWeight = 0;
 
     (masterData.goals || []).forEach(g => {
-        const rating = Number(g.rating) || 0;
-        
-        let goalWeightForUser = 0;
+        let activeWeight = 0;
 
-        // --- REPLACEMENT BLOCK FOR calc() loop ---
+        // Check if goal is assigned to this user
         (g.assignments || []).forEach(a => {
             const t = a.target;
             let weight = Number(a.weight) || 0;
 
-            // 1. CHECK FOR DIVISION OVERRIDES (Same logic as above)
+            // 1. Check for Division Overrides
             if (t.startsWith('DIV_') || t === userDiv) {
-                 const divName = t.replace('DIV_', '');
-                 if (g.division_weights && g.division_weights[divName]) {
-                     const cfg = g.division_weights[divName];
-                     if (cfg.managers && cfg.managers[userId] != null) {
-                         weight = Number(cfg.managers[userId]);
-                     } else {
-                         weight = Number(cfg.default_weight);
-                     }
-                 }
+                const divName = t.replace('DIV_', '');
+                if (g.division_weights && g.division_weights[divName]) {
+                    const cfg = g.division_weights[divName];
+                    if (cfg.managers && cfg.managers[userId] != null) {
+                        weight = Number(cfg.managers[userId]);
+                    } else {
+                        weight = Number(cfg.default_weight);
+                    }
+                }
             }
 
-            // 2. MATH FIX
-            if (weight > 1) weight = weight / 100;
-
-            // CHECK 1: GLOBAL ASSIGNMENT
-            if (t === 'GLOBAL_ALL') {
-                goalWeightForUser += weight;
-            }
-            // CHECK 2: COMPANY WIDE ASSIGNMENT
-            else if (t === `COMP_${userComp}`) {
-                goalWeightForUser += weight;
-            }
-            // CHECK 3: DIVISION ASSIGNMENT
-            else if (t === `DIV_${userDiv}` || t === userDiv) { 
-                goalWeightForUser += weight;
-            }
-            // CHECK 4: SPECIFIC USER/CHIEF ASSIGNMENT
-            else if (t === `ID_${userId}` || t === userId) { 
-                goalWeightForUser += weight;
+            // 2. Check Assignment Match
+            if (t === 'GLOBAL_ALL' ||
+                t === `COMP_${userComp}` ||
+                t === `DIV_${userDiv}` || t === userDiv ||
+                t === `ID_${userId}` || t === userId) {
+                activeWeight += weight;
             }
         });
-        // -----------------------------------------
 
-        // Apply score based on the accumulated weight for this goal
-        if (goalWeightForUser > 0) {
-            totalSharedWeightedScore += rating * goalWeightForUser;
+        // Math Fix: Convert 5 to 0.05
+        if (activeWeight > 1) activeWeight = activeWeight / 100;
+
+        // Add to the total pool for normalization
+        if (activeWeight > 0) totalRawWeight += activeWeight;
+    });
+
+    // Prevent division by zero if no goals are assigned
+    if (totalRawWeight === 0) totalRawWeight = 1;
+
+
+    // ============================================================
+    // STEP B: CALCULATE NORMALIZED SHARED SCORE
+    // ============================================================
+    let normalizedSharedRating = 0;
+
+    (masterData.goals || []).forEach(g => {
+        const rating = Number(g.rating) || 0;
+        let activeWeight = 0;
+
+        // We repeat the lookup to get the specific weight for this goal
+        (g.assignments || []).forEach(a => {
+            const t = a.target;
+            let weight = Number(a.weight) || 0;
+
+            // 1. Check for Division Overrides
+            if (t.startsWith('DIV_') || t === userDiv) {
+                const divName = t.replace('DIV_', '');
+                if (g.division_weights && g.division_weights[divName]) {
+                    const cfg = g.division_weights[divName];
+                    if (cfg.managers && cfg.managers[userId] != null) {
+                        weight = Number(cfg.managers[userId]);
+                    } else {
+                        weight = Number(cfg.default_weight);
+                    }
+                }
+            }
+
+            // 2. Check Assignment Match
+            if (t === 'GLOBAL_ALL' ||
+                t === `COMP_${userComp}` ||
+                t === `DIV_${userDiv}` || t === userDiv ||
+                t === `ID_${userId}` || t === userId) {
+                activeWeight += weight;
+            }
+        });
+
+        if (activeWeight > 1) activeWeight = activeWeight / 100;
+
+        // --- THE FIX: NORMALIZE WEIGHT ---
+        // Instead of using raw weight (0.05), we use its proportion of the total (0.05/0.10 = 0.5)
+        if (activeWeight > 0) {
+            const effectiveWeight = activeWeight / totalRawWeight;
+            normalizedSharedRating += rating * effectiveWeight;
         }
     });
 
@@ -5088,26 +5126,28 @@ function calc() {
     }
 
     // 4. Final Totals
-    const sContrib = totalSharedWeightedScore * (w.s / 100);
+    // normalizedSharedRating is now on a scale of 0-6. 
+    // We multiply it by the Employee's Shared Bucket (w.s, e.g., 5%)
+    const sContrib = normalizedSharedRating * (w.s / 100);
     const iContrib = individualGoalScore * (w.i / 100);
     const total = sContrib + iContrib;
 
-    // 5. Update UI (Masking Logic kept from your original code)
-const currentUid = (user[COL.id] || '').toString();
+    // 5. Update UI (Masking Logic)
+    const currentUid = (user[COL.id] || '').toString();
     const profileUid = (targetUser[COL.id] || '').toString();
     const viewingSelf = (currentUid === profileUid);
     const uRole = getRole(user);
-    const status = targetUser[COL.stat] || 'Draft';
-   
-const statusClean = (targetUser[COL.stat] || '').trim().toLowerCase();
+
+    const statusClean = (targetUser[COL.stat] || '').trim().toLowerCase();
     const canSeeScore = (statusClean === 'published') || (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole)));
+
     const scoreEl = document.getElementById('score');
     const ratingEl = document.getElementById('rating');
     const sharedScoreEl = document.getElementById('shared-contrib-val');
     const indivScoreEl = document.getElementById('indiv-contrib-val');
 
     if (canSeeScore) {
-       if (scoreEl) scoreEl.innerText = total.toFixed(2);
+        if (scoreEl) scoreEl.innerText = total.toFixed(2);
         if (sharedScoreEl) sharedScoreEl.innerText = sContrib.toFixed(2);
         if (indivScoreEl) indivScoreEl.innerText = iContrib.toFixed(2);
 
@@ -5118,10 +5158,10 @@ const statusClean = (targetUser[COL.stat] || '').trim().toLowerCase();
         else if (total >= 2.5) lbl = "WALKER";
         else if (total >= 1.5) lbl = "STAGNANT";
         else if (total > 0) lbl = "IDLE";
-        
+
         if (ratingEl) ratingEl.innerText = lbl;
     } else {
-       if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
+        if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
         if (ratingEl) ratingEl.innerText = "Pending HR";
     }
 }
