@@ -19,6 +19,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
        
       <style>
+		  /* Add this to your CSS */
+.metric-val.text-mode {
+    font-size: 1.5rem !important; /* Smaller size for long words */
+    word-break: break-word;       /* Prevent cutoff */
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
              .pro-goal-meta {
     display: flex;
     align-items: center;
