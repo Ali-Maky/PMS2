@@ -5026,13 +5026,13 @@ function calc() {
     const userComp = getCompany(userId);
 
     // ============================================================
-    // STEP 1: CALCULATE SHARED GOALS (Additive with Normalization Cap)
+    // STEP 1: CALCULATE SHARED GOALS (Normalized)
     // ============================================================
-    
-    // A. Gather all active goals and sum their raw assigned weights
-    let totalAssignedWeight = 0;
-    const activeGoals = [];
+    let sContrib = 0;
+    let totalSharedAssigned = 0;
+    const activeSharedGoals = [];
 
+    // A. Gather Active Shared Goals & Weights
     (masterData.goals || []).forEach(g => {
         let weightForGoal = 0;
         let isAssigned = false;
@@ -5042,7 +5042,7 @@ function calc() {
             const t = a.target;
             let weight = Number(a.weight) || 0;
 
-            // Division Override Logic
+            // Division Override
             if (t.startsWith('DIV_') || t === userDiv) {
                  const divName = t.replace('DIV_', '');
                  if (g.division_weights && g.division_weights[divName]) {
@@ -5055,7 +5055,7 @@ function calc() {
                  }
             }
 
-            // Match Logic (Global, Company, Division, or specific ID)
+            // Standard Assignments
             if (t === 'GLOBAL_ALL' || 
                 t === `COMP_${userComp}` || 
                 t === `DIV_${userDiv}` || t === userDiv || 
@@ -5067,51 +5067,63 @@ function calc() {
         });
 
         if (isAssigned) {
-            // Ensure weight is decimal (5 -> 0.05)
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
-            
-            // Add to totals
-            totalAssignedWeight += weightForGoal;
-            activeGoals.push({ 
+            totalSharedAssigned += weightForGoal;
+            activeSharedGoals.push({ 
                 rating: Number(g.rating) || 0, 
                 rawWeight: weightForGoal 
             });
         }
     });
 
-    // B. Determine Scaling Factor
-    // The "Category Cap" is the employee's max weight for Shared Goals (e.g. 5% or 10%)
-    const categoryCap = w.s / 100; 
-    let scaleFactor = 1;
+    // B. Normalize Shared Goals (Cap at Category Weight)
+    const sharedCap = w.s / 100; 
+    let sharedScaleFactor = 1;
 
-    // If assigned goals exceed the cap (e.g. 15% assigned vs 10% cap), scale them down.
-    if (totalAssignedWeight > categoryCap && categoryCap > 0) {
-        scaleFactor = categoryCap / totalAssignedWeight;
+    // If assigned > Cap (e.g. 15% assigned vs 5% cap), scale down
+    if (totalSharedAssigned > sharedCap && sharedCap > 0) {
+        sharedScaleFactor = sharedCap / totalSharedAssigned;
     }
 
     // C. Calculate Final Shared Score
-    let sContrib = 0;
-    activeGoals.forEach(g => {
-        // Effective Weight = Raw Weight * Scale Factor
-        // Example: 5% * 0.666 = 3.33% effective weight per goal
-        const effectiveWeight = g.rawWeight * scaleFactor;
-        
-        // Add to total score
-        sContrib += g.rating * effectiveWeight;
+    activeSharedGoals.forEach(g => {
+        sContrib += g.rating * (g.rawWeight * sharedScaleFactor);
     });
 
     // ============================================================
-    // STEP 2: CALCULATE INDIVIDUAL GOALS
+    // STEP 2: CALCULATE INDIVIDUAL GOALS (Normalized)
     // ============================================================
     let individualGoalScore = 0;
+    let totalIndivWeight = 0;
+
+    // A. Sum Total Weight of Individual Goals
     if (targetUser[COL.goals]) {
         targetUser[COL.goals].forEach(g => {
-            // Standard Weighted Rating Calculation
-            individualGoalScore += (Number(g.rating) || 0) * (Number(g.weight) || 0);
+            totalIndivWeight += (Number(g.weight) || 0);
         });
     }
 
-    // Apply the Individual Category Weight (e.g. 95%)
+    // B. Determine Normalization Factor (Target is 100% or 1.0)
+    // If weights sum to 1.2 (120%), we scale down by (1 / 1.2)
+    let indivScaleFactor = 1;
+    if (totalIndivWeight > 1.0) {
+        indivScaleFactor = 1.0 / totalIndivWeight;
+    }
+
+    // C. Calculate Weighted Score
+    if (targetUser[COL.goals]) {
+        targetUser[COL.goals].forEach(g => {
+            const rawWeight = Number(g.weight) || 0;
+            const rating = Number(g.rating) || 0;
+            
+            // Apply normalization
+            const effectiveWeight = rawWeight * indivScaleFactor;
+            
+            individualGoalScore += rating * effectiveWeight;
+        });
+    }
+
+    // D. Apply Category Weight (e.g. 95% or 0.95)
     const iContrib = individualGoalScore * (w.i / 100);
     
     // ============================================================
