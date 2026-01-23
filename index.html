@@ -5019,21 +5019,21 @@ async function rejectToManager(id) {
 function calc() {
     if (!targetUser) return;
 
-    // 1. Get User Profile Data
-    // w.s = Shared Goal Category Weight (e.g., 5% or 10%)
-    // w.i = Individual Goal Category Weight (e.g., 95% or 90%)
+    // 1. Get User Profile Data & Weights
     const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
     const userDiv = (targetUser[COL.div] || "").trim();
     const userId = (targetUser[COL.id] || "").trim();
     const userComp = getCompany(userId);
 
     // ============================================================
-    // STEP 1: CALCULATE SHARED GOALS (Additive with Cap)
+    // STEP 1: CALCULATE SHARED GOALS (Additive with Normalization Cap)
     // ============================================================
-    let sContrib = 0;
+    
+    // A. Gather all active goals and sum their raw assigned weights
+    let totalAssignedWeight = 0;
+    const activeGoals = [];
 
     (masterData.goals || []).forEach(g => {
-        const rating = Number(g.rating) || 0;
         let weightForGoal = 0;
         let isAssigned = false;
 
@@ -5042,7 +5042,7 @@ function calc() {
             const t = a.target;
             let weight = Number(a.weight) || 0;
 
-            // A. Check Division Overrides
+            // Division Override Logic
             if (t.startsWith('DIV_') || t === userDiv) {
                  const divName = t.replace('DIV_', '');
                  if (g.division_weights && g.division_weights[divName]) {
@@ -5055,7 +5055,7 @@ function calc() {
                  }
             }
 
-            // B. Check Assignment Match
+            // Match Logic (Global, Company, Division, or specific ID)
             if (t === 'GLOBAL_ALL' || 
                 t === `COMP_${userComp}` || 
                 t === `DIV_${userDiv}` || t === userDiv || 
@@ -5067,33 +5067,43 @@ function calc() {
         });
 
         if (isAssigned) {
-            // Math Fix: Ensure weight is decimal (5 -> 0.05)
+            // Ensure weight is decimal (5 -> 0.05)
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
-
-            // *** ADDITIVE MATH ***
-            // We sum the weights directly. 
-            // Example: (6 rating * 0.05 weight) = 0.3. 
-            // If 2 goals: 0.3 + 0.3 = 0.6.
-            sContrib += rating * weightForGoal;
+            
+            // Add to totals
+            totalAssignedWeight += weightForGoal;
+            activeGoals.push({ 
+                rating: Number(g.rating) || 0, 
+                rawWeight: weightForGoal 
+            });
         }
     });
 
-    // --- CRITICAL FIX: CAP THE SCORE ---
-    // Calculate the mathematical maximum for this employee's level.
-    // Example (Manager 10%): Max is 6 rating * 0.10 = 0.60.
-    // Example (Staff 5%): Max is 6 rating * 0.05 = 0.30.
-    const sMax = 6 * (w.s / 100);
-    
-    // Guardrail: Do not exceed the level's max limit
-    if (sContrib > sMax) {
-        sContrib = sMax;
+    // B. Determine Scaling Factor
+    // The "Category Cap" is the employee's max weight for Shared Goals (e.g. 5% or 10%)
+    const categoryCap = w.s / 100; 
+    let scaleFactor = 1;
+
+    // If assigned goals exceed the cap (e.g. 15% assigned vs 10% cap), scale them down.
+    if (totalAssignedWeight > categoryCap && categoryCap > 0) {
+        scaleFactor = categoryCap / totalAssignedWeight;
     }
+
+    // C. Calculate Final Shared Score
+    let sContrib = 0;
+    activeGoals.forEach(g => {
+        // Effective Weight = Raw Weight * Scale Factor
+        // Example: 5% * 0.666 = 3.33% effective weight per goal
+        const effectiveWeight = g.rawWeight * scaleFactor;
+        
+        // Add to total score
+        sContrib += g.rating * effectiveWeight;
+    });
 
     // ============================================================
     // STEP 2: CALCULATE INDIVIDUAL GOALS
     // ============================================================
     let individualGoalScore = 0;
-    
     if (targetUser[COL.goals]) {
         targetUser[COL.goals].forEach(g => {
             // Standard Weighted Rating Calculation
