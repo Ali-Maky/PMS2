@@ -5152,7 +5152,7 @@ function calc() {
     const sharedScoreEl = document.getElementById('shared-contrib-val');
     const indivScoreEl = document.getElementById('indiv-contrib-val');
 
-    if (canSeeScore) {
+   if (canSeeScore) {
         if (scoreEl) scoreEl.innerText = total.toFixed(2);
         if (sharedScoreEl) sharedScoreEl.innerText = sContrib.toFixed(2);
         if (indivScoreEl) indivScoreEl.innerText = iContrib.toFixed(2);
@@ -5165,10 +5165,22 @@ function calc() {
         else if (total >= 1.5) lbl = "STAGNANT";
         else if (total > 0) lbl = "IDLE";
         
-        if (ratingEl) ratingEl.innerText = lbl;
+        if (ratingEl) {
+            ratingEl.innerText = lbl;
+            // Check if it's text (like "ASTRONAUT") vs a number/dash
+            // If it is text, add the class to shrink the font
+            if (isNaN(lbl) && lbl !== "-") {
+                ratingEl.classList.add('text-mode');
+            } else {
+                ratingEl.classList.remove('text-mode');
+            }
+        }
     } else {
         if (scoreEl) scoreEl.innerHTML = '<i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3;"></i>';
-        if (ratingEl) ratingEl.innerText = "Pending HR";
+        if (ratingEl) {
+            ratingEl.innerText = "Pending HR";
+            ratingEl.classList.add('text-mode'); // Shrink this text too
+        }
     }
 }
  function autoSave() {
