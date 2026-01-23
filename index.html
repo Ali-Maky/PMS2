@@ -1852,7 +1852,19 @@ const db = {
                     }
                 };
             },
+document.addEventListener('click', (e) => {
+  // 1. Check if the clicked element is our button
+  const btn = e.target.closest('.div-weights-btn');
+  if (!btn) return;
 
+  // 2. Get the data stored in the button attributes
+  const goalIndex = Number(btn.getAttribute('data-goal'));
+  const divName = btn.getAttribute('data-div');
+
+  // 3. EXECUTE THE FUNCTION (This was missing)
+  // This opens the modal that shows the manager list and weight boxes
+  openDivisionWeights(goalIndex, divName);
+});
             // Handle Deletes
         // Handle Deletes
 delete: () => {
