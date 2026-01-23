@@ -4624,14 +4624,13 @@ const canSeeScore = (currentStatClean === 'published') || (!viewingSelf && (isMa
             // SHARED GOALS SECTION
            // SHARED GOALS SECTION
            // SHARED GOALS SECTION
+           // SHARED GOALS SECTION
             if (w.s > 0) {
                 const userDiv = (data[COL.div] || "").trim();
                 const userId = (data[COL.id] || "").trim();
-                const userComp = getCompany(userId); // Determine Company (e.g. "Zain Iraq")
+                const userComp = getCompany(userId); 
 
-                // UPDATED LOGIC: Check for Global, Company, Division, OR Personal assignments
-                const relevantShared = (masterData.goals || []).map(g => {
-              // --- REPLACEMENT BLOCK FOR loadEval relevantShared Logic ---
+                // --- REPLACEMENT BLOCK FOR loadEval relevantShared Logic ---
                 const relevantShared = (masterData.goals || []).map(g => {
                     let totalWeight = 0;
                     let isAssigned = false;
@@ -4641,16 +4640,13 @@ const canSeeScore = (currentStatClean === 'published') || (!viewingSelf && (isMa
                         const t = a.target;
 
                         // 1. CHECK FOR DIVISION OVERRIDES
-                        // If this is a Division assignment, check if there are overrides for this specific user
-                        if (t.startsWith('DIV_') || t === userDiv) { // Support legacy & new format
+                        if (t.startsWith('DIV_') || t === userDiv) { 
                              const divName = t.replace('DIV_', '');
                              if (g.division_weights && g.division_weights[divName]) {
                                  const cfg = g.division_weights[divName];
-                                 // Check if this specific user (targetUser) has an override
                                  if (cfg.managers && cfg.managers[userId] != null) {
                                      weight = Number(cfg.managers[userId]);
                                  } else {
-                                     // Otherwise use the division default
                                      weight = Number(cfg.default_weight);
                                  }
                              }
@@ -4667,13 +4663,13 @@ const canSeeScore = (currentStatClean === 'published') || (!viewingSelf && (isMa
                         }
                     });
 
-                    // 3. MATH FIX: Convert integer (e.g. 5) to decimal (0.05) if needed
-                    // If the user typed "5" for 5%, we divide by 100. 
-                    // We assume valid weights are <= 1.0 (100%). If it's > 1, it's likely a whole number.
+                    // 3. MATH FIX
                     if (totalWeight > 1) totalWeight = totalWeight / 100;
 
                     return isAssigned ? { ...g, myWeight: totalWeight } : null;
                 }).filter(Boolean);
+
+                // ... The rest of your code continues with h += ...
 
                 h += `
                 <div style="margin-bottom:40px;">
