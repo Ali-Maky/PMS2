@@ -4631,21 +4631,46 @@ const canSeeScore = (currentStatClean === 'published') || (!viewingSelf && (isMa
 
                 // UPDATED LOGIC: Check for Global, Company, Division, OR Personal assignments
                 const relevantShared = (masterData.goals || []).map(g => {
+              // --- REPLACEMENT BLOCK FOR loadEval relevantShared Logic ---
+                const relevantShared = (masterData.goals || []).map(g => {
                     let totalWeight = 0;
                     let isAssigned = false;
 
                     (g.assignments || []).forEach(a => {
-                        if (a.target === 'GLOBAL_ALL' || 
-                            a.target === `COMP_${userComp}` || 
-                            a.target === `DIV_${userDiv}` || // Note: Added DIV_ prefix support
-                            a.target === userDiv ||          // Legacy support
-                            a.target === `ID_${userId}` ||   // Note: Added ID_ prefix support
-                            a.target === userId)             // Legacy support
+                        let weight = Number(a.weight) || 0;
+                        const t = a.target;
+
+                        // 1. CHECK FOR DIVISION OVERRIDES
+                        // If this is a Division assignment, check if there are overrides for this specific user
+                        if (t.startsWith('DIV_') || t === userDiv) { // Support legacy & new format
+                             const divName = t.replace('DIV_', '');
+                             if (g.division_weights && g.division_weights[divName]) {
+                                 const cfg = g.division_weights[divName];
+                                 // Check if this specific user (targetUser) has an override
+                                 if (cfg.managers && cfg.managers[userId] != null) {
+                                     weight = Number(cfg.managers[userId]);
+                                 } else {
+                                     // Otherwise use the division default
+                                     weight = Number(cfg.default_weight);
+                                 }
+                             }
+                        }
+
+                        // 2. CHECK ASSIGNMENT MATCH
+                        if (t === 'GLOBAL_ALL' || 
+                            t === `COMP_${userComp}` || 
+                            t === `DIV_${userDiv}` || t === userDiv || 
+                            t === `ID_${userId}` || t === userId) 
                         {
-                            totalWeight += Number(a.weight);
+                            totalWeight += weight;
                             isAssigned = true;
                         }
                     });
+
+                    // 3. MATH FIX: Convert integer (e.g. 5) to decimal (0.05) if needed
+                    // If the user typed "5" for 5%, we divide by 100. 
+                    // We assume valid weights are <= 1.0 (100%). If it's > 1, it's likely a whole number.
+                    if (totalWeight > 1) totalWeight = totalWeight / 100;
 
                     return isAssigned ? { ...g, myWeight: totalWeight } : null;
                 }).filter(Boolean);
@@ -5012,9 +5037,26 @@ function calc() {
         
         let goalWeightForUser = 0;
 
+        // --- REPLACEMENT BLOCK FOR calc() loop ---
         (g.assignments || []).forEach(a => {
             const t = a.target;
-            const weight = Number(a.weight) || 0;
+            let weight = Number(a.weight) || 0;
+
+            // 1. CHECK FOR DIVISION OVERRIDES (Same logic as above)
+            if (t.startsWith('DIV_') || t === userDiv) {
+                 const divName = t.replace('DIV_', '');
+                 if (g.division_weights && g.division_weights[divName]) {
+                     const cfg = g.division_weights[divName];
+                     if (cfg.managers && cfg.managers[userId] != null) {
+                         weight = Number(cfg.managers[userId]);
+                     } else {
+                         weight = Number(cfg.default_weight);
+                     }
+                 }
+            }
+
+            // 2. MATH FIX
+            if (weight > 1) weight = weight / 100;
 
             // CHECK 1: GLOBAL ASSIGNMENT
             if (t === 'GLOBAL_ALL') {
@@ -5025,14 +5067,15 @@ function calc() {
                 goalWeightForUser += weight;
             }
             // CHECK 3: DIVISION ASSIGNMENT
-            else if (t === `DIV_${userDiv}` || t === userDiv) { // Support legacy division names
+            else if (t === `DIV_${userDiv}` || t === userDiv) { 
                 goalWeightForUser += weight;
             }
             // CHECK 4: SPECIFIC USER/CHIEF ASSIGNMENT
-            else if (t === `ID_${userId}` || t === userId) { // Support legacy IDs
+            else if (t === `ID_${userId}` || t === userId) { 
                 goalWeightForUser += weight;
             }
         });
+        // -----------------------------------------
 
         // Apply score based on the accumulated weight for this goal
         if (goalWeightForUser > 0) {
