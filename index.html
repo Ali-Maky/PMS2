@@ -5020,17 +5020,14 @@ function calc() {
     if (!targetUser) return;
 
     // 1. Get User Profile Data
-    // w.s is the Shared Bucket (e.g. 5%)
-    // w.i is the Individual Bucket (e.g. 95%)
+    // w.s is the Shared Bucket (e.g. 5% or 10%)
     const w = getW(targetUser[COL.lvl], targetUser[COL.job]);
     const userDiv = (targetUser[COL.div] || "").trim();
     const userId = (targetUser[COL.id] || "").trim();
     const userComp = getCompany(userId);
 
     // ============================================================
-    // STEP 1: CALCULATE SHARED GOALS (Additive Mode)
-    // Formula: Sum of (Rating * Goal Weight)
-    // Example: (6 * 5%) + (6 * 5%) = 0.3 + 0.3 = 0.6 Score
+    // STEP 1: CALCULATE SHARED GOALS (Additive Mode with Cap)
     // ============================================================
     let sContrib = 0;
 
@@ -5072,17 +5069,22 @@ function calc() {
             // Math Fix: Ensure weight is decimal (5 -> 0.05)
             if (weightForGoal > 1) weightForGoal = weightForGoal / 100;
 
-            // *** ACCUMULATION ***
-            // We add this specific goal's score directly to the total.
-            // We DO NOT multiply by w.s later, because this weight IS the category weight.
+            // Additive Sum: (Rating * Weight)
             sContrib += rating * weightForGoal;
         }
     });
 
+    // --- CRITICAL FIX: CAP THE SCORE ---
+    // Ensure the result doesn't exceed the Employee's Category Weight.
+    // Example: For a Manager (10%), Max is 6 * 0.10 = 0.6.
+    // If goals add up to 0.7, it will stop at 0.6.
+    const sMax = 6 * (w.s / 100); 
+    if (sContrib > sMax) {
+        sContrib = sMax;
+    }
+
     // ============================================================
     // STEP 2: CALCULATE INDIVIDUAL GOALS
-    // Individual goals are relative. They sum to 100%, then we apply 
-    // the Individual Category Weight (w.i, e.g. 95%).
     // ============================================================
     let individualGoalScore = 0;
     
