@@ -20,31 +20,6 @@
 
     <!-- TAILWIND CSS SETUP -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    colors: {
-                        brand: {
-                            50: '#eef2ff',
-                            100: '#e0e7ff',
-                            500: '#6366f1', // Primary Indigo
-                            600: '#4f46e5',
-                            700: '#4338ca',
-                            900: '#312e81',
-                        },
-                        accent: {
-                            500: '#ec4899', // Pink
-                            600: '#db2777',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
     <style>
         /* Smooth scrolling */
         html {
@@ -1748,7 +1723,29 @@
 
 
     <script>
-
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1', // Primary Indigo
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        },
+                        accent: {
+                            500: '#ec4899', // Pink
+                            600: '#db2777',
+                        }
+                    }
+                }
+            }
+        };
         /* --- i18n (Optional Bilingual: EN/AR) ---
            This is intentionally lightweight to avoid changing system features.
            Add data-i18n="key" to elements you want translated.
