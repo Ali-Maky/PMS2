@@ -2881,6 +2881,19 @@
         // REPLACE THIS with your actual Railway PHP URL
         const API_URL = 'https://pms-back-production-b693.up.railway.app';
 
+        // SECURITY: XSS Protection Helper - defined early so it's available everywhere
+        function escapeHTML(str) {
+            if (!str) return "";
+            return str.toString().replace(/[&<>'"]/g,
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag]));
+        }
+
         // REPLACE THIS with the "API_SECRET" you set in Railway Variables
         // Shared Headers Helper (Ensures every request is authorized)
         // REPLACE THIS BLOCK
@@ -3384,7 +3397,7 @@
 
             } catch (e) {
                 console.error(e);
-                contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${e.message}</div>`;
+                contentDiv.innerHTML = `<div style="color:red; padding:20px;">Error: ${escapeHTML(e.message)}</div>`;
             }
         }
         async function restoreSession(id) {
@@ -3402,15 +3415,19 @@
         async function checkID() {
             const id = document.getElementById('inp-id').value.trim();
             const btn = document.getElementById('btn-check');
-            if (!id) return;
+            if (!id) {
+                showToast("Please enter your Employee ID", "error");
+                return;
+            }
 
             btn.innerText = "Checking...";
+            btn.disabled = true;
 
             try {
                 const res = await fetch(`${API_URL}?action=checkID`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) });
                 const data = await res.json();
 
-                if (data) {
+                if (data && data.id) {
                     user = data;
                     if (data.needs_setup) {
                         // Show Create Password UI
@@ -3436,10 +3453,17 @@
                         document.getElementById('grp-confirm').classList.add('hidden');
                         document.getElementById('btn-login').innerText = "Log In";
                     }
+                } else {
+                    // ID not found - show error message
+                    showToast("Employee ID not found. Please check and try again.", "error");
+                    btn.innerText = "Continue";
+                    btn.disabled = false;
                 }
             } catch (e) {
                 console.error(e);
+                showToast("Connection error. Please try again.", "error");
                 btn.innerText = "Continue";
+                btn.disabled = false;
             }
         }
         async function doLogin() {
@@ -3882,6 +3906,20 @@
                 (u[COL.name] || "").toLowerCase().includes(q) ||
                 (u[COL.div] || "").toLowerCase().includes(q)
             ).slice(0, 50);
+            
+            if (filtered.length === 0 && q.length > 0) {
+                document.getElementById('dir-tbody').innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align:center; padding:40px; color:var(--text-muted);">
+                            <i class="fa-solid fa-user-slash" style="font-size:2rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                            <div style="font-weight:600;">No Employee Found</div>
+                            <div style="font-size:0.85rem; margin-top:4px;">No results matching "${escapeHTML(q)}"</div>
+                        </td>
+                    </tr>`;
+                showToast("No employee found matching your search", "error");
+                return;
+            }
+            
             renderDirectoryTable(filtered);
         }
 
@@ -4290,7 +4328,7 @@
 
             } catch (e) {
                 console.error(e);
-                document.getElementById('admin-content').innerHTML = `<div style="color:red; padding:20px;">Error loading shared goals: ${e.message}</div>`;
+                document.getElementById('admin-content').innerHTML = `<div style="color:red; padding:20px;">Error loading shared goals: ${escapeHTML(e.message)}</div>`;
             }
         }
 
@@ -5690,13 +5728,28 @@
 
         async function doGlobalSearch() {
             const q = document.getElementById('search-q').value.trim().toLowerCase();
-            if (!q) return;
+            if (!q) {
+                showToast("Please enter an Employee ID or Name to search", "error");
+                return;
+            }
+            
             const results = allCompanyData.filter(r =>
                 (r[COL.id] && r[COL.id].toLowerCase().includes(q)) ||
                 (r[COL.name] && r[COL.name].toLowerCase().includes(q))
             ).slice(0, 10);
 
-            document.getElementById('search-results').innerHTML = results.map(r => `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);"><div><div style="font-weight:700;">${r[COL.name]}</div><div style="font-size:0.8rem; color:var(--text-muted);">${r[COL.id]} | ${r[COL.job] || 'Staff'}</div></div><button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px;" onclick="loadEval('${r[COL.id]}', true)">Open Scorecard</button></div>`).join('');
+            if (results.length === 0) {
+                document.getElementById('search-results').innerHTML = `
+                    <div style="padding:40px; text-align:center; color:var(--text-muted);">
+                        <i class="fa-solid fa-user-slash" style="font-size:2.5rem; opacity:0.3; margin-bottom:16px; display:block;"></i>
+                        <div style="font-weight:600; margin-bottom:8px;">No Employee Found</div>
+                        <div style="font-size:0.85rem;">No results matching "<strong>${escapeHTML(q)}</strong>". Please check the ID or name and try again.</div>
+                    </div>`;
+                showToast("Employee ID or Name not found", "error");
+                return;
+            }
+
+            document.getElementById('search-results').innerHTML = results.map(r => `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);"><div><div style="font-weight:700;">${escapeHTML(r[COL.name])}</div><div style="font-size:0.8rem; color:var(--text-muted);">${escapeHTML(r[COL.id])} | ${escapeHTML(r[COL.job] || 'Staff')}</div></div><button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px;" onclick="loadEval('${escapeHTML(r[COL.id])}', true)">Open Scorecard</button></div>`).join('');
         }
 
         async function approveSingle(id) {
@@ -7290,7 +7343,9 @@
             const c = document.getElementById('toast-container');
             const t = document.createElement('div');
             t.className = `toast ${type}`;
-            t.innerHTML = `<div class="toast-icon"><i class="fa-solid ${type == 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i></div><div class="toast-msg">${msg}</div>`;
+            // SECURITY: Auto-escape message to prevent XSS
+            const safeMsg = escapeHTML(msg);
+            t.innerHTML = `<div class="toast-icon"><i class="fa-solid ${type == 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i></div><div class="toast-msg">${safeMsg}</div>`;
             c.appendChild(t);
             // Force reflow
             void t.offsetWidth;
@@ -7396,17 +7451,6 @@
                 }
                 return false;
             });
-        }
-        function escapeHTML(str) {
-            if (!str) return "";
-            return str.toString().replace(/[&<>'"]/g,
-                tag => ({
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    "'": '&#39;',
-                    '"': '&quot;'
-                }[tag]));
         }
         document.addEventListener('click', (e) => {
             // 1. Check if the clicked element is our button
