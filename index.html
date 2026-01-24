@@ -1486,6 +1486,7 @@
             transition: var(--transition);
             position: relative;
             overflow: hidden;
+            cursor: pointer;
         }
 
         .info-item::before {
@@ -1510,6 +1511,47 @@
             opacity: 1;
         }
 
+        /* Expanded state for info-item */
+        .info-item.expanded {
+            background: linear-gradient(135deg, #f8fafc, #ffffff);
+            border-color: var(--primary);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .info-item.expanded::before {
+            opacity: 1;
+        }
+
+        .info-item.expanded .info-value {
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        /* Expand indicator */
+        .info-item .expand-indicator {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.7rem;
+            color: var(--text-light);
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .info-item:hover .expand-indicator {
+            opacity: 1;
+        }
+
+        .info-item.expanded .expand-indicator {
+            opacity: 1;
+            color: var(--primary);
+        }
+
+        .info-item.expanded .expand-indicator i {
+            transform: rotate(180deg);
+        }
+
         .info-icon {
             width: 48px;
             height: 48px;
@@ -1531,6 +1573,7 @@
         .info-content {
             flex: 1;
             min-width: 0;
+            padding-right: 24px;
         }
 
         .info-item label {
@@ -1550,6 +1593,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            transition: var(--transition);
         }
 
         .btn {
@@ -6450,49 +6494,55 @@
             </div>
 
             <div class="info-panel">
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon user"><i class="fa-solid fa-user"></i></div>
                     <div class="info-content">
                         <label>Employee Name</label>
-                        <div class="info-value">${data[COL.name]}</div>
+                        <div class="info-value">${escapeHTML(data[COL.name])}</div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon job"><i class="fa-solid fa-briefcase"></i></div>
                     <div class="info-content">
                         <label>Job Title</label>
-                        <div class="info-value">${data[COL.job] || '-'}</div>
+                        <div class="info-value">${escapeHTML(data[COL.job] || '-')}</div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon division"><i class="fa-solid fa-building"></i></div>
                     <div class="info-content">
                         <label>Division</label>
-                        <div class="info-value">${data[COL.div] || '-'}</div>
+                        <div class="info-value">${escapeHTML(data[COL.div] || '-')}</div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon manager"><i class="fa-solid fa-user-tie"></i></div>
                     <div class="info-content">
                         <label>Direct Manager</label>
-                        <div class="info-value">${mName}</div>
+                        <div class="info-value">${escapeHTML(mName)}</div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon id"><i class="fa-solid fa-id-badge"></i></div>
                     <div class="info-content">
                         <label>Manager ID</label>
                         <div class="info-value" style="font-family: 'SF Mono', Monaco, monospace; background:#f1f5f9; padding:4px 10px; border-radius:6px; font-size:0.9rem;">
-                            ${managerOnlyID || '-'}
+                            ${escapeHTML(managerOnlyID || '-')}
                         </div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
-                <div class="info-item">
+                <div class="info-item" onclick="this.classList.toggle('expanded')">
                     <div class="info-icon company"><i class="fa-solid fa-landmark"></i></div>
                     <div class="info-content">
                         <label>Company</label>
-                        <div class="info-value" style="color:var(--primary);">${comp}</div>
+                        <div class="info-value" style="color:var(--primary);">${escapeHTML(comp)}</div>
                     </div>
+                    <div class="expand-indicator"><i class="fa-solid fa-chevron-down"></i></div>
                 </div>
             </div>`;
 
