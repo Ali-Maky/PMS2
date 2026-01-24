@@ -2511,7 +2511,7 @@
     <div id="app-container">
         <aside class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
-                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>Performance Management System</span></div>
+                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>PMS</span></div>
                 <div class="notification-bell" onclick="toggleNotifications()">
                     <i class="fa-solid fa-bell"></i>
                     <span class="notification-badge" id="notification-count" style="display:none;">0</span>
@@ -3309,6 +3309,12 @@
         let hasDraft = false;
         let saveTimer;
         let chart1, chartAdmin, chartOrg;
+        
+        // --- CYCLE MANAGEMENT ---
+        let currentCycle = '2025';
+        let availableCycles = [];
+        let cycleInitialized = false;
+        
         const COL = {
             id: 'id',
             name: 'name',
@@ -3322,19 +3328,155 @@
             role: 'access_role',
             email: 'email',
             phone: 'phone_number',
-            pass: 'password'
+            pass: 'password',
+            cycle: 'cycle'
         };
         let adminCache = [];
         let allCompanyData = [];
         let globalReports = [];
         // --- EXISTING VARIABLES ---
         let draftSaveTimer; // <--- ADD THIS NEW VARIABLE for Shared Goals
+        
+        // --- CYCLE HELPER FUNCTIONS ---
+        async function loadCycles() {
+            try {
+                const res = await fetch(`${API_URL}?action=getCycles`, {
+                    method: 'POST',
+                    headers: API_HEADERS
+                });
+                const data = await res.json();
+                if (data.cycles) {
+                    availableCycles = data.cycles;
+                    currentCycle = data.current || '2025';
+                    cycleInitialized = true;
+                }
+            } catch (e) {
+                console.log('Cycle support not initialized, using default 2025');
+                currentCycle = '2025';
+                availableCycles = [{ cycle: '2025', status: 'active' }];
+            }
+        }
+
+        async function initCycleSupport() {
+            try {
+                const res = await fetch(`${API_URL}?action=initCycleSupport`, {
+                    method: 'POST',
+                    headers: API_HEADERS
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Cycle support initialized successfully', 'success');
+                    await loadCycles();
+                    return true;
+                } else {
+                    showToast(data.error || 'Failed to initialize cycle support', 'error');
+                    return false;
+                }
+            } catch (e) {
+                console.error('Init cycle error:', e);
+                showToast('Failed to initialize cycle support', 'error');
+                return false;
+            }
+        }
+
+        async function switchCycle(cycle) {
+            if (cycle === currentCycle) return;
+            
+            showSaving();
+            try {
+                const res = await fetch(`${API_URL}?action=switchCycle`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ cycle })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentCycle = cycle;
+                    // Clear cache and reload data for new cycle
+                    clearDataCache();
+                    allCompanyData = await fetchAllData(true);
+                    
+                    // Load shared goals for this cycle
+                    const sgId = cycle === '2025' ? SHARED_GOALS_ID : 'shared_goals_' + cycle;
+                    const { data: sg } = await db.from('company_settings').select('data').eq('id', sgId).single();
+                    if (sg && sg.data) {
+                        masterData = Array.isArray(sg.data) ? { rating: 0, goals: sg.data } : sg.data;
+                    } else {
+                        masterData = { rating: 0, goals: [] };
+                    }
+                    
+                    showToast(`Switched to ${cycle} cycle`, 'success');
+                    // Reload current view
+                    const role = getRole(user);
+                    if (role === 'Admin' || role === 'Master') loadHRAdmin();
+                } else {
+                    showToast(data.error || 'Failed to switch cycle', 'error');
+                }
+            } catch (e) {
+                console.error('Switch cycle error:', e);
+                showToast('Failed to switch cycle', 'error');
+            }
+            showSaved();
+        }
+
+        async function startNewCycle(newCycle) {
+            if (!newCycle || !/^\d{4}$/.test(newCycle)) {
+                showToast('Invalid cycle year. Use 4-digit year (e.g., 2026)', 'error');
+                return false;
+            }
+
+            showSaving();
+            try {
+                const res = await fetch(`${API_URL}?action=startNewCycle`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ cycle: newCycle })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Cycle ${newCycle} created successfully!`, 'success');
+                    await loadCycles();
+                    currentCycle = newCycle;
+                    clearDataCache();
+                    allCompanyData = await fetchAllData(true);
+                    masterData = { rating: 0, goals: [] };
+                    loadHRAdmin();
+                    return true;
+                } else {
+                    showToast(data.error || 'Failed to create new cycle', 'error');
+                    return false;
+                }
+            } catch (e) {
+                console.error('Start new cycle error:', e);
+                showToast('Failed to create new cycle', 'error');
+                return false;
+            } finally {
+                showSaved();
+            }
+        }
+
+        async function getEmployeeHistory(empId) {
+            try {
+                const res = await fetch(`${API_URL}?action=getEmployeeHistory`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ id: empId })
+                });
+                const data = await res.json();
+                return data.history || [];
+            } catch (e) {
+                console.error('Get employee history error:', e);
+                return [];
+            }
+        }
+
         // --- 2. INIT ---
         window.onload = async function () {
-            // OPTIMIZATION: Load settings and column mapping in parallel
+            // OPTIMIZATION: Load settings, column mapping, and cycles in parallel
             const [_, settingsResult] = await Promise.all([
                 mapColumns(),
-                db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single()
+                db.from('company_settings').select('data').eq('id', SHARED_GOALS_ID).single(),
+                loadCycles()
             ]);
             
             const sg = settingsResult.data;
@@ -3863,9 +4005,20 @@
                 <div class="admin-tab" id="tab-perm" onclick="switchAdminTab('perm')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-shield-halved"></i> <span>Admins</span>
                 </div>
+                <div class="admin-tab" id="tab-cycle" onclick="switchAdminTab('cycle')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-calendar-days"></i> <span>Cycles</span>
+                </div>
                 <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
                 </div>
+            </div>
+            
+            <!-- Cycle Selector Badge -->
+            <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+                <div style="font-size:0.8rem; color:var(--text-muted);">Current Cycle:</div>
+                <select id="cycle-selector" onchange="switchCycle(this.value)" style="padding:8px 16px; border-radius:8px; border:2px solid var(--primary); background:var(--primary-light); font-weight:700; color:var(--primary); cursor:pointer;">
+                    ${availableCycles.map(c => `<option value="${c.cycle}" ${c.cycle === currentCycle ? 'selected' : ''}>${c.cycle} ${c.status === 'active' ? '(Active)' : ''}</option>`).join('')}
+                </select>
             </div>
         </div>
 
@@ -3905,7 +4058,247 @@
             else if (t === 'app') loadHRApprovals();         // Only Pending Approvals
             else if (t === 'bulk') loadAdminBulk();
             else if (t === 'perm') loadAdminPerms();
+            else if (t === 'cycle') loadCycleManagement();   // Cycle Management
             else if (t === 'search') loadAdminSearch();
+        }
+        
+        // --- CYCLE MANAGEMENT TAB ---
+        async function loadCycleManagement() {
+            // Load cycles if not already loaded
+            if (!cycleInitialized) await loadCycles();
+            
+            const content = `
+            <div class="animate-in">
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.2rem; font-weight:700;"><i class="fa-solid fa-calendar-days" style="color:var(--primary); margin-right:8px;"></i>Performance Cycle Management</h3>
+                            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">Manage performance review cycles and historical records.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="showNewCycleModal()">
+                            <i class="fa-solid fa-plus"></i> &nbsp; Start New Cycle
+                        </button>
+                    </div>
+                    
+                    <!-- Current Cycle Info -->
+                    <div style="background:linear-gradient(135deg, var(--primary), var(--primary-dark)); color:white; padding:24px; border-radius:16px; margin-bottom:24px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                            <div>
+                                <div style="font-size:0.8rem; opacity:0.8; text-transform:uppercase; letter-spacing:1px;">Active Cycle</div>
+                                <div style="font-size:2.5rem; font-weight:800;">${currentCycle}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.8rem; opacity:0.8;">Total Employees</div>
+                                <div style="font-size:1.5rem; font-weight:700;">${allCompanyData.length}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Initialize Cycle Support (if needed) -->
+                    ${!cycleInitialized ? `
+                    <div style="background:#fef3c7; border:1px solid #fbbf24; padding:20px; border-radius:12px; margin-bottom:24px;">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <i class="fa-solid fa-triangle-exclamation" style="color:#d97706; font-size:1.5rem;"></i>
+                            <div>
+                                <div style="font-weight:700; color:#92400e;">Cycle Support Not Initialized</div>
+                                <div style="font-size:0.9rem; color:#a16207;">Click below to enable multi-cycle support for your system.</div>
+                            </div>
+                            <button class="btn btn-primary" style="margin-left:auto; background:#d97706;" onclick="initCycleSupport().then(() => loadCycleManagement())">
+                                <i class="fa-solid fa-bolt"></i> &nbsp; Initialize
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Cycles List -->
+                    <h4 style="margin:0 0 16px 0; font-size:1rem; font-weight:700;">All Performance Cycles</h4>
+                    <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;">
+                        <table class="report-table" style="margin:0;">
+                            <thead style="background:#f8fafc;">
+                                <tr>
+                                    <th style="padding:16px 24px;">CYCLE YEAR</th>
+                                    <th style="padding:16px 24px;">STATUS</th>
+                                    <th style="padding:16px 24px;">EMPLOYEES</th>
+                                    <th style="padding:16px 24px;">COMPLETION</th>
+                                    <th style="padding:16px 24px; text-align:right;">ACTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cycles-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Historical Records Section -->
+                <div class="card">
+                    <h3 style="margin:0 0 16px 0; font-size:1.1rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary); margin-right:8px;"></i>Employee History Lookup</h3>
+                    <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:20px;">View an employee's performance history across all cycles.</p>
+                    
+                    <div style="display:flex; gap:12px; margin-bottom:20px;">
+                        <input id="history-emp-id" class="login-input" style="margin:0; flex:1; max-width:300px;" placeholder="Enter Employee ID (e.g., ZIQ...)">
+                        <button class="btn btn-primary" onclick="loadEmployeeHistoryView()">
+                            <i class="fa-solid fa-search"></i> &nbsp; View History
+                        </button>
+                    </div>
+                    
+                    <div id="employee-history-results"></div>
+                </div>
+            </div>`;
+            
+            document.getElementById('admin-content').innerHTML = content;
+            
+            // Load cycles into table
+            renderCyclesTable();
+        }
+
+        async function renderCyclesTable() {
+            const tbody = document.getElementById('cycles-tbody');
+            if (!tbody) return;
+            
+            if (availableCycles.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">No cycles found. Initialize cycle support to begin.</td></tr>`;
+                return;
+            }
+
+            let rows = '';
+            for (const cycle of availableCycles) {
+                // Get stats for this cycle
+                const cycleData = allCompanyData.filter(u => !u.cycle || u.cycle === cycle.cycle);
+                const total = cycleData.length;
+                const completed = cycleData.filter(u => ['Approved', 'Published'].includes(u[COL.stat])).length;
+                const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+                
+                const isActive = cycle.status === 'active';
+                const isCurrent = cycle.cycle === currentCycle;
+                
+                rows += `
+                <tr>
+                    <td style="font-weight:700; font-size:1.1rem;">
+                        ${cycle.cycle}
+                        ${isActive ? '<span style="background:var(--success); color:white; font-size:0.65rem; padding:2px 8px; border-radius:10px; margin-left:8px;">ACTIVE</span>' : ''}
+                        ${isCurrent ? '<span style="background:var(--primary); color:white; font-size:0.65rem; padding:2px 8px; border-radius:10px; margin-left:8px;">VIEWING</span>' : ''}
+                    </td>
+                    <td>
+                        <span style="background:${isActive ? '#d1fae5' : '#f1f5f9'}; color:${isActive ? '#059669' : '#64748b'}; padding:4px 12px; border-radius:20px; font-size:0.8rem; font-weight:600;">
+                            ${isActive ? 'Active' : 'Archived'}
+                        </span>
+                    </td>
+                    <td style="font-weight:600;">${total}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="flex:1; max-width:100px; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden;">
+                                <div style="width:${completionRate}%; height:100%; background:${completionRate >= 80 ? 'var(--success)' : completionRate >= 50 ? 'var(--warning)' : 'var(--danger)'};"></div>
+                            </div>
+                            <span style="font-weight:600; font-size:0.9rem;">${completionRate}%</span>
+                        </div>
+                    </td>
+                    <td style="text-align:right;">
+                        ${!isCurrent ? `<button class="btn btn-outline" style="padding:6px 12px; font-size:0.8rem;" onclick="switchCycle('${cycle.cycle}')"><i class="fa-solid fa-eye"></i> View</button>` : `<span style="color:var(--text-muted); font-size:0.85rem;"><i class="fa-solid fa-check-circle"></i> Current</span>`}
+                    </td>
+                </tr>`;
+            }
+            
+            tbody.innerHTML = rows;
+        }
+
+        function showNewCycleModal() {
+            const currentYear = new Date().getFullYear();
+            const nextYear = currentYear + 1;
+            
+            showConfirm(
+                'Start New Performance Cycle',
+                `This will create a new ${nextYear} cycle. All employee scorecards will be reset to "Draft" status with empty goals. The ${currentCycle} data will be preserved as historical records. Continue?`,
+                `Create ${nextYear} Cycle`,
+                'primary',
+                () => startNewCycle(nextYear.toString())
+            );
+        }
+
+        async function loadEmployeeHistoryView() {
+            const empId = document.getElementById('history-emp-id').value.trim();
+            if (!empId) {
+                showToast('Please enter an Employee ID', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('employee-history-results');
+            resultsDiv.innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
+
+            try {
+                const history = await getEmployeeHistory(empId);
+                
+                if (history.length === 0) {
+                    resultsDiv.innerHTML = `
+                        <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                            <i class="fa-solid fa-user-slash" style="font-size:2rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                            <div>No history found for Employee ID: <strong>${escapeHTML(empId)}</strong></div>
+                        </div>`;
+                    return;
+                }
+
+                const emp = history[0];
+                let html = `
+                    <div style="background:#f8fafc; padding:20px; border-radius:12px; margin-bottom:20px;">
+                        <div style="font-size:1.2rem; font-weight:700;">${escapeHTML(emp.name || 'Unknown')}</div>
+                        <div style="color:var(--text-muted); font-size:0.9rem;">${escapeHTML(emp.job || 'N/A')} | ${escapeHTML(emp.division || 'N/A')}</div>
+                    </div>
+                    
+                    <div style="display:grid; gap:16px;">
+                `;
+
+                for (const record of history) {
+                    const goals = typeof record.goals === 'string' ? JSON.parse(record.goals || '[]') : (record.goals || []);
+                    const status = record.status || 'Draft';
+                    const cycle = record.cycle || '2025';
+                    
+                    // Calculate score if goals exist
+                    let score = 0;
+                    if (goals.length > 0) {
+                        const totalWeight = goals.reduce((sum, g) => sum + (parseFloat(g.weight) || 0), 0);
+                        if (totalWeight > 0) {
+                            score = goals.reduce((sum, g) => sum + ((parseFloat(g.rating) || 0) * (parseFloat(g.weight) || 0)), 0) / totalWeight;
+                        }
+                    }
+                    
+                    let rating = '-';
+                    if (score >= 5.5) rating = 'ASTRONAUT';
+                    else if (score >= 4.5) rating = 'FLYER';
+                    else if (score >= 3.5) rating = 'RUNNER';
+                    else if (score >= 2.5) rating = 'WALKER';
+                    else if (score >= 1.5) rating = 'STAGNANT';
+                    else if (score > 0) rating = 'IDLE';
+
+                    html += `
+                        <div style="background:white; border:1px solid var(--border); border-radius:12px; padding:20px; ${cycle === currentCycle ? 'border-left:4px solid var(--primary);' : ''}">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div style="font-size:1.3rem; font-weight:800; color:var(--primary);">${cycle}</div>
+                                <span style="background:${status === 'Published' ? '#d1fae5' : status === 'Approved' ? '#dbeafe' : '#f1f5f9'}; color:${status === 'Published' ? '#059669' : status === 'Approved' ? '#2563eb' : '#64748b'}; padding:4px 12px; border-radius:20px; font-size:0.75rem; font-weight:600;">
+                                    ${escapeHTML(status)}
+                                </span>
+                            </div>
+                            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;">
+                                <div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Score</div>
+                                    <div style="font-size:1.5rem; font-weight:800;">${score > 0 ? score.toFixed(2) : '-'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Rating</div>
+                                    <div style="font-size:1rem; font-weight:700;">${rating}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Goals</div>
+                                    <div style="font-size:1rem; font-weight:600;">${goals.length} objectives</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+            } catch (e) {
+                console.error('Error loading history:', e);
+                resultsDiv.innerHTML = `<div style="color:var(--danger); padding:20px;">Error loading history: ${escapeHTML(e.message)}</div>`;
+            }
         }
         // --- DIRECTORY TAB (ADD/EDIT/DELETE USERS) ---
         async function loadAdminDirectory() {
@@ -7386,6 +7779,142 @@
         function setActiveNav(el) {
             document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
             el.classList.add('active');
+        }
+
+        // --- PERFORMANCE HISTORY MODAL ---
+        async function showHistory(empId) {
+            // Create and show modal
+            let modal = document.getElementById('history-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'history-modal';
+                modal.innerHTML = `
+                    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+                        <div style="background:white; width:90%; max-width:700px; max-height:90vh; border-radius:20px; overflow:hidden; display:flex; flex-direction:column;">
+                            <div style="padding:24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                                <h3 style="margin:0; font-size:1.3rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary); margin-right:10px;"></i>Performance History</h3>
+                                <button onclick="document.getElementById('history-modal').remove()" style="background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--text-muted);">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div id="history-modal-content" style="padding:24px; overflow-y:auto; flex:1;"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } else {
+                modal.style.display = 'block';
+            }
+
+            const contentDiv = document.getElementById('history-modal-content');
+            contentDiv.innerHTML = '<div class="spinner" style="margin:40px auto;"></div>';
+
+            try {
+                const history = await getEmployeeHistory(empId);
+                
+                if (history.length === 0) {
+                    contentDiv.innerHTML = `
+                        <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+                            <i class="fa-solid fa-folder-open" style="font-size:3rem; opacity:0.3; margin-bottom:16px; display:block;"></i>
+                            <div style="font-weight:600;">No Historical Records</div>
+                            <div style="font-size:0.9rem; margin-top:8px;">This is the first performance cycle for this employee.</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const emp = history[0];
+                let html = `
+                    <div style="background:linear-gradient(135deg, #f8fafc, #ffffff); padding:20px; border-radius:12px; margin-bottom:24px; border:1px solid var(--border);">
+                        <div style="font-size:1.3rem; font-weight:700; color:var(--text-main);">${escapeHTML(emp.name || 'Unknown Employee')}</div>
+                        <div style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">${escapeHTML(emp.job || 'N/A')} • ${escapeHTML(emp.division || 'N/A')}</div>
+                    </div>
+                    
+                    <div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; font-weight:700;">
+                        ${history.length} Cycle${history.length > 1 ? 's' : ''} Found
+                    </div>
+                `;
+
+                for (const record of history) {
+                    const goals = typeof record.goals === 'string' ? JSON.parse(record.goals || '[]') : (record.goals || []);
+                    const status = record.status || 'Draft';
+                    const cycle = record.cycle || '2025';
+                    
+                    // Calculate score
+                    let score = 0;
+                    let indivScore = 0;
+                    if (goals.length > 0) {
+                        const totalWeight = goals.reduce((sum, g) => sum + (parseFloat(g.weight) || 0), 0);
+                        if (totalWeight > 0) {
+                            indivScore = goals.reduce((sum, g) => sum + ((parseFloat(g.rating) || 0) * (parseFloat(g.weight) || 0)), 0);
+                        }
+                    }
+                    
+                    // This is simplified - in reality would need shared goals too
+                    score = indivScore;
+                    
+                    let rating = '-';
+                    let ratingColor = '#94a3b8';
+                    if (score >= 5.5) { rating = 'ASTRONAUT'; ratingColor = '#0f766e'; }
+                    else if (score >= 4.5) { rating = 'FLYER'; ratingColor = '#10b981'; }
+                    else if (score >= 3.5) { rating = 'RUNNER'; ratingColor = '#3b82f6'; }
+                    else if (score >= 2.5) { rating = 'WALKER'; ratingColor = '#f59e0b'; }
+                    else if (score >= 1.5) { rating = 'STAGNANT'; ratingColor = '#ef4444'; }
+                    else if (score > 0) { rating = 'IDLE'; ratingColor = '#94a3b8'; }
+
+                    const isCurrentCycle = cycle === currentCycle;
+                    const isPublished = status === 'Published' || status === 'Approved';
+
+                    html += `
+                        <div style="background:white; border:1px solid ${isCurrentCycle ? 'var(--primary)' : 'var(--border)'}; border-radius:16px; padding:20px; margin-bottom:16px; ${isCurrentCycle ? 'box-shadow:0 4px 15px rgba(13,148,136,0.15);' : ''}">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+                                <div>
+                                    <div style="font-size:1.8rem; font-weight:800; color:${isCurrentCycle ? 'var(--primary)' : 'var(--text-main)'};">
+                                        ${cycle}
+                                        ${isCurrentCycle ? '<span style="font-size:0.6rem; background:var(--primary); color:white; padding:3px 8px; border-radius:10px; margin-left:8px; vertical-align:middle;">CURRENT</span>' : ''}
+                                    </div>
+                                </div>
+                                <span style="background:${isPublished ? '#d1fae5' : '#f1f5f9'}; color:${isPublished ? '#059669' : '#64748b'}; padding:6px 14px; border-radius:20px; font-size:0.8rem; font-weight:600;">
+                                    ${escapeHTML(status)}
+                                </span>
+                            </div>
+                            
+                            ${isPublished ? `
+                            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; background:#f8fafc; padding:16px; border-radius:12px;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Final Score</div>
+                                    <div style="font-size:2rem; font-weight:800; color:var(--text-main);">${score > 0 ? score.toFixed(2) : '-'}</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Rating</div>
+                                    <div style="font-size:1.1rem; font-weight:800; color:${ratingColor}; margin-top:8px;">${rating}</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Objectives</div>
+                                    <div style="font-size:2rem; font-weight:800; color:var(--text-main);">${goals.length}</div>
+                                </div>
+                            </div>
+                            ` : `
+                            <div style="text-align:center; padding:20px; color:var(--text-muted); background:#f8fafc; border-radius:12px;">
+                                <i class="fa-solid fa-lock" style="font-size:1.5rem; opacity:0.3; margin-bottom:8px; display:block;"></i>
+                                <div style="font-size:0.9rem;">Results will be visible after publishing</div>
+                            </div>
+                            `}
+                        </div>
+                    `;
+                }
+
+                contentDiv.innerHTML = html;
+            } catch (e) {
+                console.error('Error loading history:', e);
+                contentDiv.innerHTML = `
+                    <div style="text-align:center; padding:40px; color:var(--danger);">
+                        <i class="fa-solid fa-exclamation-triangle" style="font-size:2rem; margin-bottom:12px; display:block;"></i>
+                        <div>Error loading history</div>
+                        <div style="font-size:0.85rem; margin-top:8px;">${escapeHTML(e.message)}</div>
+                    </div>
+                `;
+            }
         }
 
         // --- GLOBAL UI HELPERS ---
