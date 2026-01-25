@@ -6044,13 +6044,8 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                // FIXED CALCULATION: Each goal contributes (rating * weight) where rating is 0-6
-                // and weight is the goal's percentage (should sum to 1.0 for all goals)
-                // The individual score should be scaled so max possible = w.i
-                // Formula: (sum of rating*weight / 6) * w.i
                 userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                // Scale iScore: if all goals rated 6 with weights=1.0, iScore=6, then (6/6)*w.i = w.i
-                let total = sScore + ((iScore / 6) * w.i);
+                let total = sScore + (iScore * (w.i / 100));
                 
                 let rating = "N/A";
                 if (total >= 5.5) rating = "ASTRONAUT";
@@ -6241,9 +6236,8 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
                 userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                let total = sScore + ((iScore / 6) * w.i);
+                let total = sScore + (iScore * (w.i / 100));
                 
                 let rating = "N/A";
                 if (total >= 5.5) rating = "ASTRONAUT";
@@ -6492,10 +6486,9 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
                 userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
 
-                let total = sScore + ((iScore / 6) * w.i);
+                let total = sScore + (iScore * (w.i / 100));
 
                 let lbl = "-";
                 if (total >= 5.5) lbl = "ASTRONAUT";
@@ -6555,10 +6548,8 @@
                 if (!Array.isArray(userGoals)) userGoals = [];
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
-                let iScore = 0; 
-                // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
-                userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                let total = sScore + ((iScore / 6) * w.i);
+                let iScore = 0; userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
+                let total = sScore + (iScore * (w.i / 100));
                 let b = 0; if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                 dist[b]++;
             });
@@ -7019,9 +7010,8 @@
                     let w = getW(u[COL.lvl], u[COL.job]);
                     let sScore = globalRating * (w.s / 100);
                     let iScore = 0;
-                    // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
                     if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
-                    let total = sScore + ((iScore / 6) * w.i);
+                    let total = sScore + (iScore * (w.i / 100));
                     let b = 0;
                     if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                     d[b]++;
@@ -7078,10 +7068,9 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = (masterData.rating || 0) * (w.s / 100);
                 let iScore = 0;
-                // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
                 if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
 
-                let total = sScore + ((iScore / 6) * w.i);
+                let total = sScore + (iScore * (w.i / 100));
 
                 // Determine Level for Color
                 let lvl = 0;
@@ -7257,9 +7246,8 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                // FIXED: Scale individual score properly (max rating is 6, max contribution is w.i)
                 if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
-                let total = sScore + ((iScore / 6) * w.i);
+                let total = sScore + (iScore * (w.i / 100));
                 let b = 0;
                 if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                 dist[b]++;
@@ -8061,12 +8049,16 @@
                     const effectiveWeight = rawWeight * indivScaleFactor;
 
                     individualGoalScore += rating * effectiveWeight;
+                    
+                    // DEBUG: Log each goal's contribution
+                    console.log(`Goal: ${g.title}, Weight: ${rawWeight}, Rating: ${rating}, Contribution: ${rating * effectiveWeight}`);
                 });
             }
+            
+            console.log(`Total individualGoalScore: ${individualGoalScore}, w.i: ${w.i}, iContrib: ${individualGoalScore * (w.i / 100)}`);
 
             // D. Apply Category Weight (e.g. 95% or 0.95)
-            // FIXED: Scale by max rating (6) first, then apply allocation
-            const iContrib = (individualGoalScore / 6) * w.i;
+            const iContrib = individualGoalScore * (w.i / 100);
 
             // ============================================================
             // STEP 3: FINAL TOTAL & UI UPDATE
@@ -8477,18 +8469,15 @@
                     // Calculate score
                     let score = 0;
                     let indivScore = 0;
-                    let w = { s: 0, i: 100 }; // Simplified for history view - assuming mostly individual
                     if (goals.length > 0) {
                         const totalWeight = goals.reduce((sum, g) => sum + (parseFloat(g.weight) || 0), 0);
                         if (totalWeight > 0) {
-                            // FIXED: Calculate raw score and scale by max rating (6)
                             indivScore = goals.reduce((sum, g) => sum + ((parseFloat(g.rating) || 0) * (parseFloat(g.weight) || 0)), 0);
                         }
                     }
                     
-                    // FIXED: Scale score properly - if max rating is 6, scale to allocation
                     // This is simplified - in reality would need shared goals too
-                    score = (indivScore / 6) * w.i;
+                    score = indivScore;
                     
                     let rating = '-';
                     let ratingColor = '#94a3b8';
