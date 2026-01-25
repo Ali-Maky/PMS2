@@ -2511,7 +2511,7 @@
     <div id="app-container">
         <aside class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
-                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>PMS</span></div>
+                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>Performance Management System</span></div>
                 <div class="notification-bell" onclick="toggleNotifications()">
                     <i class="fa-solid fa-bell"></i>
                     <span class="notification-badge" id="notification-count" style="display:none;">0</span>
@@ -4895,20 +4895,43 @@
                         return;
                     }
 
+                    // Validate employee IDs exist in system
+                    const validEmpIds = [];
+                    const invalidEmpIds = [];
+                    
+                    empIds.forEach(eid => {
+                        const exists = allCompanyData.some(u => u[COL.id] === eid);
+                        if (exists) {
+                            validEmpIds.push(eid);
+                        } else {
+                            invalidEmpIds.push(eid);
+                        }
+                    });
+
+                    if (validEmpIds.length === 0) {
+                        alert(`Import Error: None of the ${empIds.length} Employee IDs were found in the system.\n\nFirst few IDs tried: ${empIds.slice(0, 5).join(', ')}`);
+                        return;
+                    }
+
                     // Count how many have ratings
                     let ratedCount = 0;
                     let totalGoals = 0;
-                    empIds.forEach(eid => {
+                    validEmpIds.forEach(eid => {
                         grouped[eid].forEach(g => {
                             totalGoals++;
                             if (g.rating > 0) ratedCount++;
                         });
                     });
 
-                    const confirmMsg = `Importing ${totalGoals} objectives for ${empIds.length} employees.\n\n` +
+                    let confirmMsg = `Importing ${totalGoals} objectives for ${validEmpIds.length} employees.\n\n` +
                         `📊 Ratings found: ${ratedCount} / ${totalGoals}\n` +
-                        `📋 Status updates: ${Object.keys(statusMap).length} employees\n\n` +
-                        `Proceed with import?`;
+                        `📋 Status updates: ${Object.keys(statusMap).filter(id => validEmpIds.includes(id)).length} employees\n`;
+                    
+                    if (invalidEmpIds.length > 0) {
+                        confirmMsg += `\n⚠️ ${invalidEmpIds.length} Employee IDs not found (will be skipped):\n${invalidEmpIds.slice(0, 5).join(', ')}${invalidEmpIds.length > 5 ? '...' : ''}\n`;
+                    }
+                    
+                    confirmMsg += `\nProceed with import?`;
 
                     if (!confirm(confirmMsg)) return;
 
@@ -4918,29 +4941,57 @@
                     const CHUNK_SIZE = 20;
                     let success = 0;
                     let fail = 0;
+                    const failedIds = [];
 
-                    for (let i = 0; i < empIds.length; i += CHUNK_SIZE) {
-                        const chunk = empIds.slice(i, i + CHUNK_SIZE);
+                    for (let i = 0; i < validEmpIds.length; i += CHUNK_SIZE) {
+                        const chunk = validEmpIds.slice(i, i + CHUNK_SIZE);
 
-                        document.getElementById('save-text').innerText = `Processing ${i} / ${empIds.length}...`;
+                        document.getElementById('save-text').innerText = `Processing ${i} / ${validEmpIds.length}...`;
 
-                        const promises = chunk.map(eid => {
-                            const updateData = { goals: grouped[eid] };
+                        const promises = chunk.map(async eid => {
+                            // Build the payload with goals
+                            const payload = {
+                                id: eid,
+                                goals: grouped[eid]
+                            };
                             
                             // Add status if available
                             if (statusMap[eid]) {
-                                updateData[COL.stat] = statusMap[eid];
+                                payload.status = statusMap[eid];
                             }
 
-                            return db.from('active_list')
-                                .update(updateData)
-                                .eq(COL.id, eid);
+                            try {
+                                const res = await fetch(`${API_URL}?action=saveUser`, {
+                                    method: 'POST',
+                                    headers: API_HEADERS,
+                                    body: JSON.stringify({ payload: payload })
+                                });
+                                
+                                if (res.status === 401 || res.status === 403) {
+                                    handleSessionExpired();
+                                    return { error: { message: "Session expired" }, eid };
+                                }
+                                
+                                if (!res.ok) {
+                                    const txt = await res.text();
+                                    return { error: { message: txt || "Update failed" }, eid };
+                                }
+                                return { error: null, eid };
+                            } catch (e) {
+                                return { error: e, eid };
+                            }
                         });
 
                         const results = await Promise.all(promises);
 
                         results.forEach(res => {
-                            if (!res.error) success++; else fail++;
+                            if (!res.error) {
+                                success++;
+                            } else {
+                                fail++;
+                                failedIds.push(res.eid);
+                                console.error(`Failed to update ${res.eid}:`, res.error);
+                            }
                         });
                     }
                     // --- CHUNKING LOGIC END ---
@@ -4948,7 +4999,17 @@
                     showSaved();
                     clearDataCache();
                     
-                    alert(`Import Finished!\n✅ Updated: ${success} employees\n❌ Failed: ${fail}\n\n📊 ${ratedCount} ratings imported`);
+                    let resultMsg = `Import Finished!\n✅ Updated: ${success} employees\n❌ Failed: ${fail}\n\n📊 ${ratedCount} ratings imported`;
+                    
+                    if (failedIds.length > 0) {
+                        resultMsg += `\n\nFailed IDs: ${failedIds.slice(0, 10).join(', ')}${failedIds.length > 10 ? '...' : ''}`;
+                    }
+                    
+                    if (invalidEmpIds.length > 0) {
+                        resultMsg += `\n\nSkipped (not found): ${invalidEmpIds.length} IDs`;
+                    }
+                    
+                    alert(resultMsg);
                     allCompanyData = await fetchAllData();
                     inp.value = '';
 
@@ -8644,4 +8705,4 @@
     </style>
 </body>
 
-</html>
+</html>FFFFFFFFF
