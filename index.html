@@ -3497,6 +3497,87 @@
         // --- EXISTING VARIABLES ---
         let draftSaveTimer; // <--- ADD THIS NEW VARIABLE for Shared Goals
         
+        // --- WEIGHT CONFIGURATION ---
+        const WEIGHT_CONFIG_ID = 'weight_config_v1';
+        let weightConfigurations = {}; // Will store per-company weight configs
+        
+        // Default weight configuration (fallback)
+        const DEFAULT_WEIGHT_CONFIG = {
+            'Zain Iraq': {
+                rules: [
+                    { type: 'title', match: 'ceo', shared: 100, individual: 0, priority: 1 },
+                    { type: 'title', match: 'chief executive officer', shared: 100, individual: 0, priority: 1 },
+                    { type: 'title', match: 'cfo', shared: 50, individual: 50, priority: 2 },
+                    { type: 'title', match: 'chief financial officer', shared: 50, individual: 50, priority: 2 },
+                    { type: 'title', match: 'cco', shared: 30, individual: 70, priority: 3 },
+                    { type: 'title', match: 'cto', shared: 30, individual: 70, priority: 3 },
+                    { type: 'title', match: 'chief', shared: 20, individual: 80, priority: 4 },
+                    { type: 'level', match: 'L1', shared: 20, individual: 80, priority: 5 },
+                    { type: 'level', match: 'L2', shared: 15, individual: 85, priority: 6 },
+                    { type: 'level', match: 'L3', shared: 10, individual: 90, priority: 7 },
+                    { type: 'level', match: 'L4', shared: 10, individual: 90, priority: 8 },
+                    { type: 'default', match: '*', shared: 5, individual: 95, priority: 99 }
+                ]
+            },
+            'Horizon': {
+                rules: [
+                    { type: 'title', match: 'ceo', shared: 100, individual: 0, priority: 1 },
+                    { type: 'title', match: 'chief', shared: 20, individual: 80, priority: 4 },
+                    { type: 'level', match: 'L1', shared: 20, individual: 80, priority: 5 },
+                    { type: 'level', match: 'L2', shared: 15, individual: 85, priority: 6 },
+                    { type: 'level', match: 'L3', shared: 10, individual: 90, priority: 7 },
+                    { type: 'level', match: 'L4', shared: 10, individual: 90, priority: 8 },
+                    { type: 'default', match: '*', shared: 5, individual: 95, priority: 99 }
+                ]
+            },
+            'Next Generation': {
+                rules: [
+                    { type: 'title', match: 'ceo', shared: 100, individual: 0, priority: 1 },
+                    { type: 'title', match: 'chief', shared: 20, individual: 80, priority: 4 },
+                    { type: 'level', match: 'L1', shared: 20, individual: 80, priority: 5 },
+                    { type: 'level', match: 'L2', shared: 15, individual: 85, priority: 6 },
+                    { type: 'level', match: 'L3', shared: 10, individual: 90, priority: 7 },
+                    { type: 'level', match: 'L4', shared: 10, individual: 90, priority: 8 },
+                    { type: 'default', match: '*', shared: 5, individual: 95, priority: 99 }
+                ]
+            }
+        };
+        
+        // Load weight configurations from database
+        async function loadWeightConfigurations() {
+            try {
+                const { data, error } = await db.from('company_settings').select('data').eq('id', WEIGHT_CONFIG_ID).single();
+                if (data && data.data) {
+                    weightConfigurations = data.data;
+                    console.log('Weight configurations loaded from DB');
+                } else {
+                    weightConfigurations = JSON.parse(JSON.stringify(DEFAULT_WEIGHT_CONFIG));
+                    console.log('Using default weight configurations');
+                }
+            } catch (e) {
+                console.log('Weight config not found, using defaults');
+                weightConfigurations = JSON.parse(JSON.stringify(DEFAULT_WEIGHT_CONFIG));
+            }
+        }
+        
+        // Save weight configurations to database
+        async function saveWeightConfigurations() {
+            try {
+                const { error } = await db.from('company_settings').upsert({
+                    id: WEIGHT_CONFIG_ID,
+                    data: weightConfigurations
+                });
+                if (error) {
+                    console.error('Failed to save weight config:', error);
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.error('Error saving weight config:', e);
+                return false;
+            }
+        }
+        
         // --- CYCLE HELPER FUNCTIONS ---
         async function loadCycles() {
             try {
@@ -4052,6 +4133,9 @@
             document.getElementById('disp-user').innerText = user[COL.name];
             document.getElementById('disp-role').innerText = user[COL.lvl];
 
+            // --- LOAD WEIGHT CONFIGURATIONS ---
+            await loadWeightConfigurations();
+
             // --- SPEED OPTIMIZATION START ---
             // 1. Try to load from session cache first (Instant Load)
             const cachedData = sessionStorage.getItem(DATA_CACHE_KEY);
@@ -4195,6 +4279,9 @@
                 <div class="admin-tab" id="tab-cycle" onclick="switchAdminTab('cycle')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-calendar-days"></i> <span>Cycles</span>
                 </div>
+                <div class="admin-tab" id="tab-weights" onclick="switchAdminTab('weights')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-sliders"></i> <span>Weights</span>
+                </div>
                 <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
                 </div>
@@ -4246,6 +4333,7 @@
             else if (t === 'bulk') loadAdminBulk();
             else if (t === 'perm') loadAdminPerms();
             else if (t === 'cycle') loadCycleManagement();   // Cycle Management
+            else if (t === 'weights') loadWeightConfiguration(); // Weight Configuration
             else if (t === 'search') loadAdminSearch();
         }
         
@@ -4487,6 +4575,479 @@
                 resultsDiv.innerHTML = `<div style="color:var(--danger); padding:20px;">Error loading history: ${escapeHTML(e.message)}</div>`;
             }
         }
+        
+        // --- WEIGHT CONFIGURATION TAB ---
+        async function loadWeightConfiguration() {
+            // Ensure weight configurations are loaded
+            if (Object.keys(weightConfigurations).length === 0) {
+                await loadWeightConfigurations();
+            }
+            
+            const companies = ['Zain Iraq', 'Horizon', 'Next Generation'];
+            
+            let html = `
+            <div class="animate-in">
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.2rem; font-weight:700;">
+                                <i class="fa-solid fa-sliders" style="color:var(--primary); margin-right:8px;"></i>
+                                Weight Configuration
+                            </h3>
+                            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">
+                                Configure Shared vs Individual goal weights per company, level, or job title.
+                            </p>
+                        </div>
+                        <button class="btn btn-outline" onclick="resetWeightConfigToDefaults()">
+                            <i class="fa-solid fa-rotate-left"></i> &nbsp; Reset to Defaults
+                        </button>
+                    </div>
+                    
+                    <!-- Info Banner -->
+                    <div style="background:linear-gradient(135deg, #dbeafe, #eff6ff); border:1px solid #93c5fd; padding:16px 20px; border-radius:12px; margin-bottom:24px;">
+                        <div style="display:flex; align-items:flex-start; gap:12px;">
+                            <i class="fa-solid fa-circle-info" style="color:#2563eb; font-size:1.2rem; margin-top:2px;"></i>
+                            <div style="font-size:0.9rem; color:#1e40af;">
+                                <strong>How it works:</strong> Weight rules are applied in priority order. Title-based rules take precedence over level-based rules. 
+                                The first matching rule determines the Shared/Individual weight split for an employee's scorecard.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Company Tabs -->
+                    <div style="display:flex; gap:8px; margin-bottom:24px; border-bottom:2px solid var(--border); padding-bottom:12px;">
+                        ${companies.map((comp, idx) => `
+                            <button class="weight-company-tab ${idx === 0 ? 'active' : ''}" 
+                                    onclick="switchWeightCompanyTab('${comp}')"
+                                    id="wt-tab-${comp.replace(/\s+/g, '-')}"
+                                    style="padding:10px 20px; border:none; background:${idx === 0 ? 'var(--primary)' : '#f1f5f9'}; 
+                                           color:${idx === 0 ? 'white' : 'var(--text-muted)'}; font-weight:600; border-radius:8px; 
+                                           cursor:pointer; transition:all 0.2s;">
+                                ${comp}
+                            </button>
+                        `).join('')}
+                    </div>
+                    
+                    <!-- Weight Rules Container -->
+                    <div id="weight-rules-container">
+                        ${renderWeightRulesForCompany(companies[0])}
+                    </div>
+                </div>
+                
+                <!-- Preview Section -->
+                <div class="card">
+                    <h3 style="margin:0 0 16px 0; font-size:1rem; font-weight:700;">
+                        <i class="fa-solid fa-eye" style="color:var(--primary); margin-right:8px;"></i>
+                        Weight Preview
+                    </h3>
+                    <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:16px;">
+                        Test how weights are calculated for different employees.
+                    </p>
+                    
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
+                        <select id="preview-company" class="login-input" style="margin:0; width:auto; min-width:150px;" onchange="previewWeightCalculation()">
+                            ${companies.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                        <input id="preview-level" class="login-input" style="margin:0; width:auto; min-width:100px;" placeholder="Level (e.g. L3)" oninput="previewWeightCalculation()">
+                        <input id="preview-title" class="login-input" style="margin:0; flex:1; min-width:200px;" placeholder="Job Title (e.g. Senior Manager)" oninput="previewWeightCalculation()">
+                    </div>
+                    
+                    <div id="weight-preview-result" style="background:#f8fafc; padding:20px; border-radius:12px; border:1px solid var(--border);">
+                        <div style="text-align:center; color:var(--text-muted);">Enter level and/or job title to preview weight calculation</div>
+                    </div>
+                </div>
+            </div>`;
+            
+            document.getElementById('admin-content').innerHTML = html;
+            
+            // Add styles for weight config
+            if (!document.getElementById('weight-config-styles')) {
+                const style = document.createElement('style');
+                style.id = 'weight-config-styles';
+                style.innerHTML = `
+                    .weight-company-tab:hover { background: var(--primary-light) !important; color: var(--primary) !important; }
+                    .weight-company-tab.active { background: var(--primary) !important; color: white !important; }
+                    .weight-rule-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; transition: all 0.2s; }
+                    .weight-rule-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+                    .weight-rule-card.default { background: linear-gradient(135deg, #f0fdf4, #ecfdf5); border-color: #86efac; }
+                    .weight-type-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+                    .weight-type-badge.title { background: #dbeafe; color: #1d4ed8; }
+                    .weight-type-badge.level { background: #fef3c7; color: #d97706; }
+                    .weight-type-badge.default { background: #d1fae5; color: #059669; }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        
+        function renderWeightRulesForCompany(company) {
+            const config = weightConfigurations[company] || { rules: [] };
+            const rules = config.rules || [];
+            
+            // Sort rules by priority
+            const sortedRules = [...rules].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+            
+            let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h4 style="margin:0; font-size:1rem; font-weight:700;">${company} Weight Rules</h4>
+                <button class="btn btn-primary" onclick="addWeightRule('${company}')">
+                    <i class="fa-solid fa-plus"></i> &nbsp; Add Rule
+                </button>
+            </div>
+            
+            <div id="rules-list-${company.replace(/\s+/g, '-')}">`;
+            
+            if (sortedRules.length === 0) {
+                html += `
+                <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                    <i class="fa-solid fa-scale-unbalanced" style="font-size:2rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                    <div>No weight rules configured for ${company}</div>
+                    <div style="font-size:0.85rem; margin-top:4px;">Click "Add Rule" to create weight rules.</div>
+                </div>`;
+            } else {
+                sortedRules.forEach((rule, idx) => {
+                    const originalIdx = rules.findIndex(r => r === rule);
+                    const typeClass = rule.type === 'title' ? 'title' : rule.type === 'level' ? 'level' : 'default';
+                    const isDefault = rule.type === 'default';
+                    
+                    html += `
+                    <div class="weight-rule-card ${isDefault ? 'default' : ''}" data-rule-idx="${originalIdx}">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:200px;">
+                                <span class="weight-type-badge ${typeClass}">${rule.type}</span>
+                                <div>
+                                    <div style="font-weight:600; color:var(--text-main);">
+                                        ${isDefault ? 'Default (All Others)' : `Match: "${escapeHTML(rule.match)}"`}
+                                    </div>
+                                    <div style="font-size:0.8rem; color:var(--text-muted);">Priority: ${rule.priority || 99}</div>
+                                </div>
+                            </div>
+                            
+                            <div style="display:flex; align-items:center; gap:20px;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:1.5rem; font-weight:800; color:var(--primary);">${rule.shared}%</div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Shared</div>
+                                </div>
+                                <div style="width:1px; height:40px; background:var(--border);"></div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:1.5rem; font-weight:800; color:var(--secondary);">${rule.individual}%</div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Individual</div>
+                                </div>
+                            </div>
+                            
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn btn-outline" style="padding:8px 12px;" onclick="editWeightRule('${company}', ${originalIdx})" title="Edit Rule">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                ${!isDefault ? `
+                                <button class="btn btn-outline" style="padding:8px 12px; color:var(--danger); border-color:#fee2e2;" onclick="deleteWeightRule('${company}', ${originalIdx})" title="Delete Rule">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            }
+            
+            html += `</div>
+            
+            <div style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:12px;">
+                <button class="btn btn-outline" onclick="loadWeightConfiguration()">
+                    <i class="fa-solid fa-rotate"></i> &nbsp; Refresh
+                </button>
+                <button class="btn btn-primary" onclick="saveCompanyWeightConfig('${company}')">
+                    <i class="fa-solid fa-check"></i> &nbsp; Save ${company} Config
+                </button>
+            </div>`;
+            
+            return html;
+        }
+        
+        function switchWeightCompanyTab(company) {
+            // Update tab styles
+            document.querySelectorAll('.weight-company-tab').forEach(tab => {
+                tab.classList.remove('active');
+                tab.style.background = '#f1f5f9';
+                tab.style.color = 'var(--text-muted)';
+            });
+            
+            const activeTab = document.getElementById(`wt-tab-${company.replace(/\s+/g, '-')}`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+                activeTab.style.background = 'var(--primary)';
+                activeTab.style.color = 'white';
+            }
+            
+            // Render rules for selected company
+            document.getElementById('weight-rules-container').innerHTML = renderWeightRulesForCompany(company);
+        }
+        
+        function addWeightRule(company) {
+            showWeightRuleModal(company, null);
+        }
+        
+        function editWeightRule(company, ruleIdx) {
+            const config = weightConfigurations[company];
+            if (!config || !config.rules || !config.rules[ruleIdx]) {
+                showToast('Rule not found', 'error');
+                return;
+            }
+            showWeightRuleModal(company, ruleIdx);
+        }
+        
+        function showWeightRuleModal(company, ruleIdx = null) {
+            const isEdit = ruleIdx !== null;
+            const rule = isEdit ? weightConfigurations[company].rules[ruleIdx] : { type: 'level', match: '', shared: 10, individual: 90, priority: 50 };
+            
+            const modalHtml = `
+            <div id="weight-rule-modal" style="position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5);">
+                <div style="background:white; width:90%; max-width:500px; padding:32px; border-radius:20px; animation:scaleIn 0.3s ease;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                        <h3 style="margin:0; font-size:1.3rem; font-weight:700;">${isEdit ? 'Edit' : 'Add'} Weight Rule</h3>
+                        <button onclick="closeWeightRuleModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-muted);">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    
+                    <div style="margin-bottom:20px;">
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Rule Type</label>
+                        <select id="wr-type" class="login-input" style="margin:0;" onchange="toggleWeightRuleMatch()">
+                            <option value="title" ${rule.type === 'title' ? 'selected' : ''}>Job Title (matches if title contains...)</option>
+                            <option value="level" ${rule.type === 'level' ? 'selected' : ''}>Level (e.g., L1, L2, L3...)</option>
+                            <option value="default" ${rule.type === 'default' ? 'selected' : ''}>Default (applies to all others)</option>
+                        </select>
+                    </div>
+                    
+                    <div id="wr-match-container" style="margin-bottom:20px; ${rule.type === 'default' ? 'display:none;' : ''}">
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Match Value</label>
+                        <input id="wr-match" class="login-input" style="margin:0;" value="${escapeHTML(rule.match || '')}" 
+                               placeholder="${rule.type === 'level' ? 'e.g., L1, L2, L3' : 'e.g., chief, manager, director'}">
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                            ${rule.type === 'title' ? 'The job title must contain this text (case-insensitive)' : 'Enter the exact level code'}
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom:20px;">
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Priority (lower = higher priority)</label>
+                        <input id="wr-priority" type="number" class="login-input" style="margin:0;" value="${rule.priority || 50}" min="1" max="99">
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+                        <div>
+                            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">
+                                <i class="fa-solid fa-users" style="color:var(--primary);"></i> Shared Weight %
+                            </label>
+                            <input id="wr-shared" type="number" class="login-input" style="margin:0;" value="${rule.shared}" min="0" max="100" 
+                                   oninput="syncWeightInputs('shared')">
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">
+                                <i class="fa-solid fa-user" style="color:var(--secondary);"></i> Individual Weight %
+                            </label>
+                            <input id="wr-individual" type="number" class="login-input" style="margin:0;" value="${rule.individual}" min="0" max="100"
+                                   oninput="syncWeightInputs('individual')">
+                        </div>
+                    </div>
+                    
+                    <div id="wr-total-warning" style="display:none; background:#fef2f2; border:1px solid #fecaca; padding:12px; border-radius:8px; margin-bottom:20px; color:#dc2626; font-size:0.85rem;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Total must equal 100%
+                    </div>
+                    
+                    <div style="display:flex; justify-content:flex-end; gap:12px;">
+                        <button class="btn btn-outline" onclick="closeWeightRuleModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="saveWeightRule('${company}', ${ruleIdx})">
+                            <i class="fa-solid fa-check"></i> &nbsp; ${isEdit ? 'Update' : 'Add'} Rule
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        function toggleWeightRuleMatch() {
+            const type = document.getElementById('wr-type').value;
+            const matchContainer = document.getElementById('wr-match-container');
+            matchContainer.style.display = type === 'default' ? 'none' : 'block';
+        }
+        
+        function syncWeightInputs(changed) {
+            const sharedInput = document.getElementById('wr-shared');
+            const individualInput = document.getElementById('wr-individual');
+            const warning = document.getElementById('wr-total-warning');
+            
+            let shared = parseInt(sharedInput.value) || 0;
+            let individual = parseInt(individualInput.value) || 0;
+            
+            // Auto-calculate the other value
+            if (changed === 'shared') {
+                individual = 100 - shared;
+                individualInput.value = individual;
+            } else {
+                shared = 100 - individual;
+                sharedInput.value = shared;
+            }
+            
+            // Show warning if total doesn't equal 100
+            const total = shared + individual;
+            warning.style.display = total !== 100 ? 'block' : 'none';
+        }
+        
+        function closeWeightRuleModal() {
+            const modal = document.getElementById('weight-rule-modal');
+            if (modal) modal.remove();
+        }
+        
+        function saveWeightRule(company, ruleIdx) {
+            const type = document.getElementById('wr-type').value;
+            const match = document.getElementById('wr-match').value.trim();
+            const priority = parseInt(document.getElementById('wr-priority').value) || 50;
+            const shared = parseInt(document.getElementById('wr-shared').value) || 0;
+            const individual = parseInt(document.getElementById('wr-individual').value) || 0;
+            
+            // Validation
+            if (type !== 'default' && !match) {
+                showToast('Please enter a match value', 'error');
+                return;
+            }
+            
+            if (shared + individual !== 100) {
+                showToast('Shared + Individual must equal 100%', 'error');
+                return;
+            }
+            
+            const newRule = {
+                type: type,
+                match: type === 'default' ? '*' : match.toLowerCase(),
+                shared: shared,
+                individual: individual,
+                priority: priority
+            };
+            
+            // Initialize company config if not exists
+            if (!weightConfigurations[company]) {
+                weightConfigurations[company] = { rules: [] };
+            }
+            
+            if (ruleIdx !== null) {
+                // Edit existing rule
+                weightConfigurations[company].rules[ruleIdx] = newRule;
+            } else {
+                // Add new rule
+                weightConfigurations[company].rules.push(newRule);
+            }
+            
+            closeWeightRuleModal();
+            switchWeightCompanyTab(company);
+            showToast(`Rule ${ruleIdx !== null ? 'updated' : 'added'} successfully`, 'success');
+        }
+        
+        function deleteWeightRule(company, ruleIdx) {
+            showConfirm('Delete Rule', 'Are you sure you want to delete this weight rule?', 'Delete', 'danger', () => {
+                if (weightConfigurations[company] && weightConfigurations[company].rules) {
+                    weightConfigurations[company].rules.splice(ruleIdx, 1);
+                    switchWeightCompanyTab(company);
+                    showToast('Rule deleted', 'success');
+                }
+            });
+        }
+        
+        async function saveCompanyWeightConfig(company) {
+            showSaving();
+            const success = await saveWeightConfigurations();
+            if (success) {
+                showSaved();
+                showToast(`${company} weight configuration saved!`, 'success');
+            } else {
+                showToast('Failed to save weight configuration', 'error');
+            }
+        }
+        
+        function resetWeightConfigToDefaults() {
+            showConfirm('Reset to Defaults', 'This will reset ALL company weight configurations to default values. This cannot be undone. Continue?', 'Reset All', 'danger', async () => {
+                weightConfigurations = JSON.parse(JSON.stringify(DEFAULT_WEIGHT_CONFIG));
+                showSaving();
+                const success = await saveWeightConfigurations();
+                if (success) {
+                    showSaved();
+                    loadWeightConfiguration();
+                    showToast('Weight configurations reset to defaults', 'success');
+                } else {
+                    showToast('Failed to save reset configurations', 'error');
+                }
+            });
+        }
+        
+        function previewWeightCalculation() {
+            const company = document.getElementById('preview-company').value;
+            const level = document.getElementById('preview-level').value.trim();
+            const title = document.getElementById('preview-title').value.trim();
+            const resultDiv = document.getElementById('weight-preview-result');
+            
+            if (!level && !title) {
+                resultDiv.innerHTML = '<div style="text-align:center; color:var(--text-muted);">Enter level and/or job title to preview weight calculation</div>';
+                return;
+            }
+            
+            // Temporarily override the company detection
+            const tempConfig = weightConfigurations[company] || DEFAULT_WEIGHT_CONFIG[company];
+            
+            // Simulate getW logic for preview
+            let result = { s: 5, i: 95, matchedRule: 'Default' };
+            
+            if (tempConfig && tempConfig.rules) {
+                const sortedRules = [...tempConfig.rules].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+                
+                for (const rule of sortedRules) {
+                    if (rule.type === 'default') continue;
+                    
+                    const matchValue = (rule.match || '').toLowerCase();
+                    const jobLower = title.toLowerCase();
+                    const levelUpper = level.toUpperCase();
+                    
+                    if (rule.type === 'title' && matchValue) {
+                        if (jobLower.includes(matchValue) || jobLower === matchValue) {
+                            result = { s: rule.shared, i: rule.individual, matchedRule: `Title: "${rule.match}"` };
+                            break;
+                        }
+                    } else if (rule.type === 'level') {
+                        const ruleLevel = matchValue.toUpperCase();
+                        if (levelUpper === ruleLevel || levelUpper.includes(ruleLevel.replace('L', ''))) {
+                            result = { s: rule.shared, i: rule.individual, matchedRule: `Level: ${rule.match}` };
+                            break;
+                        }
+                    }
+                }
+                
+                // Check default rule
+                if (result.matchedRule === 'Default') {
+                    const defaultRule = sortedRules.find(r => r.type === 'default');
+                    if (defaultRule) {
+                        result = { s: defaultRule.shared, i: defaultRule.individual, matchedRule: 'Default Rule' };
+                    }
+                }
+            }
+            
+            resultDiv.innerHTML = `
+                <div style="display:flex; justify-content:space-around; align-items:center; text-align:center;">
+                    <div>
+                        <div style="font-size:2.5rem; font-weight:800; color:var(--primary);">${result.s}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted);">Shared Goals</div>
+                    </div>
+                    <div style="width:2px; height:60px; background:var(--border);"></div>
+                    <div>
+                        <div style="font-size:2.5rem; font-weight:800; color:var(--secondary);">${result.i}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted);">Individual Goals</div>
+                    </div>
+                </div>
+                <div style="text-align:center; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+                    <span style="background:#f1f5f9; padding:4px 12px; border-radius:20px; font-size:0.8rem; color:var(--text-muted);">
+                        <i class="fa-solid fa-check-circle" style="color:var(--success);"></i> Matched: <strong>${result.matchedRule}</strong>
+                    </span>
+                </div>
+            `;
+        }
+        
         // --- DIRECTORY TAB (ADD/EDIT/DELETE USERS) ---
         async function loadAdminDirectory() {
             if (allCompanyData.length === 0) allCompanyData = await fetchAllData();
@@ -8775,7 +9336,61 @@
             return 'Staff';
         }
 
-        function getW(l, j) {
+        function getW(l, j, empId = null) {
+            const job = (j || "").toLowerCase().trim();
+            const levelStr = (l || "").toUpperCase().trim();
+            
+            // Determine the company for this employee
+            let company = 'Zain Iraq'; // Default
+            if (empId) {
+                company = getCompany(empId);
+            } else if (typeof targetUser !== 'undefined' && targetUser && targetUser[COL.id]) {
+                company = getCompany(targetUser[COL.id]);
+            }
+            
+            // Get company-specific configuration
+            const companyConfig = weightConfigurations[company] || weightConfigurations['Zain Iraq'] || DEFAULT_WEIGHT_CONFIG['Zain Iraq'];
+            
+            if (!companyConfig || !companyConfig.rules) {
+                // Fallback to old hardcoded logic if no config exists
+                return getWFallback(l, j);
+            }
+            
+            // Sort rules by priority (lower number = higher priority)
+            const sortedRules = [...companyConfig.rules].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+            
+            // Find matching rule
+            for (const rule of sortedRules) {
+                if (rule.type === 'default') continue; // Check default last
+                
+                const matchValue = (rule.match || '').toLowerCase();
+                
+                if (rule.type === 'title') {
+                    // Check if job title contains or matches the rule
+                    if (matchValue && (job.includes(matchValue) || job === matchValue)) {
+                        return { s: rule.shared, i: rule.individual };
+                    }
+                } else if (rule.type === 'level') {
+                    // Check if level matches
+                    const ruleLevel = matchValue.toUpperCase();
+                    if (levelStr === ruleLevel || levelStr.includes(ruleLevel.replace('L', ''))) {
+                        return { s: rule.shared, i: rule.individual };
+                    }
+                }
+            }
+            
+            // Return default rule if exists
+            const defaultRule = sortedRules.find(r => r.type === 'default');
+            if (defaultRule) {
+                return { s: defaultRule.shared, i: defaultRule.individual };
+            }
+            
+            // Ultimate fallback
+            return { s: 5, i: 95 };
+        }
+        
+        // Fallback function (old hardcoded logic)
+        function getWFallback(l, j) {
             const job = (j || "").toLowerCase().trim();
             const levelStr = (l || "").toUpperCase();
             const is = (role) => new RegExp(`\\b${role}\\b`).test(job);
