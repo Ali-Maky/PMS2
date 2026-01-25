@@ -2511,7 +2511,7 @@
     <div id="app-container">
         <aside class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
-                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>Performance Management System</span></div>
+                <div class="brand" style="margin-bottom:0;"><i class="fa-solid fa-bolt"></i> <span>PMS</span></div>
                 <div class="notification-bell" onclick="toggleNotifications()">
                     <i class="fa-solid fa-bell"></i>
                     <span class="notification-badge" id="notification-count" style="display:none;">0</span>
@@ -2944,7 +2944,7 @@
         const API_HEADERS = {
             'Content-Type': 'application/json',
             get 'Authorization'() {
-                return 'Bearer ' + (sessionStorage.getItem('zpms_token') || '');
+                return 'Bearer ' + (localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token') || '');
             }
         };
 
@@ -2953,7 +2953,7 @@
         let lastTokenRotation = Date.now();
 
         async function rotateToken() {
-            const currentToken = sessionStorage.getItem('zpms_token');
+            const currentToken = localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token');
             if (!currentToken) return;
 
             try {
@@ -2966,6 +2966,7 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (data.token) {
+                        localStorage.setItem('zpms_token', data.token);
                         sessionStorage.setItem('zpms_token', data.token);
                         lastTokenRotation = Date.now();
                         logActivity('TOKEN_ROTATED', 'Session token rotated');
@@ -2999,7 +3000,7 @@
                 details: details,
                 targetId: targetId,
                 userId: localStorage.getItem('zpms_uid') || 'unknown',
-                sessionId: sessionStorage.getItem('zpms_token')?.slice(-8) || 'none'
+                sessionId: (localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token'))?.slice(-8) || 'none'
             };
 
             activityLog.unshift(entry);
@@ -3061,7 +3062,7 @@
                             eq: (col, val) => {
                                 const execute = async () => {
                                     let action = (table === 'company_settings') ? 'getSettings' : 'checkID';
-                                    if (action === 'getSettings' && !sessionStorage.getItem('zpms_token')) {
+                                    if (action === 'getSettings' && !localStorage.getItem('zpms_token') && !sessionStorage.getItem('zpms_token')) {
                                         return { data: null, error: null };
                                     }
 
@@ -3074,6 +3075,13 @@
                                             },
                                             body: JSON.stringify({ id: val })
                                         });
+                                        
+                                        // Handle session expiry gracefully
+                                        if (res.status === 401 || res.status === 403) {
+                                            handleSessionExpired();
+                                            return { data: null, error: { message: "Session expired" } };
+                                        }
+                                        
                                         if (!res.ok) return { data: null, error: { message: "Server Error: " + res.status } };
                                         return { data: await res.json(), error: null };
                                     } catch (e) { return { data: null, error: e }; }
@@ -3100,6 +3108,10 @@
                                     const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${to}`, {
                                         headers: API_HEADERS
                                     });
+                                    if (res.status === 401 || res.status === 403) {
+                                        handleSessionExpired();
+                                        return { data: [], error: { message: "Session expired" } };
+                                    }
                                     return { data: await res.json(), error: null };
                                 } catch (e) { return { data: [], error: e }; }
                             },
@@ -3109,6 +3121,10 @@
                                 const res = await fetch(`${API_URL}?action=fetchAll&from=0&to=1`, {
                                     headers: API_HEADERS
                                 });
+                                if (res.status === 401 || res.status === 403) {
+                                    handleSessionExpired();
+                                    return { data: [], error: { message: "Session expired" } };
+                                }
                                 return { data: await res.json(), error: null };
                             },
 
@@ -3154,6 +3170,10 @@
                                 headers: API_HEADERS,
                                 body: JSON.stringify({ payload: payload })
                             });
+                            if (res.status === 401 || res.status === 403) {
+                                handleSessionExpired();
+                                return { error: { message: "Session expired" } };
+                            }
                             if (!res.ok) {
                                 const errText = await res.text();
                                 return { error: { message: errText || "Save failed" } };
@@ -3173,6 +3193,10 @@
                                         headers: API_HEADERS,
                                         body: JSON.stringify({ id: val, payload: payload })
                                     });
+                                    if (res.status === 401 || res.status === 403) {
+                                        handleSessionExpired();
+                                        return { error: { message: "Session expired" } };
+                                    }
                                     if (!res.ok) {
                                         const txt = await res.text();
                                         return { error: { message: txt || "Update failed" } };
@@ -3183,11 +3207,15 @@
                             in: async (col, valArray) => {
                                 // For bulk status updates (Approve/Publish)
                                 for (const id of valArray) {
-                                    await fetch(`${API_URL}?action=saveUser`, {
+                                    const res = await fetch(`${API_URL}?action=saveUser`, {
                                         method: 'POST',
                                         headers: API_HEADERS,
                                         body: JSON.stringify({ id: id, payload: payload })
                                     });
+                                    if (res.status === 401 || res.status === 403) {
+                                        handleSessionExpired();
+                                        return { error: { message: "Session expired" } };
+                                    }
                                 }
                                 return { error: null };
                             }
@@ -3207,6 +3235,10 @@
                                         headers: API_HEADERS,
                                         body: JSON.stringify({ id: val })
                                     });
+                                    if (res.status === 401 || res.status === 403) {
+                                        handleSessionExpired();
+                                        return { error: { message: "Session expired" } };
+                                    }
                                     return { error: res.ok ? null : { message: "Delete failed" } };
                                 } catch (e) { return { error: e }; }
                             }
@@ -3223,6 +3255,10 @@
                             headers: API_HEADERS,
                             body: JSON.stringify({ payload: params })
                         });
+                        if (res.status === 401 || res.status === 403) {
+                            handleSessionExpired();
+                            return { error: { message: "Session expired" } };
+                        }
                         return { error: res.ok ? null : { message: "RPC failed" } };
                     } catch (e) { return { error: e }; }
                 }
@@ -3593,7 +3629,7 @@
 
         function showLogin() { document.getElementById('loading-overlay').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); }
         function startIdleTimer() { ['click', 'keydown'].forEach(e => window.addEventListener(e, () => localStorage.setItem('zpms_time', Date.now()))); }
-        function logout() { localStorage.clear(); location.reload(); }
+        function logout() { localStorage.clear(); sessionStorage.clear(); location.reload(); }
 
         // --- 3. AUTH & ROUTING ---
         // --- NEW SECURE LOGIN LOGIC ---
@@ -3679,7 +3715,8 @@
                 const result = await res.json();
 
                 if (result.success) {
-                    sessionStorage.setItem('zpms_token', result.token);
+                    localStorage.setItem('zpms_token', result.token);
+                    sessionStorage.setItem('zpms_token', result.token); // Keep for backward compatibility
                     localStorage.setItem('zpms_uid', result.user.id);
                     localStorage.setItem('zpms_time', Date.now());
                     document.getElementById('loading-overlay').classList.remove('hidden');
@@ -3759,8 +3796,10 @@
                     });
 
                     if (!res.ok) {
-                        if (res.status === 401) {
-                            throw new Error("Security Error: API Key Mismatch (401)");
+                        if (res.status === 401 || res.status === 403) {
+                            // Session expired or invalid - handle gracefully
+                            handleSessionExpired();
+                            return [];
                         }
                         throw new Error(`Server status: ${res.status}`);
                     }
@@ -3790,8 +3829,8 @@
                 } catch (e) {
                     console.error(`Fetch error at offset ${from}:`, e);
 
-                    if (e.message.includes("401")) {
-                        alert("Security Error: The API Key in your code does not match the Server Variable.");
+                    if (e.message.includes("401") || e.message.includes("403")) {
+                        handleSessionExpired();
                         return [];
                     }
 
@@ -3823,6 +3862,27 @@
             }
 
             return allRows;
+        }
+        
+        // --- SESSION EXPIRY HANDLER ---
+        function handleSessionExpired() {
+            // Only show message once
+            if (sessionStorage.getItem('zpms_session_expired')) return;
+            sessionStorage.setItem('zpms_session_expired', 'true');
+            
+            // Clear auth data
+            localStorage.removeItem('zpms_token');
+            localStorage.removeItem('zpms_uid');
+            localStorage.removeItem('zpms_time');
+            sessionStorage.removeItem('zpms_token');
+            
+            // Show friendly message
+            showToast('Session expired. Please login again.', 'error');
+            
+            // Redirect to login after a short delay
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
         }
         
         // Helper function to force refresh data cache
