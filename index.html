@@ -6113,12 +6113,11 @@
             if (allCompanyData.length === 0) { allCompanyData = await fetchAllData(); }
             const divs = [...new Set(allCompanyData.map(i => i[COL.div] || 'Unknown'))].sort().filter(d => d !== 'Unknown');
             
-            // Get all Chiefs (L1 level or Chief Officer titles)
+            // Get all Chiefs (L1 level ONLY)
             const chiefs = allCompanyData
                 .filter(u => {
                     const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
-                    const j = (u[COL.job] || "").toString().trim().toUpperCase();
-                    return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) || j.includes('CCO') || j.includes('CFO') || j.includes('CTO') || j.includes('COO') || j.includes('CMO');
+                    return l === 'L1';
                 })
                 .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
             
@@ -6144,10 +6143,10 @@
                         </select>
                     </div>
                     <div>
-                        <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px; display:block;">Chief / Executive</label>
+                        <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px; display:block;">Chief (L1)</label>
                         <select id="anl-chief" onchange="calcAdminStats()" style="padding:8px 32px 8px 12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-weight:600; min-width:180px;">
                             <option value="ALL">All Chiefs</option>
-                            ${chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]} (${c[COL.job] || 'Executive'})</option>`).join('')}
+                            ${chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]}</option>`).join('')}
                         </select>
                     </div>
                 </div>
@@ -6190,18 +6189,17 @@
             const divSelect = document.getElementById('anl-filter');
             divSelect.innerHTML = `<option value="ALL">All Divisions</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
             
-            // Update Chiefs dropdown
+            // Update Chiefs dropdown - L1 ONLY, filtered by company
             const chiefs = subset
                 .filter(u => {
                     const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
-                    const j = (u[COL.job] || "").toString().trim().toUpperCase();
-                    return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) || j.includes('CCO') || j.includes('CFO') || j.includes('CTO') || j.includes('COO') || j.includes('CMO');
+                    return l === 'L1';
                 })
                 .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
             
             const chiefSelect = document.getElementById('anl-chief');
             if (chiefSelect) {
-                chiefSelect.innerHTML = `<option value="ALL">All Chiefs</option>` + chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]} (${c[COL.job] || 'Executive'})</option>`).join('');
+                chiefSelect.innerHTML = `<option value="ALL">All Chiefs</option>` + chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]}</option>`).join('');
             }
         }
         
