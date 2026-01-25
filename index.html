@@ -4100,6 +4100,9 @@
             renderNav(role);
             initNotifications(); // Initialize notification center
 
+            // Check if we should auto-open a scorecard from URL parameter
+            checkAutoOpenScorecard();
+
             if (role === 'Admin' || role === 'Master') loadHRAdmin();
             else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
             else if (role === 'Manager') loadTeam();
@@ -6044,8 +6047,18 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                let total = sScore + (iScore * (w.i / 100));
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                let totalWeight = 0;
+                userGoals.forEach(g => totalWeight += (g.weight || 0));
+                const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                
+                userGoals.forEach(g => {
+                    const scaledWeight = (g.weight || 0) * scaleFactor;
+                    iScore += (g.rating || 0) * scaledWeight;
+                });
+                
+                let total = sScore + iScore;
                 
                 let rating = "N/A";
                 if (total >= 5.5) rating = "ASTRONAUT";
@@ -6172,7 +6185,16 @@
                                    e.calculatedRating === 'STAGNANT' ? 'lvl-2' : 'lvl-1';
                 return `<tr>
                     <td style="font-weight:800; color:var(--primary);">#${i + 1}</td>
-                    <td style="font-weight:600;">${e[COL.name] || '-'}</td>
+                    <td style="font-weight:600;">
+                        <a href="#" onclick="event.preventDefault(); loadEval('${e[COL.id]}', true);" 
+                           oncontextmenu="event.preventDefault(); openScorecardInNewTab('${e[COL.id]}');"
+                           style="color:var(--primary); text-decoration:none; cursor:pointer; transition: all 0.2s;"
+                           onmouseover="this.style.textDecoration='underline'"
+                           onmouseout="this.style.textDecoration='none'"
+                           title="Left-click to view | Right-click to open in new tab">
+                            ${e[COL.name] || '-'}
+                        </a>
+                    </td>
                     <td style="color:var(--text-muted);">${e[COL.div] || '-'}</td>
                     <td style="font-weight:700;">${e.calculatedScore.toFixed(2)}</td>
                     <td><span class="badge-rating ${ratingClass}">${e.calculatedRating}</span></td>
@@ -6236,8 +6258,18 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                let total = sScore + (iScore * (w.i / 100));
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                let totalWeight = 0;
+                userGoals.forEach(g => totalWeight += (g.weight || 0));
+                const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                
+                userGoals.forEach(g => {
+                    const scaledWeight = (g.weight || 0) * scaleFactor;
+                    iScore += (g.rating || 0) * scaledWeight;
+                });
+                
+                let total = sScore + iScore;
                 
                 let rating = "N/A";
                 if (total >= 5.5) rating = "ASTRONAUT";
@@ -6486,9 +6518,18 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                let totalWeight = 0;
+                userGoals.forEach(g => totalWeight += (g.weight || 0));
+                const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                
+                userGoals.forEach(g => {
+                    const scaledWeight = (g.weight || 0) * scaleFactor;
+                    iScore += (g.rating || 0) * scaledWeight;
+                });
 
-                let total = sScore + (iScore * (w.i / 100));
+                let total = sScore + iScore;
 
                 let lbl = "-";
                 if (total >= 5.5) lbl = "ASTRONAUT";
@@ -6548,8 +6589,19 @@
                 if (!Array.isArray(userGoals)) userGoals = [];
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
-                let iScore = 0; userGoals.forEach(g => (iScore += (g.rating || 0) * (g.weight || 0)));
-                let total = sScore + (iScore * (w.i / 100));
+                let iScore = 0;
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                let totalWeight = 0;
+                userGoals.forEach(g => totalWeight += (g.weight || 0));
+                const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                
+                userGoals.forEach(g => {
+                    const scaledWeight = (g.weight || 0) * scaleFactor;
+                    iScore += (g.rating || 0) * scaledWeight;
+                });
+                
+                let total = sScore + iScore;
                 let b = 0; if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                 dist[b]++;
             });
@@ -7010,8 +7062,20 @@
                     let w = getW(u[COL.lvl], u[COL.job]);
                     let sScore = globalRating * (w.s / 100);
                     let iScore = 0;
-                    if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
-                    let total = sScore + (iScore * (w.i / 100));
+                    
+                    // FIXED: Scale goal weights to employee's individual allocation
+                    if (Array.isArray(userGoals)) {
+                        let totalWeight = 0;
+                        userGoals.forEach(g => totalWeight += (Number(g.weight) || 0));
+                        const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                        
+                        userGoals.forEach(g => {
+                            const scaledWeight = (Number(g.weight) || 0) * scaleFactor;
+                            iScore += (Number(g.rating) || 0) * scaledWeight;
+                        });
+                    }
+                    
+                    let total = sScore + iScore;
                     let b = 0;
                     if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                     d[b]++;
@@ -7068,9 +7132,20 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = (masterData.rating || 0) * (w.s / 100);
                 let iScore = 0;
-                if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                if (Array.isArray(userGoals)) {
+                    let totalWeight = 0;
+                    userGoals.forEach(g => totalWeight += (Number(g.weight) || 0));
+                    const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                    
+                    userGoals.forEach(g => {
+                        const scaledWeight = (Number(g.weight) || 0) * scaleFactor;
+                        iScore += (Number(g.rating) || 0) * scaledWeight;
+                    });
+                }
 
-                let total = sScore + (iScore * (w.i / 100));
+                let total = sScore + iScore;
 
                 // Determine Level for Color
                 let lvl = 0;
@@ -7083,6 +7158,7 @@
                 else if (total > 0) { lvl = 1; lbl = "IDLE"; }
 
                 return {
+                    id: u[COL.id],
                     name: u[COL.name],
                     score: total.toFixed(2),
                     lvl: lvl,
@@ -7096,7 +7172,16 @@
             // New HTML Rendering with dynamic classes
             let tableRows = scoredReports.map(r => `
     <tr>
-        <td style="font-weight:600; color:var(--text-main);">${r.name}</td>
+        <td style="font-weight:600; color:var(--text-main);">
+            <a href="#" onclick="event.preventDefault(); loadEval('${r.id}', true);" 
+               oncontextmenu="event.preventDefault(); openScorecardInNewTab('${r.id}');"
+               style="color:var(--primary); text-decoration:none; cursor:pointer; transition: all 0.2s;"
+               onmouseover="this.style.textDecoration='underline'"
+               onmouseout="this.style.textDecoration='none'"
+               title="Left-click to view | Right-click to open in new tab">
+                ${r.name}
+            </a>
+        </td>
         <td style="text-align:center;">
             <span class="badge-score lvl-${r.lvl}">${r.score}</span>
         </td>
@@ -7246,8 +7331,20 @@
                 let w = getW(u[COL.lvl], u[COL.job]);
                 let sScore = globalRating * (w.s / 100);
                 let iScore = 0;
-                if (Array.isArray(userGoals)) userGoals.forEach(g => (iScore += (Number(g.rating) || 0) * (Number(g.weight) || 0)));
-                let total = sScore + (iScore * (w.i / 100));
+                
+                // FIXED: Scale goal weights to employee's individual allocation
+                if (Array.isArray(userGoals)) {
+                    let totalWeight = 0;
+                    userGoals.forEach(g => totalWeight += (Number(g.weight) || 0));
+                    const scaleFactor = totalWeight > 0 ? (w.i / 100) / totalWeight : 0;
+                    
+                    userGoals.forEach(g => {
+                        const scaledWeight = (Number(g.weight) || 0) * scaleFactor;
+                        iScore += (Number(g.rating) || 0) * scaledWeight;
+                    });
+                }
+                
+                let total = sScore + iScore;
                 let b = 0;
                 if (total >= 5.5) b = 5; else if (total >= 4.5) b = 4; else if (total >= 3.5) b = 3; else if (total >= 2.5) b = 2; else if (total >= 1.5) b = 1;
                 dist[b]++;
@@ -7299,7 +7396,11 @@
 
                     // Add 'data-comp' attribute to the card for filtering
                     h += `
-            <div class="premium-team-card team-card-item" data-comp="${comp}" onclick="loadEval('${e[COL.id]}')">
+            <div class="premium-team-card team-card-item" data-comp="${comp}" 
+                 onclick="loadEval('${e[COL.id]}')"
+                 oncontextmenu="event.preventDefault(); openScorecardInNewTab('${e[COL.id]}');"
+                 title="Left-click to view | Right-click to open in new tab"
+                 style="cursor:pointer;">
                 <div class="pt-status status-badge ${statClass}">${e[COL.stat] || 'Draft'}</div>
                 <div class="pt-avatar">${e[COL.name].charAt(0)}</div>
                 <div class="pt-info">
@@ -7333,6 +7434,28 @@
                     card.style.display = 'none';
                 }
             });
+        }
+
+        // --- OPEN SCORECARD IN NEW TAB ---
+        function openScorecardInNewTab(employeeId) {
+            // Get current URL and add employee ID as parameter
+            const currentUrl = window.location.href.split('?')[0].split('#')[0];
+            const newUrl = `${currentUrl}?openScorecard=${encodeURIComponent(employeeId)}`;
+            window.open(newUrl, '_blank');
+        }
+
+        // Check if we should auto-open a scorecard (from URL parameter)
+        function checkAutoOpenScorecard() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const scorecardId = urlParams.get('openScorecard');
+            if (scorecardId) {
+                // Clear the URL parameter
+                window.history.replaceState({}, document.title, window.location.pathname);
+                // Load the scorecard after a short delay to ensure app is ready
+                setTimeout(() => {
+                    loadEval(scorecardId, true);
+                }, 1000);
+            }
         }
 
         // --- 9. SCORECARD ---
@@ -8020,7 +8143,7 @@
             });
 
             // ============================================================
-            // STEP 2: CALCULATE INDIVIDUAL GOALS (Normalized)
+            // STEP 2: CALCULATE INDIVIDUAL GOALS (Normalized to Allocation)
             // ============================================================
             let individualGoalScore = 0;
             let totalIndivWeight = 0;
@@ -8032,33 +8155,35 @@
                 });
             }
 
-            // B. Determine Normalization Factor (Target is 100% or 1.0)
-            // If weights sum to 1.2 (120%), we scale down by (1 / 1.2)
+            // B. Determine Normalization Factor
+            // FIXED: Scale weights to match the employee's individual allocation (w.i / 100)
+            // For example, if a manager has 90% individual allocation and goals sum to 100%:
+            // - Scale factor = 0.9 / 1.0 = 0.9
+            // - Each 25% goal becomes 22.5%, four goals = 90% total
+            const individualCap = w.i / 100; // Convert percentage to decimal (90 -> 0.9)
             let indivScaleFactor = 1;
-            if (totalIndivWeight > 1.0) {
-                indivScaleFactor = 1.0 / totalIndivWeight;
+            
+            if (totalIndivWeight > 0) {
+                // Scale goals to fit within the individual allocation
+                indivScaleFactor = individualCap / totalIndivWeight;
             }
 
-            // C. Calculate Weighted Score
+            // C. Calculate Weighted Score (Already Scaled to Allocation)
             if (targetUser[COL.goals]) {
                 targetUser[COL.goals].forEach(g => {
                     const rawWeight = Number(g.weight) || 0;
                     const rating = Number(g.rating) || 0;
 
-                    // Apply normalization
+                    // Apply normalization - weights now sum to individualCap (e.g., 0.9)
                     const effectiveWeight = rawWeight * indivScaleFactor;
 
                     individualGoalScore += rating * effectiveWeight;
-                    
-                    // DEBUG: Log each goal's contribution
-                    console.log(`Goal: ${g.title}, Weight: ${rawWeight}, Rating: ${rating}, Contribution: ${rating * effectiveWeight}`);
                 });
             }
-            
-            console.log(`Total individualGoalScore: ${individualGoalScore}, w.i: ${w.i}, iContrib: ${individualGoalScore * (w.i / 100)}`);
 
-            // D. Apply Category Weight (e.g. 95% or 0.95)
-            const iContrib = individualGoalScore * (w.i / 100);
+            // D. No additional multiplication needed - weights are already scaled to allocation
+            // FIXED: Individual score is already properly weighted
+            const iContrib = individualGoalScore;
 
             // ============================================================
             // STEP 3: FINAL TOTAL & UI UPDATE
