@@ -5844,14 +5844,24 @@
         async function loadAdminAnalytics() {
             if (allCompanyData.length === 0) { allCompanyData = await fetchAllData(); }
             const divs = [...new Set(allCompanyData.map(i => i[COL.div] || 'Unknown'))].sort().filter(d => d !== 'Unknown');
+            
+            // Get all Chiefs (L1 level or Chief Officer titles)
+            const chiefs = allCompanyData
+                .filter(u => {
+                    const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
+                    const j = (u[COL.job] || "").toString().trim().toUpperCase();
+                    return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) || j.includes('CCO') || j.includes('CFO') || j.includes('CTO') || j.includes('COO') || j.includes('CMO');
+                })
+                .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
+            
             let h = `
     <div class="animate-in">
         <div class="card" style="margin-bottom:24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
-                <div style="display:flex; align-items:center; gap:16px;">
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                     <div>
                         <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px; display:block;">Company</label>
-                        <select id="anl-comp" onchange="updateDivisions(); calcAdminStats()" style="padding:8px 32px 8px 12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-weight:600;">
+                        <select id="anl-comp" onchange="updateDivisionsAndChiefs(); calcAdminStats()" style="padding:8px 32px 8px 12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-weight:600;">
                             <option value="ALL">All Companies</option>
                             <option value="Zain Iraq">Zain Iraq</option>
                             <option value="Horizon">Horizon</option>
@@ -5863,6 +5873,13 @@
                         <select id="anl-filter" onchange="calcAdminStats()" style="padding:8px 32px 8px 12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-weight:600; min-width:150px;">
                             <option value="ALL">All Divisions</option>
                             ${divs.map(d => `<option value="${d}">${d}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px; display:block;">Chief / Executive</label>
+                        <select id="anl-chief" onchange="calcAdminStats()" style="padding:8px 32px 8px 12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-weight:600; min-width:180px;">
+                            <option value="ALL">All Chiefs</option>
+                            ${chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]} (${c[COL.job] || 'Executive'})</option>`).join('')}
                         </select>
                     </div>
                 </div>
@@ -5892,7 +5909,7 @@
             document.getElementById('admin-content').innerHTML = h;
             calcAdminStats();
         }
-        function updateDivisions() {
+        function updateDivisionsAndChiefs() {
             const selectedComp = document.getElementById('anl-comp').value;
             let subset = allCompanyData;
 
@@ -5900,15 +5917,35 @@
                 subset = allCompanyData.filter(u => getCompany(u[COL.id]) === selectedComp);
             }
 
+            // Update Divisions dropdown
             const divs = [...new Set(subset.map(i => i[COL.div] || 'Unknown'))].sort().filter(d => d !== 'Unknown');
-
             const divSelect = document.getElementById('anl-filter');
             divSelect.innerHTML = `<option value="ALL">All Divisions</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
+            
+            // Update Chiefs dropdown
+            const chiefs = subset
+                .filter(u => {
+                    const l = (u[COL.lvl] || "").toString().trim().toUpperCase();
+                    const j = (u[COL.job] || "").toString().trim().toUpperCase();
+                    return l === 'L1' || j === 'CEO' || (j.startsWith('CHIEF ') && j.endsWith(' OFFICER')) || j.includes('CCO') || j.includes('CFO') || j.includes('CTO') || j.includes('COO') || j.includes('CMO');
+                })
+                .sort((a, b) => (a[COL.name] || "").localeCompare(b[COL.name] || ""));
+            
+            const chiefSelect = document.getElementById('anl-chief');
+            if (chiefSelect) {
+                chiefSelect.innerHTML = `<option value="ALL">All Chiefs</option>` + chiefs.map(c => `<option value="${c[COL.id]}">${c[COL.name]} (${c[COL.job] || 'Executive'})</option>`).join('');
+            }
+        }
+        
+        // Keep old function name for backward compatibility
+        function updateDivisions() {
+            updateDivisionsAndChiefs();
         }
 
         function downloadAdminReport() {
             const compFilter = document.getElementById('anl-comp').value;
             const divFilter = document.getElementById('anl-filter').value;
+            const chiefFilter = document.getElementById('anl-chief') ? document.getElementById('anl-chief').value : 'ALL';
 
             let subset = allCompanyData;
 
@@ -5917,6 +5954,13 @@
             }
             if (divFilter !== 'ALL') {
                 subset = subset.filter(u => (u[COL.div] || 'Unknown') === divFilter);
+            }
+            
+            // Filter by Chief - get all downstream employees under selected Chief
+            if (chiefFilter !== 'ALL') {
+                const chiefDownstream = getDownstream(chiefFilter, allCompanyData);
+                const downstreamIds = new Set(chiefDownstream.map(u => u[COL.id]));
+                subset = subset.filter(u => downstreamIds.has(u[COL.id]) || u[COL.id] === chiefFilter);
             }
 
             if (subset.length === 0) { alert("No data to export."); return; }
@@ -5965,6 +6009,7 @@
         function calcAdminStats() {
             const compFilter = document.getElementById('anl-comp').value;
             const divFilter = document.getElementById('anl-filter').value;
+            const chiefFilter = document.getElementById('anl-chief') ? document.getElementById('anl-chief').value : 'ALL';
 
             let subset = allCompanyData;
 
@@ -5974,6 +6019,13 @@
 
             if (divFilter !== 'ALL') {
                 subset = subset.filter(u => (u[COL.div] || 'Unknown') === divFilter);
+            }
+            
+            // Filter by Chief - get all downstream employees under selected Chief
+            if (chiefFilter !== 'ALL') {
+                const chiefDownstream = getDownstream(chiefFilter, allCompanyData);
+                const downstreamIds = new Set(chiefDownstream.map(u => u[COL.id]));
+                subset = subset.filter(u => downstreamIds.has(u[COL.id]) || u[COL.id] === chiefFilter);
             }
 
             let dist = [0, 0, 0, 0, 0, 0];
@@ -7527,6 +7579,22 @@
                         document.getElementById('save-dot').style.background = "#ef4444"; // Red
                     } else {
                         showSaved();
+                        
+                        // --- AUTO-REFRESH: Clear cache and update local data ---
+                        // This ensures Reports and Analytics show real-time changes
+                        clearDataCache();
+                        
+                        // Update the local allCompanyData array with the change
+                        const idx = allCompanyData.findIndex(x => x[COL.id] === targetUser[COL.id]);
+                        if (idx !== -1) {
+                            allCompanyData[idx][COL.goals] = targetUser[COL.goals];
+                            allCompanyData[idx][COL.stat] = targetUser[COL.stat];
+                        }
+                        
+                        // Refresh notifications to reflect changes
+                        if (typeof refreshNotifications === 'function') {
+                            refreshNotifications();
+                        }
                     }
                 } catch (err) {
                     console.error("AutoSave Crash:", err);
