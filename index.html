@@ -8561,6 +8561,655 @@
             );
         }
 
+        // --- PROGRESS DASHBOARD FOR MANAGERS ---
+        async function loadProgressDashboard() {
+            const myId = user[COL.id];
+            const myName = user[COL.name];
+
+            // Fetch my direct reports
+            let filter = `${COL.mgr}.ilike.%${myId}%`;
+            if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
+
+            const { data: teamData } = await db.from('active_list').select('*').or(filter);
+            
+            // Also fetch my own data
+            const { data: myData } = await db.from('active_list').select('*').eq(COL.id, myId).single();
+            
+            // Parse goals for my data
+            let myGoals = myData ? myData[COL.goals] : [];
+            if (typeof myGoals === 'string') {
+                try { myGoals = JSON.parse(myGoals); } catch (e) { myGoals = []; }
+            }
+            if (!Array.isArray(myGoals)) myGoals = [];
+            
+            // Calculate team stats
+            const teamMembers = teamData || [];
+            let totalObjectives = 0;
+            let totalProgress = 0;
+            let objectivesWithProgress = 0;
+            
+            teamMembers.forEach(member => {
+                let goals = member[COL.goals];
+                if (typeof goals === 'string') {
+                    try { goals = JSON.parse(goals); } catch (e) { goals = []; }
+                }
+                if (Array.isArray(goals)) {
+                    goals.forEach(g => {
+                        totalObjectives++;
+                        if (g.progress !== undefined && g.progress > 0) {
+                            totalProgress += g.progress;
+                            objectivesWithProgress++;
+                        }
+                    });
+                }
+            });
+            
+            const avgTeamProgress = objectivesWithProgress > 0 ? Math.round(totalProgress / objectivesWithProgress) : 0;
+            
+            // Calculate my own progress
+            let myTotalProgress = 0;
+            let myObjectivesWithProgress = 0;
+            myGoals.forEach(g => {
+                if (g.progress !== undefined && g.progress > 0) {
+                    myTotalProgress += g.progress;
+                    myObjectivesWithProgress++;
+                }
+            });
+            const myAvgProgress = myObjectivesWithProgress > 0 ? Math.round(myTotalProgress / myObjectivesWithProgress) : 0;
+
+            let h = `
+    <div class="animate-in">
+        <div class="header-bar">
+            <div>
+                <h2 class="page-title">Progress Tracker</h2>
+                <p class="page-sub">Track objectives progress throughout the performance cycle</p>
+            </div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-outline" onclick="exportProgressReport()">
+                    <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> &nbsp; Export Report
+                </button>
+                <button class="btn btn-primary" onclick="loadProgressDashboard()">
+                    <i class="fa-solid fa-rotate"></i> &nbsp; Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="metric-card">
+                <div class="metric-card-inner">
+                    <div class="metric-icon" style="background:linear-gradient(135deg, var(--primary), var(--accent));">
+                        <i class="fa-solid fa-bullseye"></i>
+                    </div>
+                    <div class="metric-val">${myGoals.length}</div>
+                    <div class="metric-lbl">My Objectives</div>
+                    <div class="metric-sub-val">${myAvgProgress}% Avg Progress</div>
+                </div>
+                <div class="metric-progress"><div class="metric-progress-bar" style="width:${myAvgProgress}%"></div></div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-card-inner">
+                    <div class="metric-icon" style="background:linear-gradient(135deg, #8b5cf6, #a78bfa);">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div class="metric-val">${teamMembers.length}</div>
+                    <div class="metric-lbl">Team Members</div>
+                    <div class="metric-sub-val">${totalObjectives} Total Objectives</div>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-card-inner">
+                    <div class="metric-icon" style="background:linear-gradient(135deg, #10b981, #34d399);">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div class="metric-val">${avgTeamProgress}%</div>
+                    <div class="metric-lbl">Team Avg Progress</div>
+                    <div class="metric-sub-val">${objectivesWithProgress} with updates</div>
+                </div>
+                <div class="metric-progress"><div class="metric-progress-bar" style="width:${avgTeamProgress}%; background:linear-gradient(90deg, #10b981, #34d399);"></div></div>
+            </div>
+            
+            <div class="metric-card highlight">
+                <div class="metric-card-inner">
+                    <div class="metric-icon">
+                        <i class="fa-solid fa-flag-checkered"></i>
+                    </div>
+                    <div class="metric-val">${teamMembers.filter(m => {
+                        let g = m[COL.goals];
+                        if (typeof g === 'string') try { g = JSON.parse(g); } catch(e) { g = []; }
+                        if (!Array.isArray(g)) return false;
+                        return g.every(obj => obj.progress >= 100);
+                    }).length}</div>
+                    <div class="metric-lbl">Completed</div>
+                    <div class="metric-sub-val">All objectives at 100%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs for My Progress vs Team Progress -->
+        <div class="card" style="padding:0; overflow:hidden;">
+            <div style="display:flex; border-bottom:1px solid var(--border);">
+                <button class="progress-tab active" id="prog-tab-my" onclick="switchProgressTab('my')" 
+                        style="flex:1; padding:16px; border:none; background:var(--primary-light); color:var(--primary); font-weight:700; cursor:pointer; transition:all 0.2s;">
+                    <i class="fa-solid fa-user"></i> &nbsp; My Objectives
+                </button>
+                <button class="progress-tab" id="prog-tab-team" onclick="switchProgressTab('team')"
+                        style="flex:1; padding:16px; border:none; background:#f8fafc; color:var(--text-muted); font-weight:700; cursor:pointer; transition:all 0.2s;">
+                    <i class="fa-solid fa-users"></i> &nbsp; Team Progress
+                </button>
+            </div>
+            
+            <div id="progress-content" style="padding:24px;">
+                ${renderMyProgressSection(myGoals, myId)}
+            </div>
+        </div>
+    </div>`;
+
+            render(h);
+            
+            // Store data for tab switching
+            window.progressDashboardData = {
+                myGoals: myGoals,
+                myId: myId,
+                teamMembers: teamMembers
+            };
+            
+            // Add tab styles
+            if (!document.getElementById('progress-tab-styles')) {
+                const style = document.createElement('style');
+                style.id = 'progress-tab-styles';
+                style.innerHTML = `
+                    .progress-tab:hover { background: var(--primary-light) !important; color: var(--primary) !important; }
+                    .progress-tab.active { background: var(--primary-light) !important; color: var(--primary) !important; border-bottom: 3px solid var(--primary) !important; }
+                    .progress-slider { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 4px; background: #e2e8f0; outline: none; }
+                    .progress-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--primary); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+                    .progress-slider::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--primary); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        
+        function renderMyProgressSection(goals, empId) {
+            if (!goals || goals.length === 0) {
+                return `
+                    <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+                        <i class="fa-solid fa-clipboard-list" style="font-size:3rem; opacity:0.3; margin-bottom:16px; display:block;"></i>
+                        <div style="font-weight:600;">No Objectives Found</div>
+                        <div style="font-size:0.9rem; margin-top:8px;">Add objectives to your scorecard to track progress.</div>
+                    </div>`;
+            }
+            
+            let html = `
+                <div style="margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0; font-size:1.1rem; font-weight:700;">
+                        <i class="fa-solid fa-tasks" style="color:var(--primary); margin-right:8px;"></i>
+                        My Objectives Progress
+                    </h3>
+                    <button class="btn btn-primary" onclick="saveAllMyProgress()">
+                        <i class="fa-solid fa-save"></i> &nbsp; Save All Progress
+                    </button>
+                </div>
+                
+                <div class="progress-objectives-list">`;
+            
+            goals.forEach((goal, idx) => {
+                const progress = goal.progress || 0;
+                const progressColor = progress >= 100 ? '#10b981' : progress >= 75 ? '#0d9488' : progress >= 50 ? '#f59e0b' : progress >= 25 ? '#f97316' : '#ef4444';
+                
+                html += `
+                    <div class="progress-objective-card" style="background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; ${progress >= 100 ? 'border-left:4px solid #10b981;' : ''}">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+                            <div style="flex:1;">
+                                <div style="font-weight:700; font-size:1rem; color:var(--text-main); margin-bottom:4px;">${escapeHTML(goal.title)}</div>
+                                <div style="font-size:0.85rem; color:var(--text-muted);">
+                                    Weight: ${Math.round((goal.weight || 0) * 100)}%
+                                    ${goal.unit ? ` • Unit: ${escapeHTML(goal.unit)}` : ''}
+                                </div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:2rem; font-weight:800; color:${progressColor};" id="progress-value-${idx}">${progress}%</div>
+                                <div style="font-size:0.75rem; color:var(--text-muted);">Progress</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom:12px;">
+                            <input type="range" class="progress-slider" min="0" max="100" value="${progress}" 
+                                   id="progress-slider-${idx}"
+                                   oninput="updateProgressValue(${idx}, this.value)"
+                                   style="background: linear-gradient(to right, ${progressColor} ${progress}%, #e2e8f0 ${progress}%);">
+                        </div>
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="setQuickProgress(${idx}, 0)">0%</button>
+                                <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="setQuickProgress(${idx}, 25)">25%</button>
+                                <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="setQuickProgress(${idx}, 50)">50%</button>
+                                <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="setQuickProgress(${idx}, 75)">75%</button>
+                                <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="setQuickProgress(${idx}, 100)">100%</button>
+                            </div>
+                            ${progress >= 100 ? '<span style="color:#10b981; font-weight:600; font-size:0.85rem;"><i class="fa-solid fa-check-circle"></i> Complete</span>' : ''}
+                        </div>
+                        
+                        <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+                            <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Progress Notes</label>
+                            <textarea id="progress-notes-${idx}" class="login-input" style="margin:0; height:60px; resize:vertical;" 
+                                      placeholder="Add notes about your progress...">${escapeHTML(goal.progressNotes || '')}</textarea>
+                        </div>
+                    </div>`;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function renderTeamProgressSection(teamMembers) {
+            if (!teamMembers || teamMembers.length === 0) {
+                return `
+                    <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+                        <i class="fa-solid fa-users-slash" style="font-size:3rem; opacity:0.3; margin-bottom:16px; display:block;"></i>
+                        <div style="font-weight:600;">No Team Members Found</div>
+                        <div style="font-size:0.9rem; margin-top:8px;">You don't have any direct reports.</div>
+                    </div>`;
+            }
+            
+            let html = `
+                <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <h3 style="margin:0; font-size:1.1rem; font-weight:700;">
+                        <i class="fa-solid fa-users" style="color:var(--primary); margin-right:8px;"></i>
+                        Team Objectives Progress
+                    </h3>
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <select id="team-progress-filter" onchange="filterTeamProgress()" style="padding:8px 16px; border-radius:8px; border:1px solid var(--border); font-weight:600;">
+                            <option value="all">All Members</option>
+                            <option value="behind">Behind Schedule (&lt;50%)</option>
+                            <option value="ontrack">On Track (50-99%)</option>
+                            <option value="complete">Completed (100%)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="team-progress-list">`;
+            
+            teamMembers.forEach(member => {
+                let goals = member[COL.goals];
+                if (typeof goals === 'string') {
+                    try { goals = JSON.parse(goals); } catch (e) { goals = []; }
+                }
+                if (!Array.isArray(goals)) goals = [];
+                
+                // Calculate member's average progress
+                let totalProgress = 0;
+                let objectivesWithProgress = 0;
+                goals.forEach(g => {
+                    if (g.progress !== undefined) {
+                        totalProgress += g.progress;
+                        objectivesWithProgress++;
+                    }
+                });
+                const avgProgress = goals.length > 0 ? Math.round(totalProgress / goals.length) : 0;
+                const progressColor = avgProgress >= 100 ? '#10b981' : avgProgress >= 75 ? '#0d9488' : avgProgress >= 50 ? '#f59e0b' : avgProgress >= 25 ? '#f97316' : '#ef4444';
+                
+                // Determine status class for filtering
+                const statusClass = avgProgress >= 100 ? 'complete' : avgProgress >= 50 ? 'ontrack' : 'behind';
+                
+                html += `
+                    <div class="team-member-progress-card" data-status="${statusClass}" 
+                         style="background:white; border:1px solid var(--border); border-radius:12px; margin-bottom:16px; overflow:hidden;">
+                        
+                        <!-- Member Header -->
+                        <div style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; background:#f8fafc;"
+                             onclick="toggleMemberObjectives('${member[COL.id]}')">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="width:44px; height:44px; background:linear-gradient(135deg, var(--primary), var(--accent)); color:white; border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:1.1rem;">
+                                    ${member[COL.name].charAt(0)}
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; color:var(--text-main);">${member[COL.name].split('(')[0]}</div>
+                                    <div style="font-size:0.8rem; color:var(--text-muted);">${member[COL.job] || 'Staff'} • ${goals.length} objectives</div>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <div style="text-align:right;">
+                                    <div style="font-size:1.5rem; font-weight:800; color:${progressColor};">${avgProgress}%</div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted);">Average Progress</div>
+                                </div>
+                                <div style="width:100px; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden;">
+                                    <div style="width:${avgProgress}%; height:100%; background:${progressColor}; transition:width 0.3s;"></div>
+                                </div>
+                                <i class="fa-solid fa-chevron-down" id="chevron-${member[COL.id]}" style="color:var(--text-muted); transition:transform 0.3s;"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- Member Objectives (Expandable) -->
+                        <div id="objectives-${member[COL.id]}" style="display:none; padding:16px 20px; border-top:1px solid var(--border);">
+                            ${goals.length > 0 ? goals.map((g, idx) => {
+                                const gProgress = g.progress || 0;
+                                const gColor = gProgress >= 100 ? '#10b981' : gProgress >= 50 ? '#f59e0b' : '#ef4444';
+                                return `
+                                    <div style="display:flex; align-items:center; gap:12px; padding:12px; background:#f8fafc; border-radius:8px; margin-bottom:8px; ${idx === goals.length - 1 ? 'margin-bottom:0;' : ''}">
+                                        <div style="flex:1; min-width:0;">
+                                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(g.title)}</div>
+                                            <div style="font-size:0.75rem; color:var(--text-muted);">Weight: ${Math.round((g.weight || 0) * 100)}%</div>
+                                        </div>
+                                        <div style="display:flex; align-items:center; gap:12px;">
+                                            <div style="width:80px; height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
+                                                <div style="width:${gProgress}%; height:100%; background:${gColor};"></div>
+                                            </div>
+                                            <div style="font-weight:700; color:${gColor}; min-width:45px; text-align:right;">${gProgress}%</div>
+                                        </div>
+                                        <button class="btn btn-outline" style="padding:6px 10px; font-size:0.75rem;" 
+                                                onclick="event.stopPropagation(); openTeamMemberProgressModal('${member[COL.id]}', ${idx})">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                    </div>`;
+                            }).join('') : '<div style="text-align:center; padding:20px; color:var(--text-muted);">No objectives assigned</div>'}
+                        </div>
+                    </div>`;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function switchProgressTab(tab) {
+            const data = window.progressDashboardData;
+            if (!data) return;
+            
+            // Update tab styles
+            document.getElementById('prog-tab-my').classList.toggle('active', tab === 'my');
+            document.getElementById('prog-tab-team').classList.toggle('active', tab === 'team');
+            document.getElementById('prog-tab-my').style.background = tab === 'my' ? 'var(--primary-light)' : '#f8fafc';
+            document.getElementById('prog-tab-my').style.color = tab === 'my' ? 'var(--primary)' : 'var(--text-muted)';
+            document.getElementById('prog-tab-team').style.background = tab === 'team' ? 'var(--primary-light)' : '#f8fafc';
+            document.getElementById('prog-tab-team').style.color = tab === 'team' ? 'var(--primary)' : 'var(--text-muted)';
+            
+            // Render content
+            const content = document.getElementById('progress-content');
+            if (tab === 'my') {
+                content.innerHTML = renderMyProgressSection(data.myGoals, data.myId);
+            } else {
+                content.innerHTML = renderTeamProgressSection(data.teamMembers);
+            }
+        }
+        
+        function updateProgressValue(idx, value) {
+            const valueEl = document.getElementById(`progress-value-${idx}`);
+            const slider = document.getElementById(`progress-slider-${idx}`);
+            
+            value = parseInt(value);
+            if (valueEl) valueEl.textContent = value + '%';
+            
+            // Update slider background
+            const color = value >= 100 ? '#10b981' : value >= 75 ? '#0d9488' : value >= 50 ? '#f59e0b' : value >= 25 ? '#f97316' : '#ef4444';
+            if (slider) {
+                slider.style.background = `linear-gradient(to right, ${color} ${value}%, #e2e8f0 ${value}%)`;
+            }
+            
+            // Update stored data
+            if (window.progressDashboardData && window.progressDashboardData.myGoals[idx]) {
+                window.progressDashboardData.myGoals[idx].progress = value;
+            }
+        }
+        
+        function setQuickProgress(idx, value) {
+            const slider = document.getElementById(`progress-slider-${idx}`);
+            if (slider) {
+                slider.value = value;
+                updateProgressValue(idx, value);
+            }
+        }
+        
+        async function saveAllMyProgress() {
+            const data = window.progressDashboardData;
+            if (!data || !data.myGoals) return;
+            
+            showSaving();
+            
+            // Collect all progress values and notes
+            data.myGoals.forEach((goal, idx) => {
+                const slider = document.getElementById(`progress-slider-${idx}`);
+                const notes = document.getElementById(`progress-notes-${idx}`);
+                
+                if (slider) goal.progress = parseInt(slider.value);
+                if (notes) goal.progressNotes = notes.value;
+                goal.progressUpdated = new Date().toISOString();
+            });
+            
+            try {
+                const { error } = await db.from('active_list').upsert({
+                    [COL.id]: data.myId,
+                    [COL.goals]: data.myGoals
+                });
+                
+                if (error) {
+                    showToast('Failed to save progress: ' + error.message, 'error');
+                } else {
+                    showSaved();
+                    showToast('Progress saved successfully!', 'success');
+                    
+                    // Clear cache
+                    clearDataCache();
+                }
+            } catch (err) {
+                console.error('Save error:', err);
+                showToast('Error saving progress', 'error');
+            }
+        }
+        
+        function toggleMemberObjectives(memberId) {
+            const objectives = document.getElementById(`objectives-${memberId}`);
+            const chevron = document.getElementById(`chevron-${memberId}`);
+            
+            if (objectives.style.display === 'none') {
+                objectives.style.display = 'block';
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                objectives.style.display = 'none';
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+        
+        function filterTeamProgress() {
+            const filter = document.getElementById('team-progress-filter').value;
+            const cards = document.querySelectorAll('.team-member-progress-card');
+            
+            cards.forEach(card => {
+                const status = card.getAttribute('data-status');
+                if (filter === 'all' || status === filter) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+        
+        function openTeamMemberProgressModal(memberId, objectiveIdx) {
+            const data = window.progressDashboardData;
+            if (!data || !data.teamMembers) return;
+            
+            const member = data.teamMembers.find(m => m[COL.id] === memberId);
+            if (!member) return;
+            
+            let goals = member[COL.goals];
+            if (typeof goals === 'string') {
+                try { goals = JSON.parse(goals); } catch (e) { goals = []; }
+            }
+            if (!Array.isArray(goals) || !goals[objectiveIdx]) return;
+            
+            const goal = goals[objectiveIdx];
+            const progress = goal.progress || 0;
+            
+            const modalHtml = `
+            <div id="team-progress-modal" style="position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5);">
+                <div style="background:white; width:90%; max-width:500px; padding:32px; border-radius:20px; animation:scaleIn 0.3s ease;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                        <h3 style="margin:0; font-size:1.2rem; font-weight:700;">Update Progress</h3>
+                        <button onclick="closeTeamProgressModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-muted);">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    
+                    <div style="background:#f8fafc; padding:16px; border-radius:12px; margin-bottom:20px;">
+                        <div style="font-weight:600; margin-bottom:4px;">${member[COL.name].split('(')[0]}</div>
+                        <div style="font-size:0.9rem; color:var(--text-muted);">${escapeHTML(goal.title)}</div>
+                    </div>
+                    
+                    <div style="margin-bottom:20px;">
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:8px;">
+                            Progress: <span id="modal-progress-value" style="color:var(--primary);">${progress}%</span>
+                        </label>
+                        <input type="range" class="progress-slider" min="0" max="100" value="${progress}" 
+                               id="modal-progress-slider"
+                               oninput="document.getElementById('modal-progress-value').textContent = this.value + '%'"
+                               style="background: linear-gradient(to right, var(--primary) ${progress}%, #e2e8f0 ${progress}%);">
+                        
+                        <div style="display:flex; justify-content:space-between; margin-top:12px;">
+                            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="document.getElementById('modal-progress-slider').value=0; document.getElementById('modal-progress-value').textContent='0%'">0%</button>
+                            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="document.getElementById('modal-progress-slider').value=25; document.getElementById('modal-progress-value').textContent='25%'">25%</button>
+                            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="document.getElementById('modal-progress-slider').value=50; document.getElementById('modal-progress-value').textContent='50%'">50%</button>
+                            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="document.getElementById('modal-progress-slider').value=75; document.getElementById('modal-progress-value').textContent='75%'">75%</button>
+                            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.75rem;" onclick="document.getElementById('modal-progress-slider').value=100; document.getElementById('modal-progress-value').textContent='100%'">100%</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom:24px;">
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Progress Notes</label>
+                        <textarea id="modal-progress-notes" class="login-input" style="margin:0; height:80px; resize:vertical;" 
+                                  placeholder="Add notes about this progress update...">${escapeHTML(goal.progressNotes || '')}</textarea>
+                    </div>
+                    
+                    <div style="display:flex; justify-content:flex-end; gap:12px;">
+                        <button class="btn btn-outline" onclick="closeTeamProgressModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="saveTeamMemberProgress('${memberId}', ${objectiveIdx})">
+                            <i class="fa-solid fa-save"></i> &nbsp; Save Progress
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        function closeTeamProgressModal() {
+            const modal = document.getElementById('team-progress-modal');
+            if (modal) modal.remove();
+        }
+        
+        async function saveTeamMemberProgress(memberId, objectiveIdx) {
+            const data = window.progressDashboardData;
+            if (!data || !data.teamMembers) return;
+            
+            const memberIdx = data.teamMembers.findIndex(m => m[COL.id] === memberId);
+            if (memberIdx === -1) return;
+            
+            const member = data.teamMembers[memberIdx];
+            let goals = member[COL.goals];
+            if (typeof goals === 'string') {
+                try { goals = JSON.parse(goals); } catch (e) { goals = []; }
+            }
+            if (!Array.isArray(goals) || !goals[objectiveIdx]) return;
+            
+            const progress = parseInt(document.getElementById('modal-progress-slider').value);
+            const notes = document.getElementById('modal-progress-notes').value;
+            
+            // Update local data
+            goals[objectiveIdx].progress = progress;
+            goals[objectiveIdx].progressNotes = notes;
+            goals[objectiveIdx].progressUpdated = new Date().toISOString();
+            
+            showSaving();
+            
+            try {
+                const { error } = await db.from('active_list').upsert({
+                    [COL.id]: memberId,
+                    [COL.goals]: goals
+                });
+                
+                if (error) {
+                    showToast('Failed to save: ' + error.message, 'error');
+                } else {
+                    showSaved();
+                    showToast('Progress updated!', 'success');
+                    
+                    // Update local data
+                    data.teamMembers[memberIdx][COL.goals] = goals;
+                    
+                    // Close modal and refresh view
+                    closeTeamProgressModal();
+                    switchProgressTab('team');
+                    
+                    // Clear cache
+                    clearDataCache();
+                }
+            } catch (err) {
+                console.error('Save error:', err);
+                showToast('Error saving progress', 'error');
+            }
+        }
+        
+        async function exportProgressReport() {
+            const data = window.progressDashboardData;
+            if (!data) {
+                showToast('No data to export', 'error');
+                return;
+            }
+            
+            const rows = [];
+            
+            // Add manager's own objectives
+            if (data.myGoals && data.myGoals.length > 0) {
+                data.myGoals.forEach(g => {
+                    rows.push({
+                        'Employee ID': data.myId,
+                        'Employee Name': user[COL.name],
+                        'Type': 'Manager',
+                        'Objective': g.title,
+                        'Weight': Math.round((g.weight || 0) * 100) + '%',
+                        'Progress': (g.progress || 0) + '%',
+                        'Notes': g.progressNotes || '',
+                        'Last Updated': g.progressUpdated ? new Date(g.progressUpdated).toLocaleDateString() : '-'
+                    });
+                });
+            }
+            
+            // Add team members' objectives
+            if (data.teamMembers && data.teamMembers.length > 0) {
+                data.teamMembers.forEach(member => {
+                    let goals = member[COL.goals];
+                    if (typeof goals === 'string') {
+                        try { goals = JSON.parse(goals); } catch (e) { goals = []; }
+                    }
+                    if (Array.isArray(goals)) {
+                        goals.forEach(g => {
+                            rows.push({
+                                'Employee ID': member[COL.id],
+                                'Employee Name': member[COL.name],
+                                'Type': 'Team Member',
+                                'Objective': g.title,
+                                'Weight': Math.round((g.weight || 0) * 100) + '%',
+                                'Progress': (g.progress || 0) + '%',
+                                'Notes': g.progressNotes || '',
+                                'Last Updated': g.progressUpdated ? new Date(g.progressUpdated).toLocaleDateString() : '-'
+                            });
+                        });
+                    }
+                });
+            }
+            
+            if (rows.length === 0) {
+                showToast('No objectives to export', 'error');
+                return;
+            }
+            
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Progress Report');
+            XLSX.writeFile(wb, `Progress_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            showToast('Progress report exported!', 'success');
+        }
+
         // --- OPEN SCORECARD IN NEW TAB ---
         function openScorecardInNewTab(employeeId) {
             // Get current URL and add employee ID as parameter
@@ -9643,6 +10292,7 @@
             if (isMgr) {
                 h += mkSec('Management');
                 if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) h += mkItem('My Team', 'fa-solid fa-users', 'loadTeam()');
+                if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) h += mkItem('Progress', 'fa-solid fa-bars-progress', 'loadProgressDashboard()');
                 if (['Chief', 'Director', 'Senior Manager', 'Manager', 'Admin', 'Master'].includes(r)) h += mkItem('Reports', 'fa-solid fa-chart-line', 'loadReports()');
             }
 
