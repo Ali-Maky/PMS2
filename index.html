@@ -7966,6 +7966,9 @@
             if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
 
             const { data } = await db.from('active_list').select('*').or(filter);
+            
+            // Store team data for bulk assignment
+            window.managerTeamData = data || [];
 
             let h = `
     <div class="animate-in">
@@ -7974,7 +7977,10 @@
                 <h2 class="page-title">My Team</h2>
                 <p class="page-sub">Direct Reports & Scorecards</p>
             </div>
-            <div>
+            <div style="display:flex; gap:12px; align-items:center;">
+                <button class="btn btn-outline" onclick="openBulkObjectivesModal()">
+                    <i class="fa-solid fa-file-import"></i> &nbsp; Bulk Assign Objectives
+                </button>
                 <select id="team-comp-filter" onchange="filterTeamGrid()" style="padding:10px 16px; border-radius:10px; border:1px solid var(--border); font-weight:600; cursor:pointer;">
                     <option value="ALL">All Companies</option>
                     <option value="Zain Iraq">Zain Iraq</option>
@@ -8039,6 +8045,520 @@
                     card.style.display = 'none';
                 }
             });
+        }
+
+        // --- BULK OBJECTIVES IMPORT FOR MANAGERS ---
+        let bulkObjectivesData = [];
+        let selectedEmployeesForBulk = new Set();
+        
+        function openBulkObjectivesModal() {
+            const teamData = window.managerTeamData || [];
+            
+            if (teamData.length === 0) {
+                showToast('No team members found to assign objectives to', 'error');
+                return;
+            }
+            
+            // Reset state
+            bulkObjectivesData = [];
+            selectedEmployeesForBulk = new Set();
+            
+            const modalHtml = `
+            <div id="bulk-objectives-modal" style="position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); padding:20px;">
+                <div style="background:white; width:100%; max-width:1000px; max-height:90vh; border-radius:20px; display:flex; flex-direction:column; overflow:hidden; animation:scaleIn 0.3s ease;">
+                    
+                    <!-- Header -->
+                    <div style="padding:24px 32px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.4rem; font-weight:700;">
+                                <i class="fa-solid fa-file-import" style="color:var(--primary); margin-right:10px;"></i>
+                                Bulk Assign Objectives
+                            </h3>
+                            <p style="margin:4px 0 0; color:var(--text-muted); font-size:0.9rem;">Import objectives from Excel and assign to team members</p>
+                        </div>
+                        <button onclick="closeBulkObjectivesModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted); padding:8px;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Steps Container -->
+                    <div style="flex:1; overflow-y:auto; padding:24px 32px;">
+                        
+                        <!-- Step 1: Import Objectives -->
+                        <div class="bulk-step" id="bulk-step-1">
+                            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+                                <div style="width:32px; height:32px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700;">1</div>
+                                <h4 style="margin:0; font-size:1.1rem;">Import Objectives</h4>
+                            </div>
+                            
+                            <div style="background:#f8fafc; border:2px dashed var(--border); border-radius:12px; padding:40px; text-align:center; margin-bottom:20px;">
+                                <i class="fa-solid fa-file-excel" style="font-size:3rem; color:#10b981; margin-bottom:16px; display:block;"></i>
+                                <p style="margin:0 0 16px; color:var(--text-muted);">Upload an Excel file with objectives</p>
+                                <input type="file" id="bulk-obj-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="processBulkObjectivesFile(this)">
+                                <button class="btn btn-primary" onclick="document.getElementById('bulk-obj-file').click()">
+                                    <i class="fa-solid fa-upload"></i> &nbsp; Choose File
+                                </button>
+                                
+                                <div style="margin-top:20px; text-align:left; background:white; padding:16px; border-radius:8px; border:1px solid var(--border);">
+                                    <div style="font-weight:600; margin-bottom:8px; font-size:0.85rem;">Expected Excel Columns:</div>
+                                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600;">Objective / Title</span>
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600;">Weight (%)</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600;">Description (optional)</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600;">Unit (optional)</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600;">L1-L6 Targets (optional)</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom:20px;">
+                                <div style="font-weight:600; margin-bottom:12px;">Or add objectives manually:</div>
+                                <button class="btn btn-outline" onclick="addManualBulkObjective()">
+                                    <i class="fa-solid fa-plus"></i> &nbsp; Add Objective Manually
+                                </button>
+                            </div>
+                            
+                            <!-- Objectives Preview -->
+                            <div id="bulk-objectives-preview" style="display:none;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                    <h4 style="margin:0; font-size:1rem;"><i class="fa-solid fa-list-check" style="color:var(--primary); margin-right:8px;"></i>Objectives to Assign</h4>
+                                    <button class="btn btn-outline" style="padding:6px 12px; font-size:0.8rem;" onclick="clearBulkObjectives()">
+                                        <i class="fa-solid fa-trash"></i> &nbsp; Clear All
+                                    </button>
+                                </div>
+                                <div id="bulk-objectives-list" style="max-height:300px; overflow-y:auto; border:1px solid var(--border); border-radius:12px;"></div>
+                                <div id="bulk-objectives-weight-warning" style="display:none; background:#fef2f2; border:1px solid #fecaca; padding:12px 16px; border-radius:8px; margin-top:12px; color:#dc2626; font-size:0.85rem;">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> <span id="weight-warning-text"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2: Select Employees -->
+                        <div class="bulk-step" id="bulk-step-2" style="margin-top:32px; padding-top:32px; border-top:1px solid var(--border);">
+                            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+                                <div style="width:32px; height:32px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700;">2</div>
+                                <h4 style="margin:0; font-size:1.1rem;">Select Team Members</h4>
+                            </div>
+                            
+                            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+                                <button class="btn btn-outline" onclick="selectAllEmployeesForBulk()">
+                                    <i class="fa-solid fa-check-double"></i> &nbsp; Select All
+                                </button>
+                                <button class="btn btn-outline" onclick="deselectAllEmployeesForBulk()">
+                                    <i class="fa-solid fa-xmark"></i> &nbsp; Deselect All
+                                </button>
+                                <div style="margin-left:auto; color:var(--text-muted); font-size:0.9rem; display:flex; align-items:center; gap:8px;">
+                                    <span id="selected-employees-count">0</span> of ${teamData.length} selected
+                                </div>
+                            </div>
+                            
+                            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; max-height:300px; overflow-y:auto; padding:4px;">
+                                ${teamData.map(emp => `
+                                    <label class="bulk-employee-card" style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:#f8fafc; border:2px solid var(--border); border-radius:10px; cursor:pointer; transition:all 0.2s;"
+                                           onmouseover="this.style.borderColor='var(--primary-light)'"
+                                           onmouseout="this.style.borderColor=this.querySelector('input').checked ? 'var(--primary)' : 'var(--border)'">
+                                        <input type="checkbox" class="bulk-emp-checkbox" value="${emp[COL.id]}" onchange="toggleEmployeeForBulk(this)"
+                                               style="width:18px; height:18px; accent-color:var(--primary);">
+                                        <div style="flex:1; min-width:0;">
+                                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${emp[COL.name].split('(')[0]}</div>
+                                            <div style="font-size:0.75rem; color:var(--text-muted);">${emp[COL.id]} • ${emp[COL.job] || 'Staff'}</div>
+                                        </div>
+                                        <span class="status-badge ${emp[COL.stat] === 'Draft' ? 'draft' : 'submitted'}" style="font-size:0.65rem; padding:3px 8px;">
+                                            ${emp[COL.stat] || 'Draft'}
+                                        </span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3: Assignment Mode -->
+                        <div class="bulk-step" id="bulk-step-3" style="margin-top:32px; padding-top:32px; border-top:1px solid var(--border);">
+                            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+                                <div style="width:32px; height:32px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700;">3</div>
+                                <h4 style="margin:0; font-size:1.1rem;">Assignment Mode</h4>
+                            </div>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                                <label class="assignment-mode-card" style="padding:20px; background:#f8fafc; border:2px solid var(--border); border-radius:12px; cursor:pointer; transition:all 0.2s;">
+                                    <input type="radio" name="assignment-mode" value="replace" checked style="display:none;">
+                                    <div style="display:flex; align-items:flex-start; gap:12px;">
+                                        <div style="width:40px; height:40px; background:var(--danger); color:white; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                                            <i class="fa-solid fa-arrows-rotate"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight:700; margin-bottom:4px;">Replace Existing</div>
+                                            <div style="font-size:0.85rem; color:var(--text-muted);">Remove all current individual objectives and replace with the new ones</div>
+                                        </div>
+                                    </div>
+                                </label>
+                                
+                                <label class="assignment-mode-card" style="padding:20px; background:#f8fafc; border:2px solid var(--border); border-radius:12px; cursor:pointer; transition:all 0.2s;">
+                                    <input type="radio" name="assignment-mode" value="append" style="display:none;">
+                                    <div style="display:flex; align-items:flex-start; gap:12px;">
+                                        <div style="width:40px; height:40px; background:var(--success); color:white; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                                            <i class="fa-solid fa-plus"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight:700; margin-bottom:4px;">Append to Existing</div>
+                                            <div style="font-size:0.85rem; color:var(--text-muted);">Keep current objectives and add the new ones at the end</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="padding:20px 32px; border-top:1px solid var(--border); background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="color:var(--text-muted); font-size:0.85rem;">
+                            <i class="fa-solid fa-circle-info"></i> &nbsp; Objectives will be assigned to selected employees' scorecards
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <button class="btn btn-outline" onclick="closeBulkObjectivesModal()">Cancel</button>
+                            <button class="btn btn-primary" id="btn-apply-bulk" onclick="applyBulkObjectives()" disabled>
+                                <i class="fa-solid fa-paper-plane"></i> &nbsp; Apply to Selected (<span id="apply-count">0</span>)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Add styles for the modal
+            if (!document.getElementById('bulk-objectives-styles')) {
+                const style = document.createElement('style');
+                style.id = 'bulk-objectives-styles';
+                style.innerHTML = `
+                    .assignment-mode-card:has(input:checked) {
+                        border-color: var(--primary) !important;
+                        background: var(--primary-light) !important;
+                    }
+                    .assignment-mode-card:hover {
+                        border-color: var(--primary-light);
+                    }
+                    .bulk-employee-card:has(input:checked) {
+                        border-color: var(--primary) !important;
+                        background: var(--primary-light) !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        
+        function closeBulkObjectivesModal() {
+            const modal = document.getElementById('bulk-objectives-modal');
+            if (modal) modal.remove();
+            bulkObjectivesData = [];
+            selectedEmployeesForBulk.clear();
+        }
+        
+        function processBulkObjectivesFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                    
+                    if (json.length === 0) {
+                        showToast('Excel file is empty', 'error');
+                        return;
+                    }
+                    
+                    // Parse objectives from Excel
+                    function getVal(row, candidates) {
+                        const keys = Object.keys(row);
+                        const clean = (s) => s.toString().toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                        for (let c of candidates) {
+                            const found = keys.find(k => clean(k) === clean(c));
+                            if (found && row[found] !== undefined) return row[found];
+                        }
+                        return "";
+                    }
+                    
+                    bulkObjectivesData = json.map((r, idx) => {
+                        let w = getVal(r, ['Weight', 'Wt', 'W%', 'Weight%']);
+                        w = parseFloat(w) || 0;
+                        if (w > 1) w = w / 100; // Convert percentage to decimal
+                        
+                        return {
+                            id: 'obj_' + Date.now() + '_' + idx,
+                            title: getVal(r, ['Objective', 'Title', 'Item', 'Items', 'Goal', 'KPI', 'Name']) || "Imported Objective",
+                            weight: w,
+                            desc: getVal(r, ['Description', 'Desc', 'Details', 'KPI Description']),
+                            unit: getVal(r, ['Unit', 'UoM', 'Measure']),
+                            rating: 0,
+                            targets: [
+                                getVal(r, ['L1', 'Idle', 'Level1']),
+                                getVal(r, ['L2', 'Stagnant', 'Level2']),
+                                getVal(r, ['L3', 'Walker', 'Level3']),
+                                getVal(r, ['L4', 'Target', 'Runner', 'Level4']),
+                                getVal(r, ['L5', 'Flyer', 'Level5']),
+                                getVal(r, ['L6', 'Astronaut', 'Level6'])
+                            ]
+                        };
+                    }).filter(obj => obj.title && obj.title !== "Imported Objective");
+                    
+                    if (bulkObjectivesData.length === 0) {
+                        showToast('No valid objectives found in file. Check column names.', 'error');
+                        return;
+                    }
+                    
+                    renderBulkObjectivesPreview();
+                    showToast(`Imported ${bulkObjectivesData.length} objectives`, 'success');
+                    input.value = '';
+                } catch (err) {
+                    console.error('Error parsing file:', err);
+                    showToast('Error reading Excel file. Check format.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function addManualBulkObjective() {
+            const newObj = {
+                id: 'obj_' + Date.now(),
+                title: 'New Objective',
+                weight: 0,
+                desc: '',
+                unit: '',
+                rating: 0,
+                targets: ['', '', '', '', '', '']
+            };
+            bulkObjectivesData.push(newObj);
+            renderBulkObjectivesPreview();
+            
+            // Auto-focus on the new objective's title
+            setTimeout(() => {
+                const inputs = document.querySelectorAll('.bulk-obj-title');
+                if (inputs.length > 0) {
+                    inputs[inputs.length - 1].focus();
+                    inputs[inputs.length - 1].select();
+                }
+            }, 100);
+        }
+        
+        function renderBulkObjectivesPreview() {
+            const container = document.getElementById('bulk-objectives-preview');
+            const list = document.getElementById('bulk-objectives-list');
+            
+            if (bulkObjectivesData.length === 0) {
+                container.style.display = 'none';
+                updateBulkApplyButton();
+                return;
+            }
+            
+            container.style.display = 'block';
+            
+            let totalWeight = 0;
+            bulkObjectivesData.forEach(obj => totalWeight += (obj.weight || 0));
+            
+            list.innerHTML = bulkObjectivesData.map((obj, idx) => `
+                <div class="bulk-obj-item" style="padding:16px; border-bottom:1px solid var(--border); ${idx === bulkObjectivesData.length - 1 ? 'border-bottom:none;' : ''}">
+                    <div style="display:flex; gap:12px; align-items:flex-start;">
+                        <div style="flex:1;">
+                            <input class="bulk-obj-title login-input" style="margin:0 0 8px 0; font-weight:600;" 
+                                   value="${escapeHTML(obj.title)}" placeholder="Objective Title"
+                                   onchange="updateBulkObjective(${idx}, 'title', this.value)">
+                            <div style="display:flex; gap:8px;">
+                                <input class="login-input" style="margin:0; width:80px;" type="number" step="0.01" min="0" max="1"
+                                       value="${obj.weight}" placeholder="Weight"
+                                       onchange="updateBulkObjective(${idx}, 'weight', parseFloat(this.value) || 0)">
+                                <input class="login-input" style="margin:0; width:80px;" 
+                                       value="${escapeHTML(obj.unit || '')}" placeholder="Unit"
+                                       onchange="updateBulkObjective(${idx}, 'unit', this.value)">
+                                <input class="login-input" style="margin:0; flex:1;" 
+                                       value="${escapeHTML(obj.desc || '')}" placeholder="Description (optional)"
+                                       onchange="updateBulkObjective(${idx}, 'desc', this.value)">
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="padding:8px 12px; color:var(--danger); border-color:#fee2e2;" 
+                                onclick="removeBulkObjective(${idx})" title="Remove">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Show weight warning if needed
+            const warningEl = document.getElementById('bulk-objectives-weight-warning');
+            const warningText = document.getElementById('weight-warning-text');
+            const totalPct = Math.round(totalWeight * 100);
+            
+            if (totalWeight > 0 && totalWeight !== 1) {
+                warningEl.style.display = 'block';
+                warningText.textContent = `Total weight is ${totalPct}%. Weights should sum to 100% for proper scoring.`;
+            } else {
+                warningEl.style.display = 'none';
+            }
+            
+            updateBulkApplyButton();
+        }
+        
+        function updateBulkObjective(idx, field, value) {
+            if (bulkObjectivesData[idx]) {
+                bulkObjectivesData[idx][field] = value;
+                if (field === 'weight') {
+                    renderBulkObjectivesPreview();
+                }
+            }
+        }
+        
+        function removeBulkObjective(idx) {
+            bulkObjectivesData.splice(idx, 1);
+            renderBulkObjectivesPreview();
+        }
+        
+        function clearBulkObjectives() {
+            bulkObjectivesData = [];
+            renderBulkObjectivesPreview();
+        }
+        
+        function selectAllEmployeesForBulk() {
+            document.querySelectorAll('.bulk-emp-checkbox').forEach(cb => {
+                cb.checked = true;
+                selectedEmployeesForBulk.add(cb.value);
+                cb.closest('.bulk-employee-card').style.borderColor = 'var(--primary)';
+                cb.closest('.bulk-employee-card').style.background = 'var(--primary-light)';
+            });
+            updateBulkApplyButton();
+        }
+        
+        function deselectAllEmployeesForBulk() {
+            document.querySelectorAll('.bulk-emp-checkbox').forEach(cb => {
+                cb.checked = false;
+                selectedEmployeesForBulk.delete(cb.value);
+                cb.closest('.bulk-employee-card').style.borderColor = 'var(--border)';
+                cb.closest('.bulk-employee-card').style.background = '#f8fafc';
+            });
+            updateBulkApplyButton();
+        }
+        
+        function toggleEmployeeForBulk(checkbox) {
+            if (checkbox.checked) {
+                selectedEmployeesForBulk.add(checkbox.value);
+                checkbox.closest('.bulk-employee-card').style.borderColor = 'var(--primary)';
+                checkbox.closest('.bulk-employee-card').style.background = 'var(--primary-light)';
+            } else {
+                selectedEmployeesForBulk.delete(checkbox.value);
+                checkbox.closest('.bulk-employee-card').style.borderColor = 'var(--border)';
+                checkbox.closest('.bulk-employee-card').style.background = '#f8fafc';
+            }
+            updateBulkApplyButton();
+        }
+        
+        function updateBulkApplyButton() {
+            const btn = document.getElementById('btn-apply-bulk');
+            const countSpan = document.getElementById('apply-count');
+            const selectedCountSpan = document.getElementById('selected-employees-count');
+            
+            const count = selectedEmployeesForBulk.size;
+            const hasObjectives = bulkObjectivesData.length > 0;
+            
+            if (countSpan) countSpan.textContent = count;
+            if (selectedCountSpan) selectedCountSpan.textContent = count;
+            if (btn) btn.disabled = !hasObjectives || count === 0;
+        }
+        
+        async function applyBulkObjectives() {
+            if (bulkObjectivesData.length === 0) {
+                showToast('No objectives to assign', 'error');
+                return;
+            }
+            
+            if (selectedEmployeesForBulk.size === 0) {
+                showToast('No employees selected', 'error');
+                return;
+            }
+            
+            const mode = document.querySelector('input[name="assignment-mode"]:checked').value;
+            const employeeIds = Array.from(selectedEmployeesForBulk);
+            
+            showConfirm(
+                'Confirm Bulk Assignment',
+                `This will ${mode === 'replace' ? 'REPLACE all existing objectives with' : 'ADD'} ${bulkObjectivesData.length} objective(s) for ${employeeIds.length} employee(s). Continue?`,
+                'Apply Changes',
+                'primary',
+                async () => {
+                    showSaving();
+                    let successCount = 0;
+                    let errorCount = 0;
+                    
+                    for (const empId of employeeIds) {
+                        try {
+                            // Fetch current employee data
+                            const { data: empData, error: fetchError } = await db.from('active_list').select('*').eq(COL.id, empId).single();
+                            
+                            if (fetchError || !empData) {
+                                console.error(`Failed to fetch employee ${empId}:`, fetchError);
+                                errorCount++;
+                                continue;
+                            }
+                            
+                            // Parse existing goals
+                            let currentGoals = empData[COL.goals];
+                            if (typeof currentGoals === 'string') {
+                                try { currentGoals = JSON.parse(currentGoals); } catch (e) { currentGoals = []; }
+                            }
+                            if (!Array.isArray(currentGoals)) currentGoals = [];
+                            
+                            // Prepare new objectives (deep copy to avoid reference issues)
+                            const newObjectives = bulkObjectivesData.map(obj => ({
+                                title: obj.title,
+                                weight: obj.weight,
+                                desc: obj.desc || '',
+                                unit: obj.unit || '',
+                                rating: 0,
+                                targets: [...(obj.targets || ['', '', '', '', '', ''])]
+                            }));
+                            
+                            // Determine final goals based on mode
+                            let finalGoals;
+                            if (mode === 'replace') {
+                                finalGoals = newObjectives;
+                            } else {
+                                finalGoals = [...currentGoals, ...newObjectives];
+                            }
+                            
+                            // Save to database
+                            const { error: saveError } = await db.from('active_list').upsert({
+                                [COL.id]: empId,
+                                [COL.goals]: finalGoals
+                            });
+                            
+                            if (saveError) {
+                                console.error(`Failed to save for employee ${empId}:`, saveError);
+                                errorCount++;
+                            } else {
+                                successCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Error processing employee ${empId}:`, err);
+                            errorCount++;
+                        }
+                    }
+                    
+                    showSaved();
+                    closeBulkObjectivesModal();
+                    
+                    // Clear data cache to reflect changes
+                    clearDataCache();
+                    
+                    if (errorCount === 0) {
+                        showToast(`Successfully assigned objectives to ${successCount} employee(s)!`, 'success');
+                    } else {
+                        showToast(`Completed with ${successCount} success, ${errorCount} errors`, 'warning');
+                    }
+                    
+                    // Refresh team view
+                    loadTeam();
+                }
+            );
         }
 
         // --- OPEN SCORECARD IN NEW TAB ---
