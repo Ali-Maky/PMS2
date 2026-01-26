@@ -3951,10 +3951,53 @@
         // --- DATA CACHE CONFIGURATION ---
         const DATA_CACHE_KEY = 'zpms_data_cache';
         const DATA_CACHE_TIME_KEY = 'zpms_data_cache_time';
-        const DATA_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes cache
+        const DATA_CACHE_EXPIRY = 10 * 60 * 1000; // 10 minutes cache (increased from 5)
+        const TEAM_CACHE_KEY = 'zpms_team_cache';
+        const SETTINGS_CACHE_KEY = 'zpms_settings_cache';
         
-        // --- BATCHED FETCH HELPER ---
+        // --- INDEXED LOCAL CACHE FOR INSTANT ACCESS ---
+        let localDataIndex = {}; // Index by employee ID for O(1) lookups
+        let isDataLoaded = false;
+        let dataLoadPromise = null; // Prevent duplicate fetches
+        
+        // Build index for fast lookups
+        function buildDataIndex(data) {
+            localDataIndex = {};
+            if (Array.isArray(data)) {
+                data.forEach(emp => {
+                    if (emp && emp[COL.id]) {
+                        localDataIndex[emp[COL.id]] = emp;
+                    }
+                });
+            }
+            isDataLoaded = true;
+        }
+        
+        // Get employee by ID instantly from index
+        function getEmployeeFromCache(empId) {
+            return localDataIndex[empId] || null;
+        }
+        
+        // Get team members from cache (no API call needed)
+        function getTeamFromCache(managerId, managerName) {
+            if (!isDataLoaded || allCompanyData.length === 0) return null;
+            
+            const myId = managerId.toString().toLowerCase();
+            const myName = (managerName || "").toString().toLowerCase();
+            
+            return allCompanyData.filter(u => {
+                const m = (u[COL.mgr] || "").toString().toLowerCase();
+                return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+            });
+        }
+        
+        // --- BATCHED FETCH HELPER (Optimized) ---
         async function fetchAllData(forceRefresh = false) {
+            // Prevent duplicate simultaneous fetches
+            if (dataLoadPromise && !forceRefresh) {
+                return dataLoadPromise;
+            }
+            
             // OPTIMIZATION: Check cache first
             if (!forceRefresh) {
                 const cachedTime = parseInt(sessionStorage.getItem(DATA_CACHE_TIME_KEY) || '0');
@@ -3967,6 +4010,7 @@
                             const parsed = JSON.parse(cachedData);
                             if (Array.isArray(parsed) && parsed.length > 0) {
                                 console.log(`Using cached data (${parsed.length} records, ${Math.round(cacheAge/1000)}s old)`);
+                                buildDataIndex(parsed);
                                 return parsed;
                             }
                         }
@@ -3976,97 +4020,105 @@
                 }
             }
             
-            let allRows = [];
-            let from = 0;
-            const step = 5000; // Increased chunk size for speed
-            const timestamp = Date.now();
-            let retries = 0;
-            const maxRetries = 3;
+            // Create promise for this fetch operation
+            dataLoadPromise = (async () => {
+                let allRows = [];
+                let from = 0;
+                const step = 10000; // Increased chunk size for fewer requests
+                const timestamp = Date.now();
+                let retries = 0;
+                const maxRetries = 3;
 
-            // Grab UI elements to show progress
-            const loaderText = document.querySelector('#loading-overlay div:last-child');
-            const saveText = document.getElementById('save-text');
+                // Grab UI elements to show progress
+                const loaderText = document.querySelector('#loading-overlay div:last-child');
+                const saveText = document.getElementById('save-text');
 
-            while (true) {
-                try {
-                    // Update UI with progress
-                    const msg = `Syncing Directory... (${allRows.length} loaded)`;
-                    if (loaderText) loaderText.innerText = msg;
-                    if (saveText) saveText.innerText = msg;
+                while (true) {
+                    try {
+                        // Update UI with progress
+                        const msg = `Syncing Directory... (${allRows.length} loaded)`;
+                        if (loaderText) loaderText.innerText = msg;
+                        if (saveText) saveText.innerText = msg;
 
-                    // Fetch with Cache Buster AND Headers
-                    const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
-                        method: 'GET',
-                        headers: API_HEADERS
-                    });
+                        // Fetch with Cache Buster AND Headers
+                        const res = await fetch(`${API_URL}?action=fetchAll&from=${from}&to=${from + step - 1}&_t=${timestamp}`, {
+                            method: 'GET',
+                            headers: API_HEADERS
+                        });
 
-                    if (!res.ok) {
-                        if (res.status === 401 || res.status === 403) {
-                            // Session expired or invalid - handle gracefully
+                        if (!res.ok) {
+                            if (res.status === 401 || res.status === 403) {
+                                handleSessionExpired();
+                                return [];
+                            }
+                            throw new Error(`Server status: ${res.status}`);
+                        }
+
+                        const chunk = await res.json();
+
+                        if (!Array.isArray(chunk)) {
+                            console.warn("Invalid chunk received:", chunk);
+                            break;
+                        }
+
+                        if (chunk.length === 0) {
+                            break;
+                        }
+
+                        retries = 0;
+                        allRows = allRows.concat(chunk);
+
+                        if (chunk.length < step) break;
+                        from += step;
+
+                    } catch (e) {
+                        console.error(`Fetch error at offset ${from}:`, e);
+
+                        if (e.message.includes("401") || e.message.includes("403")) {
                             handleSessionExpired();
                             return [];
                         }
-                        throw new Error(`Server status: ${res.status}`);
-                    }
 
-                    const chunk = await res.json();
-
-                    // Validation
-                    if (!Array.isArray(chunk)) {
-                        console.warn("Invalid chunk received:", chunk);
-                        break;
-                    }
-
-                    if (chunk.length === 0) {
-                        break;
-                    }
-
-                    // Success: Reset retries and append data
-                    retries = 0;
-                    allRows = allRows.concat(chunk);
-
-                    // Optimization: If we got less than requested, we are at the end
-                    if (chunk.length < step) break;
-
-                    // Prepare next page
-                    from += step;
-
-                } catch (e) {
-                    console.error(`Fetch error at offset ${from}:`, e);
-
-                    if (e.message.includes("401") || e.message.includes("403")) {
-                        handleSessionExpired();
-                        return [];
-                    }
-
-                    if (retries < maxRetries) {
-                        retries++;
-                        const delay = retries * 1000;
-                        if (loaderText) loaderText.innerText = `Network blip. Retrying batch ${from}... (${retries}/${maxRetries})`;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    } else {
-                        alert("Connection unstable. Loaded partial data. Please refresh.");
-                        break;
+                        if (retries < maxRetries) {
+                            retries++;
+                            const delay = retries * 1000;
+                            if (loaderText) loaderText.innerText = `Network blip. Retrying... (${retries}/${maxRetries})`;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        } else {
+                            alert("Connection unstable. Loaded partial data. Please refresh.");
+                            break;
+                        }
                     }
                 }
-            }
 
-            // Final UI Cleanup
-            if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
+                if (loaderText) loaderText.innerText = "Initializing Zain Performance Management...";
 
-            // --- SAVE TO SESSION CACHE (Speed Optimization) ---
-            if (allRows.length > 0) {
-                try {
-                    sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify(allRows));
-                    sessionStorage.setItem(DATA_CACHE_TIME_KEY, Date.now().toString());
-                    console.log(`Cached ${allRows.length} records`);
-                } catch (e) {
-                    console.warn("Cache full, could not save data:", e);
+                // Build index and save to cache
+                if (allRows.length > 0) {
+                    buildDataIndex(allRows);
+                    try {
+                        sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify(allRows));
+                        sessionStorage.setItem(DATA_CACHE_TIME_KEY, Date.now().toString());
+                        console.log(`Cached ${allRows.length} records`);
+                    } catch (e) {
+                        console.warn("Cache full, could not save data:", e);
+                        // Try to clear old data and retry
+                        try {
+                            sessionStorage.removeItem(DATA_CACHE_KEY);
+                            sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify(allRows));
+                            sessionStorage.setItem(DATA_CACHE_TIME_KEY, Date.now().toString());
+                        } catch (e2) {
+                            console.warn("Still cannot cache:", e2);
+                        }
+                    }
                 }
-            }
 
-            return allRows;
+                dataLoadPromise = null;
+                return allRows;
+            })();
+            
+            return dataLoadPromise;
         }
         
         // --- SESSION EXPIRY HANDLER ---
@@ -4095,7 +4147,75 @@
             sessionStorage.removeItem(DATA_CACHE_KEY);
             sessionStorage.removeItem(DATA_CACHE_TIME_KEY);
             allCompanyData = [];
+            localDataIndex = {};
+            isDataLoaded = false;
             console.log('Data cache cleared');
+        }
+        
+        // --- SKELETON LOADING HELPERS FOR INSTANT VISUAL FEEDBACK ---
+        function showTeamSkeleton() {
+            return `
+            <div class="animate-in">
+                <div class="header-bar">
+                    <div>
+                        <h2 class="page-title">My Team</h2>
+                        <p class="page-sub">Direct Reports & Scorecards</p>
+                    </div>
+                </div>
+                <div class="team-grid">
+                    ${[1,2,3,4,5,6].map(() => `
+                    <div class="premium-team-card skeleton-card" style="padding:20px;">
+                        <div class="skeleton-avatar" style="width:60px; height:60px; margin:0 auto 16px;"></div>
+                        <div class="skeleton-text lg" style="margin:0 auto 8px;"></div>
+                        <div class="skeleton-text sm" style="margin:0 auto 16px; width:60%;"></div>
+                        <div class="skeleton-text md" style="margin:0 auto;"></div>
+                    </div>`).join('')}
+                </div>
+            </div>`;
+        }
+        
+        function showReportsSkeleton() {
+            return `
+            <div class="animate-in">
+                <div class="header-bar">
+                    <div>
+                        <h2 class="page-title">Leadership Reports</h2>
+                    </div>
+                </div>
+                <div class="dash-grid">
+                    <div class="card">
+                        <div class="skeleton-text lg" style="margin-bottom:20px;"></div>
+                        <div class="skeleton" style="height:300px; border-radius:12px;"></div>
+                    </div>
+                    <div class="card">
+                        <div class="skeleton-text lg" style="margin-bottom:20px;"></div>
+                        <div class="skeleton" style="height:300px; border-radius:12px;"></div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        function showScorecardSkeleton() {
+            return `
+            <div class="animate-in">
+                <div class="header-bar">
+                    <div class="skeleton-text xl" style="width:200px;"></div>
+                </div>
+                <div class="metrics-row">
+                    ${[1,2,3,4].map(() => `
+                    <div class="metric-card">
+                        <div class="skeleton-metric"></div>
+                    </div>`).join('')}
+                </div>
+                <div class="card">
+                    <div class="skeleton-text lg" style="margin-bottom:20px;"></div>
+                    ${[1,2,3].map(() => `
+                    <div class="skeleton-row" style="margin-bottom:16px;">
+                        <div class="skeleton-cell" style="width:60%;"></div>
+                        <div class="skeleton-cell" style="width:20%;"></div>
+                    </div>`).join('')}
+                </div>
+            </div>`;
         }
 
         function getCompany(id, division = "") {
@@ -4133,8 +4253,11 @@
             document.getElementById('disp-user').innerText = user[COL.name];
             document.getElementById('disp-role').innerText = user[COL.lvl];
 
-            // --- LOAD WEIGHT CONFIGURATIONS ---
-            await loadWeightConfigurations();
+            // --- PARALLEL LOADING FOR SPEED ---
+            const loadPromises = [];
+            
+            // Load weight configurations in parallel (non-blocking)
+            loadPromises.push(loadWeightConfigurations().catch(e => console.warn('Weight config load failed:', e)));
 
             // --- SPEED OPTIMIZATION START ---
             // 1. Try to load from session cache first (Instant Load)
@@ -4145,6 +4268,7 @@
             if (cachedData && cacheAge < DATA_CACHE_EXPIRY) {
                 try {
                     allCompanyData = JSON.parse(cachedData);
+                    buildDataIndex(allCompanyData); // Build index for instant lookups
                     console.log(`Loaded from cache: ${allCompanyData.length} records (${Math.round(cacheAge/1000)}s old)`);
                 } catch (e) {
                     console.error("Cache corrupted, reloading...");
@@ -4152,45 +4276,60 @@
                 }
             }
 
-            // 2. If cache is empty or expired, fetch from server
-            if (allCompanyData.length === 0) {
-                document.getElementById('save-text').innerText = "Syncing directory...";
-                document.getElementById('save-status').classList.add('show');
-                allCompanyData = await fetchAllData(true); // Force refresh
-                document.getElementById('save-status').classList.remove('show');
-            } else {
-                // 3. If cache had data, refresh it in the BACKGROUND after 10 seconds
-                setTimeout(() => {
-                    fetchAllData(true).then(freshData => {
-                        if (freshData.length > 0) {
-                            allCompanyData = freshData;
-                            console.log("Background sync finished");
-                        }
-                    });
-                }, 10000); // Wait 10 seconds before background refresh
-            }
-            // --- SPEED OPTIMIZATION END ---
-
+            // 2. Determine role IMMEDIATELY (don't wait for data if we have cache)
             let hasReports = false;
             const myId = user[COL.id].toString().toLowerCase();
             const myName = (user[COL.name] || "").toString().toLowerCase();
 
-            hasReports = allCompanyData.some(u => {
-                const m = (u[COL.mgr] || "").toString().toLowerCase();
-                return m.includes(myId) || (myName.length > 3 && m.includes(myName));
-            });
+            if (allCompanyData.length > 0) {
+                hasReports = allCompanyData.some(u => {
+                    const m = (u[COL.mgr] || "").toString().toLowerCase();
+                    return m.includes(myId) || (myName.length > 3 && m.includes(myName));
+                });
+            }
 
             const role = getRole(user, hasReports);
             renderNav(role);
-            initNotifications(); // Initialize notification center
+            initNotifications();
 
             // Check if we should auto-open a scorecard from URL parameter
             checkAutoOpenScorecard();
 
+            // 3. Load initial view IMMEDIATELY (don't wait for full data sync)
             if (role === 'Admin' || role === 'Master') loadHRAdmin();
             else if (role === 'Chief' || role === 'Director' || role === 'Senior Manager') loadReports();
             else if (role === 'Manager') loadTeam();
             else loadEval(user[COL.id]);
+
+            // 4. If cache is empty, fetch in background WITHOUT blocking UI
+            if (allCompanyData.length === 0) {
+                document.getElementById('save-text').innerText = "Syncing directory...";
+                document.getElementById('save-status').classList.add('show');
+                
+                fetchAllData(true).then(freshData => {
+                    if (freshData.length > 0) {
+                        allCompanyData = freshData;
+                        buildDataIndex(allCompanyData);
+                        document.getElementById('save-status').classList.remove('show');
+                        console.log("Initial data sync complete");
+                    }
+                });
+            } else {
+                // 5. If cache had data, refresh it in the BACKGROUND after 15 seconds
+                setTimeout(() => {
+                    fetchAllData(true).then(freshData => {
+                        if (freshData.length > 0) {
+                            allCompanyData = freshData;
+                            buildDataIndex(allCompanyData);
+                            console.log("Background sync finished");
+                        }
+                    });
+                }, 15000); // Wait 15 seconds before background refresh
+            }
+            
+            // Wait for parallel operations to complete
+            await Promise.all(loadPromises);
+            // --- SPEED OPTIMIZATION END ---
         }
 
         function triggerImport() { document.getElementById('file-import').click(); }
@@ -7603,18 +7742,22 @@
         // --- 7. REPORTS ---
         // --- 7. REPORTS (UPDATED FOR REAL-TIME AUTO-CALCULATION) ---
         async function loadReports() {
-            // 1. Loading State
-            document.getElementById('main-view').innerHTML = `
-        <div style="height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; color:var(--text-muted);">
-            <div class="spinner" style="border-width:3px; width:30px; height:30px;"></div>
-            <div style="margin-top:10px; font-weight:600; font-size:0.9rem;">Syncing latest data...</div>
-        </div>`;
+            // SPEED OPTIMIZATION: Use cached data first for instant render
+            const hasCachedData = allCompanyData && allCompanyData.length > 0;
+            
+            if (!hasCachedData) {
+                // Show loading only if we don't have cached data
+                document.getElementById('main-view').innerHTML = `
+            <div style="height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; color:var(--text-muted);">
+                <div class="spinner" style="border-width:3px; width:30px; height:30px;"></div>
+                <div style="margin-top:10px; font-weight:600; font-size:0.9rem;">Syncing latest data...</div>
+            </div>`;
 
-            // 2. Fetch Fresh Data
-            try {
-                allCompanyData = await fetchAllData();
-            } catch (e) {
-                console.error(e);
+                try {
+                    allCompanyData = await fetchAllData();
+                } catch (e) {
+                    console.error(e);
+                }
             }
 
             // SAFE ACCESS: Check if user and the specific ID column exist before calling .toString()
@@ -7961,11 +8104,22 @@
             const myId = user[COL.id];
             const myName = user[COL.name];
 
-            // Fetch my direct reports
-            let filter = `${COL.mgr}.ilike.%${myId}%`;
-            if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
+            // INSTANT VISUAL FEEDBACK: Show skeleton while loading
+            const hasCachedTeam = getTeamFromCache(myId, myName);
+            if (!hasCachedTeam || hasCachedTeam.length === 0) {
+                render(showTeamSkeleton());
+            }
 
-            const { data } = await db.from('active_list').select('*').or(filter);
+            // SPEED OPTIMIZATION: Try to get team from cache first
+            let data = getTeamFromCache(myId, myName);
+            
+            // If cache is empty, fetch from API (fallback)
+            if (!data || data.length === 0) {
+                let filter = `${COL.mgr}.ilike.%${myId}%`;
+                if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
+                const result = await db.from('active_list').select('*').or(filter);
+                data = result.data || [];
+            }
             
             // Store team data for bulk assignment
             window.managerTeamData = data || [];
@@ -8566,14 +8720,23 @@
             const myId = user[COL.id];
             const myName = user[COL.name];
 
-            // Fetch my direct reports
-            let filter = `${COL.mgr}.ilike.%${myId}%`;
-            if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
-
-            const { data: teamData } = await db.from('active_list').select('*').or(filter);
+            // SPEED OPTIMIZATION: Try to get team from cache first
+            let teamData = getTeamFromCache(myId, myName);
             
-            // Also fetch my own data
-            const { data: myData } = await db.from('active_list').select('*').eq(COL.id, myId).single();
+            // If cache is empty, fetch from API (fallback)
+            if (!teamData || teamData.length === 0) {
+                let filter = `${COL.mgr}.ilike.%${myId}%`;
+                if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
+                const result = await db.from('active_list').select('*').or(filter);
+                teamData = result.data || [];
+            }
+            
+            // Get my own data from cache or API
+            let myData = getEmployeeFromCache(myId);
+            if (!myData) {
+                const result = await db.from('active_list').select('*').eq(COL.id, myId).single();
+                myData = result.data;
+            }
             
             // Parse goals for my data
             let myGoals = myData ? myData[COL.goals] : [];
@@ -9235,13 +9398,24 @@
         // --- 9. SCORECARD ---
         async function loadEval(tid, isSearchMode = false) {
             try {
-                // 1. Fetch Data
-                const { data, error } = await db.from('active_list').select('*').eq(COL.id, tid).single();
-
-                if (error || !data) {
-                    console.error("Load Error:", error);
-                    alert("Could not load employee data. Please refresh and try again.");
-                    return;
+                // SPEED OPTIMIZATION: Try to get from cache first
+                let data = getEmployeeFromCache(tid);
+                
+                // If not in cache or viewing own scorecard (need fresh data), fetch from API
+                const needsFreshData = !data || (tid === user[COL.id] && !isSearchMode);
+                if (needsFreshData) {
+                    const result = await db.from('active_list').select('*').eq(COL.id, tid).single();
+                    if (result.error || !result.data) {
+                        console.error("Load Error:", result.error);
+                        alert("Could not load employee data. Please refresh and try again.");
+                        return;
+                    }
+                    data = result.data;
+                    
+                    // Update cache with fresh data
+                    if (data && data[COL.id]) {
+                        localDataIndex[data[COL.id]] = data;
+                    }
                 }
 
                 // 2. Setup Context Variables
