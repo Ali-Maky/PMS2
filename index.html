@@ -3693,6 +3693,226 @@
         const WEIGHT_CONFIG_ID = 'weight_config_v1';
         let weightConfigurations = {}; // Will store per-company weight configs
         
+        // --- PROGRESS WEIGHT CONFIGURATION ---
+        const PROGRESS_CONFIG_ID = 'progress_config_v1';
+        let progressConfigurations = {}; // Will store progress weight configs
+        
+        // Default progress configuration
+        const DEFAULT_PROGRESS_CONFIG = {
+            cascadeMode: 'direct', // 'direct' = direct reports only, 'full' = full cascade
+            levelWeights: {
+                // Individual vs Team weight per level
+                'L1': { individual: 50, team: 50 },
+                'L2': { individual: 60, team: 40 },
+                'L3': { individual: 70, team: 30 },
+                'L4': { individual: 80, team: 20 },
+                'L5': { individual: 90, team: 10 },
+                'L6': { individual: 100, team: 0 },
+                'L7': { individual: 100, team: 0 },
+                'default': { individual: 100, team: 0 }
+            },
+            teamMemberWeights: {
+                // How much each team member level contributes to team progress
+                'L1': 50,
+                'L2': 40,
+                'L3': 35,
+                'L4': 30,
+                'L5': 25,
+                'L6': 20,
+                'L7': 15,
+                'default': 10
+            },
+            autoUpdateInterval: 0 // 0 = instant, or milliseconds for polling
+        };
+        
+        // Load progress configurations from database
+        async function loadProgressConfigurations() {
+            try {
+                const { data, error } = await db.from('company_settings').select('data').eq('id', PROGRESS_CONFIG_ID).single();
+                if (data && data.data) {
+                    progressConfigurations = data.data;
+                    console.log('Progress configurations loaded from DB');
+                } else {
+                    progressConfigurations = JSON.parse(JSON.stringify(DEFAULT_PROGRESS_CONFIG));
+                    console.log('Using default progress configurations');
+                }
+            } catch (e) {
+                console.log('Progress config not found, using defaults');
+                progressConfigurations = JSON.parse(JSON.stringify(DEFAULT_PROGRESS_CONFIG));
+            }
+        }
+        
+        // Save progress configurations to database
+        async function saveProgressConfigurations() {
+            try {
+                const { error } = await db.from('company_settings').upsert({
+                    id: PROGRESS_CONFIG_ID,
+                    data: progressConfigurations
+                });
+                if (error) throw error;
+                console.log('Progress configurations saved');
+                return true;
+            } catch (e) {
+                console.error('Failed to save progress config:', e);
+                return false;
+            }
+        }
+        
+        // Calculate manager's overall progress (Individual + Team)
+        function calculateManagerProgress(managerId, managerLevel, teamMembers, cascadeMode = null) {
+            const config = progressConfigurations || DEFAULT_PROGRESS_CONFIG;
+            const mode = cascadeMode || config.cascadeMode || 'direct';
+            
+            // Get weights for this manager's level
+            const levelKey = managerLevel || 'default';
+            const weights = config.levelWeights[levelKey] || config.levelWeights['default'] || { individual: 100, team: 0 };
+            
+            // Get manager's own data from cache
+            const managerData = getEmployeeFromCache(managerId);
+            if (!managerData) return { individual: 0, team: 0, overall: 0, weights };
+            
+            // Calculate individual progress
+            let managerGoals = managerData[COL.goals];
+            if (typeof managerGoals === 'string') {
+                try { managerGoals = JSON.parse(managerGoals); } catch (e) { managerGoals = []; }
+            }
+            if (!Array.isArray(managerGoals)) managerGoals = [];
+            
+            let individualProgress = 0;
+            if (managerGoals.length > 0) {
+                const totalProgress = managerGoals.reduce((sum, g) => sum + (g.progress || 0), 0);
+                individualProgress = totalProgress / managerGoals.length;
+            }
+            
+            // Calculate team progress
+            let teamProgress = 0;
+            if (weights.team > 0 && teamMembers && teamMembers.length > 0) {
+                let totalTeamWeight = 0;
+                let weightedTeamProgress = 0;
+                
+                teamMembers.forEach(member => {
+                    const memberLevel = member[COL.lvl] || 'default';
+                    const memberWeight = config.teamMemberWeights[memberLevel] || config.teamMemberWeights['default'] || 10;
+                    
+                    let memberGoals = member[COL.goals];
+                    if (typeof memberGoals === 'string') {
+                        try { memberGoals = JSON.parse(memberGoals); } catch (e) { memberGoals = []; }
+                    }
+                    if (!Array.isArray(memberGoals)) memberGoals = [];
+                    
+                    let memberProgress = 0;
+                    if (memberGoals.length > 0) {
+                        const totalMemberProgress = memberGoals.reduce((sum, g) => sum + (g.progress || 0), 0);
+                        memberProgress = totalMemberProgress / memberGoals.length;
+                    }
+                    
+                    // If full cascade mode, recursively calculate team member's progress
+                    if (mode === 'full') {
+                        const subTeam = getTeamFromCache(member[COL.id], member[COL.name]);
+                        if (subTeam && subTeam.length > 0) {
+                            const subProgress = calculateManagerProgress(member[COL.id], memberLevel, subTeam, mode);
+                            memberProgress = subProgress.overall;
+                        }
+                    }
+                    
+                    weightedTeamProgress += memberProgress * memberWeight;
+                    totalTeamWeight += memberWeight;
+                });
+                
+                teamProgress = totalTeamWeight > 0 ? weightedTeamProgress / totalTeamWeight : 0;
+            }
+            
+            // Calculate overall progress
+            const overallProgress = (individualProgress * (weights.individual / 100)) + (teamProgress * (weights.team / 100));
+            
+            return {
+                individual: Math.round(individualProgress * 10) / 10,
+                team: Math.round(teamProgress * 10) / 10,
+                overall: Math.round(overallProgress * 10) / 10,
+                weights: weights
+            };
+        }
+        
+        // Real-time progress update subscription
+        let progressUpdateSubscription = null;
+        
+        function setupProgressAutoUpdate() {
+            // Clear existing subscription
+            if (progressUpdateSubscription) {
+                clearInterval(progressUpdateSubscription);
+                progressUpdateSubscription = null;
+            }
+            
+            // For instant updates, we'll use a short polling interval
+            // In production, this could be replaced with WebSocket/Supabase realtime
+            progressUpdateSubscription = setInterval(async () => {
+                if (document.getElementById('progress-content')) {
+                    // Refresh progress data silently
+                    await refreshProgressData();
+                }
+            }, 30000); // Check every 30 seconds for updates
+        }
+        
+        async function refreshProgressData() {
+            const data = window.progressDashboardData;
+            if (!data) return;
+            
+            // Fetch fresh team data
+            const myId = user[COL.id];
+            const myName = user[COL.name];
+            
+            let filter = `${COL.mgr}.ilike.%${myId}%`;
+            if (myName) filter += `,${COL.mgr}.ilike.%${myName}%`;
+            
+            const { data: freshTeamData } = await db.from('active_list').select('*').or(filter);
+            const { data: freshMyData } = await db.from('active_list').select('*').eq(COL.id, myId).single();
+            
+            if (freshTeamData && freshMyData) {
+                // Update cache
+                if (freshMyData[COL.id]) localDataIndex[freshMyData[COL.id]] = freshMyData;
+                freshTeamData.forEach(m => { if (m[COL.id]) localDataIndex[m[COL.id]] = m; });
+                
+                // Update dashboard data
+                let myGoals = freshMyData[COL.goals];
+                if (typeof myGoals === 'string') {
+                    try { myGoals = JSON.parse(myGoals); } catch (e) { myGoals = []; }
+                }
+                
+                window.progressDashboardData = {
+                    myGoals: myGoals || [],
+                    myId: myId,
+                    teamMembers: freshTeamData,
+                    myLevel: freshMyData[COL.lvl]
+                };
+                
+                // Update UI if on progress tab
+                updateProgressDisplay();
+            }
+        }
+        
+        function updateProgressDisplay() {
+            const data = window.progressDashboardData;
+            if (!data) return;
+            
+            // Recalculate progress
+            const progress = calculateManagerProgress(data.myId, data.myLevel, data.teamMembers);
+            
+            // Update progress bars if they exist
+            const overallBar = document.getElementById('overall-progress-bar');
+            const individualBar = document.getElementById('individual-progress-bar');
+            const teamBar = document.getElementById('team-progress-bar');
+            const overallVal = document.getElementById('overall-progress-value');
+            const individualVal = document.getElementById('individual-progress-value');
+            const teamVal = document.getElementById('team-progress-value');
+            
+            if (overallBar) overallBar.style.width = progress.overall + '%';
+            if (individualBar) individualBar.style.width = progress.individual + '%';
+            if (teamBar) teamBar.style.width = progress.team + '%';
+            if (overallVal) overallVal.textContent = progress.overall + '%';
+            if (individualVal) individualVal.textContent = progress.individual + '%';
+            if (teamVal) teamVal.textContent = progress.team + '%';
+        }
+        
         // Default weight configuration (fallback)
         const DEFAULT_WEIGHT_CONFIG = {
             'Zain Iraq': {
@@ -4450,6 +4670,9 @@
             
             // Load weight configurations in parallel (non-blocking)
             loadPromises.push(loadWeightConfigurations().catch(e => console.warn('Weight config load failed:', e)));
+            
+            // Load progress configurations in parallel (non-blocking)
+            loadPromises.push(loadProgressConfigurations().catch(e => console.warn('Progress config load failed:', e)));
 
             // --- SPEED OPTIMIZATION START ---
             // 1. Try to load from session cache first (Instant Load)
@@ -4613,6 +4836,9 @@
                 <div class="admin-tab" id="tab-weights" onclick="switchAdminTab('weights')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-sliders"></i> <span>Weights</span>
                 </div>
+                <div class="admin-tab" id="tab-progress-config" onclick="switchAdminTab('progress-config')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-bars-progress"></i> <span>Progress</span>
+                </div>
                 <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
                 </div>
@@ -4665,6 +4891,7 @@
             else if (t === 'perm') loadAdminPerms();
             else if (t === 'cycle') loadCycleManagement();   // Cycle Management
             else if (t === 'weights') loadWeightConfiguration(); // Weight Configuration
+            else if (t === 'progress-config') loadProgressConfiguration(); // Progress Weights Configuration
             else if (t === 'search') loadAdminSearch();
         }
         
@@ -5375,6 +5602,348 @@
                     <span style="background:#f1f5f9; padding:4px 12px; border-radius:20px; font-size:0.8rem; color:var(--text-muted);">
                         <i class="fa-solid fa-check-circle" style="color:var(--success);"></i> Matched: <strong>${result.matchedRule}</strong>
                     </span>
+                </div>
+            `;
+        }
+        
+        // --- PROGRESS WEIGHTS CONFIGURATION TAB ---
+        async function loadProgressConfiguration() {
+            // Load current configuration
+            await loadProgressConfigurations();
+            const config = progressConfigurations || DEFAULT_PROGRESS_CONFIG;
+            
+            const levels = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
+            
+            const content = `
+            <div class="animate-in">
+                <div class="card" style="margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.3rem; font-weight:700;">
+                                <i class="fa-solid fa-bars-progress" style="color:var(--primary); margin-right:10px;"></i>
+                                Progress Weights Configuration
+                            </h3>
+                            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">
+                                Configure how manager progress is calculated (Individual + Team weights)
+                            </p>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <button class="btn btn-outline" onclick="resetProgressToDefaults()">
+                                <i class="fa-solid fa-rotate-left"></i> &nbsp; Reset to Defaults
+                            </button>
+                            <button class="btn btn-primary" onclick="saveProgressConfig()">
+                                <i class="fa-solid fa-save"></i> &nbsp; Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Cascade Mode Selection -->
+                    <div style="background:#f8fafc; padding:20px; border-radius:12px; margin-bottom:24px; border:1px solid var(--border);">
+                        <h4 style="margin:0 0 12px; font-size:1rem; font-weight:700;">
+                            <i class="fa-solid fa-sitemap" style="color:var(--primary); margin-right:8px;"></i>
+                            Cascade Mode
+                        </h4>
+                        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+                            Choose how team progress is calculated for managers
+                        </p>
+                        <div style="display:flex; gap:16px;">
+                            <label style="flex:1; background:white; padding:16px; border-radius:10px; border:2px solid ${config.cascadeMode === 'direct' ? 'var(--primary)' : 'var(--border)'}; cursor:pointer; transition:all 0.2s;">
+                                <input type="radio" name="cascade-mode" value="direct" ${config.cascadeMode === 'direct' ? 'checked' : ''} onchange="updateCascadeMode('direct')" style="margin-right:10px;">
+                                <strong>Direct Reports Only</strong>
+                                <p style="font-size:0.8rem; color:var(--text-muted); margin:8px 0 0;">
+                                    Only include immediate direct reports in team progress calculation
+                                </p>
+                            </label>
+                            <label style="flex:1; background:white; padding:16px; border-radius:10px; border:2px solid ${config.cascadeMode === 'full' ? 'var(--primary)' : 'var(--border)'}; cursor:pointer; transition:all 0.2s;">
+                                <input type="radio" name="cascade-mode" value="full" ${config.cascadeMode === 'full' ? 'checked' : ''} onchange="updateCascadeMode('full')" style="margin-right:10px;">
+                                <strong>Full Cascade</strong>
+                                <p style="font-size:0.8rem; color:var(--text-muted); margin:8px 0 0;">
+                                    Include all levels below (direct + indirect reports recursively)
+                                </p>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Individual vs Team Weights by Level -->
+                    <div style="margin-bottom:24px;">
+                        <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
+                            <i class="fa-solid fa-balance-scale" style="color:var(--primary); margin-right:8px;"></i>
+                            Individual vs Team Weight (Per Level)
+                        </h4>
+                        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+                            Configure how much weight is given to individual objectives vs team progress for each level
+                        </p>
+                        
+                        <div style="background:#f8fafc; border-radius:12px; border:1px solid var(--border); overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#e2e8f0;">
+                                        <th style="padding:12px 16px; text-align:left; font-weight:700; font-size:0.85rem;">Level</th>
+                                        <th style="padding:12px 16px; text-align:center; font-weight:700; font-size:0.85rem;">Individual Weight (%)</th>
+                                        <th style="padding:12px 16px; text-align:center; font-weight:700; font-size:0.85rem;">Team Weight (%)</th>
+                                        <th style="padding:12px 16px; text-align:center; font-weight:700; font-size:0.85rem;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${levels.map(level => {
+                                        const levelConfig = config.levelWeights[level] || { individual: 100, team: 0 };
+                                        const total = levelConfig.individual + levelConfig.team;
+                                        const isValid = total === 100;
+                                        return `
+                                        <tr style="border-bottom:1px solid var(--border);">
+                                            <td style="padding:12px 16px; font-weight:700;">${level}</td>
+                                            <td style="padding:12px 16px; text-align:center;">
+                                                <input type="number" id="level-ind-${level}" value="${levelConfig.individual}" min="0" max="100" 
+                                                       onchange="updateLevelWeight('${level}')"
+                                                       style="width:80px; padding:8px; border-radius:6px; border:1px solid var(--border); text-align:center; font-weight:600;">
+                                            </td>
+                                            <td style="padding:12px 16px; text-align:center;">
+                                                <input type="number" id="level-team-${level}" value="${levelConfig.team}" min="0" max="100" 
+                                                       onchange="updateLevelWeight('${level}')"
+                                                       style="width:80px; padding:8px; border-radius:6px; border:1px solid var(--border); text-align:center; font-weight:600;">
+                                            </td>
+                                            <td style="padding:12px 16px; text-align:center;">
+                                                <span id="level-total-${level}" style="font-weight:700; color:${isValid ? 'var(--success)' : 'var(--danger)'};">
+                                                    ${total}%
+                                                    ${isValid ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-exclamation-circle"></i>'}
+                                                </span>
+                                            </td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Team Member Weight by Level -->
+                    <div>
+                        <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
+                            <i class="fa-solid fa-users" style="color:var(--primary); margin-right:8px;"></i>
+                            Team Member Contribution Weights
+                        </h4>
+                        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+                            Configure how much each team member level contributes to the team progress (weighted average)
+                        </p>
+                        
+                        <div style="background:#f8fafc; border-radius:12px; border:1px solid var(--border); padding:20px;">
+                            <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:12px;">
+                                ${levels.map(level => {
+                                    const weight = config.teamMemberWeights[level] || 10;
+                                    return `
+                                    <div style="text-align:center;">
+                                        <div style="font-weight:700; margin-bottom:8px; color:var(--text-main);">${level}</div>
+                                        <input type="number" id="member-weight-${level}" value="${weight}" min="1" max="100" 
+                                               style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); text-align:center; font-weight:600; font-size:1.1rem;">
+                                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">weight</div>
+                                    </div>`;
+                                }).join('')}
+                            </div>
+                            <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+                                <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
+                                    <i class="fa-solid fa-info-circle" style="color:var(--primary);"></i>
+                                    Higher weights mean that level's progress has more impact on the manager's team progress score.
+                                    Example: If L5=25 and L6=20, an L5 employee's progress is weighted 25% more than an L6's.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Preview Section -->
+                <div class="card">
+                    <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
+                        <i class="fa-solid fa-calculator" style="color:var(--primary); margin-right:8px;"></i>
+                        Progress Calculation Preview
+                    </h4>
+                    
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                        <div>
+                            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Manager Level</label>
+                            <select id="preview-progress-level" onchange="previewProgressCalculation()" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); margin-top:6px;">
+                                ${levels.map(l => `<option value="${l}">${l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Team Composition</label>
+                            <input type="text" id="preview-team-comp" placeholder="e.g., 2xL5, 3xL6, 5xL7" onkeyup="previewProgressCalculation()" 
+                                   style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); margin-top:6px;">
+                        </div>
+                    </div>
+                    
+                    <div id="progress-preview-result" style="margin-top:20px; padding:20px; background:#f0fdfa; border-radius:12px; border:1px solid #99f6e4;">
+                        <div style="text-align:center; color:var(--text-muted);">Enter team composition to preview calculation</div>
+                    </div>
+                </div>
+            </div>`;
+            
+            document.getElementById('admin-content').innerHTML = content;
+        }
+        
+        function updateCascadeMode(mode) {
+            progressConfigurations.cascadeMode = mode;
+            // Update radio button styles
+            document.querySelectorAll('input[name="cascade-mode"]').forEach(input => {
+                const label = input.closest('label');
+                if (input.value === mode) {
+                    label.style.borderColor = 'var(--primary)';
+                } else {
+                    label.style.borderColor = 'var(--border)';
+                }
+            });
+        }
+        
+        function updateLevelWeight(level) {
+            const indInput = document.getElementById(`level-ind-${level}`);
+            const teamInput = document.getElementById(`level-team-${level}`);
+            const totalSpan = document.getElementById(`level-total-${level}`);
+            
+            const ind = parseInt(indInput.value) || 0;
+            const team = parseInt(teamInput.value) || 0;
+            const total = ind + team;
+            const isValid = total === 100;
+            
+            totalSpan.innerHTML = `${total}% ${isValid ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-exclamation-circle"></i>'}`;
+            totalSpan.style.color = isValid ? 'var(--success)' : 'var(--danger)';
+            
+            // Update config
+            if (!progressConfigurations.levelWeights) progressConfigurations.levelWeights = {};
+            progressConfigurations.levelWeights[level] = { individual: ind, team: team };
+        }
+        
+        async function saveProgressConfig() {
+            const levels = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
+            
+            // Validate all levels sum to 100
+            let hasError = false;
+            levels.forEach(level => {
+                const ind = parseInt(document.getElementById(`level-ind-${level}`)?.value) || 0;
+                const team = parseInt(document.getElementById(`level-team-${level}`)?.value) || 0;
+                if (ind + team !== 100) {
+                    hasError = true;
+                }
+            });
+            
+            if (hasError) {
+                showToast('All level weights must sum to 100%', 'error');
+                return;
+            }
+            
+            // Collect level weights
+            progressConfigurations.levelWeights = {};
+            levels.forEach(level => {
+                progressConfigurations.levelWeights[level] = {
+                    individual: parseInt(document.getElementById(`level-ind-${level}`)?.value) || 100,
+                    team: parseInt(document.getElementById(`level-team-${level}`)?.value) || 0
+                };
+            });
+            
+            // Collect team member weights
+            progressConfigurations.teamMemberWeights = {};
+            levels.forEach(level => {
+                progressConfigurations.teamMemberWeights[level] = parseInt(document.getElementById(`member-weight-${level}`)?.value) || 10;
+            });
+            
+            // Cascade mode is already updated via updateCascadeMode
+            
+            showSaving();
+            const success = await saveProgressConfigurations();
+            
+            if (success) {
+                showSaved();
+                showToast('Progress configuration saved successfully!', 'success');
+            } else {
+                showToast('Failed to save configuration', 'error');
+            }
+        }
+        
+        function resetProgressToDefaults() {
+            showConfirm('Reset to Defaults', 'This will reset all progress weight configurations to default values. Continue?', 'Reset', 'danger', async () => {
+                progressConfigurations = JSON.parse(JSON.stringify(DEFAULT_PROGRESS_CONFIG));
+                showSaving();
+                const success = await saveProgressConfigurations();
+                if (success) {
+                    showSaved();
+                    loadProgressConfiguration();
+                    showToast('Progress configuration reset to defaults', 'success');
+                } else {
+                    showToast('Failed to save reset configuration', 'error');
+                }
+            });
+        }
+        
+        function previewProgressCalculation() {
+            const level = document.getElementById('preview-progress-level').value;
+            const teamComp = document.getElementById('preview-team-comp').value;
+            const resultDiv = document.getElementById('progress-preview-result');
+            
+            const levelConfig = progressConfigurations.levelWeights?.[level] || DEFAULT_PROGRESS_CONFIG.levelWeights[level];
+            
+            if (!teamComp) {
+                resultDiv.innerHTML = `
+                    <div style="text-align:center;">
+                        <div style="margin-bottom:16px;">
+                            <strong>${level} Manager Configuration:</strong><br>
+                            Individual: ${levelConfig.individual}% | Team: ${levelConfig.team}%
+                        </div>
+                        <div style="color:var(--text-muted);">Enter team composition (e.g., "2xL5, 3xL6, 5xL7") to see full calculation</div>
+                    </div>`;
+                return;
+            }
+            
+            // Parse team composition
+            const teamParts = teamComp.split(',').map(p => p.trim());
+            let teamBreakdown = [];
+            teamParts.forEach(part => {
+                const match = part.match(/(\d+)\s*[xX]\s*(L\d)/i);
+                if (match) {
+                    teamBreakdown.push({ count: parseInt(match[1]), level: match[2].toUpperCase() });
+                }
+            });
+            
+            if (teamBreakdown.length === 0) {
+                resultDiv.innerHTML = '<div style="text-align:center; color:var(--danger);">Invalid format. Use: 2xL5, 3xL6, 5xL7</div>';
+                return;
+            }
+            
+            // Calculate weighted team contribution
+            let totalWeight = 0;
+            let weightedSum = 0;
+            teamBreakdown.forEach(tb => {
+                const memberWeight = progressConfigurations.teamMemberWeights?.[tb.level] || DEFAULT_PROGRESS_CONFIG.teamMemberWeights[tb.level] || 10;
+                totalWeight += memberWeight * tb.count;
+                weightedSum += memberWeight * tb.count;  // Assuming 100% progress for preview
+            });
+            
+            const totalMembers = teamBreakdown.reduce((sum, tb) => sum + tb.count, 0);
+            
+            resultDiv.innerHTML = `
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; text-align:center;">
+                    <div style="background:white; padding:16px; border-radius:10px;">
+                        <div style="font-size:2rem; font-weight:800; color:#3b82f6;">${levelConfig.individual}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted);">Individual Weight</div>
+                    </div>
+                    <div style="font-size:2rem; color:var(--text-muted); display:flex; align-items:center; justify-content:center;">+</div>
+                    <div style="background:white; padding:16px; border-radius:10px;">
+                        <div style="font-size:2rem; font-weight:800; color:#10b981;">${levelConfig.team}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted);">Team Weight</div>
+                    </div>
+                </div>
+                <div style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
+                    <h5 style="margin:0 0 12px; font-size:0.9rem; font-weight:700;">Team Composition: ${totalMembers} members</h5>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                        ${teamBreakdown.map(tb => {
+                            const weight = progressConfigurations.teamMemberWeights?.[tb.level] || DEFAULT_PROGRESS_CONFIG.teamMemberWeights[tb.level] || 10;
+                            return `<span style="background:#e2e8f0; padding:6px 12px; border-radius:20px; font-size:0.85rem;">
+                                ${tb.count}x ${tb.level} (weight: ${weight})
+                            </span>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div style="margin-top:16px; background:linear-gradient(135deg, #0f172a, #1e293b); color:white; padding:16px; border-radius:10px;">
+                    <div style="font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Example: If Individual Progress = 80% and Team Progress = 60%</div>
+                    <div style="font-size:1.5rem; font-weight:800; color:#0d9488;">
+                        Overall = (80% × ${levelConfig.individual/100}) + (60% × ${levelConfig.team/100}) = ${(80 * levelConfig.individual/100 + 60 * levelConfig.team/100).toFixed(1)}%
+                    </div>
                 </div>
             `;
         }
@@ -8911,6 +9480,7 @@
         async function loadProgressDashboard() {
             const myId = user[COL.id];
             const myName = user[COL.name];
+            const myLevel = user[COL.lvl] || 'default';
 
             // SPEED OPTIMIZATION: Try to get team from cache first
             let teamData = getTeamFromCache(myId, myName);
@@ -8970,7 +9540,12 @@
                     myObjectivesWithProgress++;
                 }
             });
-            const myAvgProgress = myObjectivesWithProgress > 0 ? Math.round(myTotalProgress / myObjectivesWithProgress) : 0;
+            const myAvgProgress = myGoals.length > 0 ? Math.round(myGoals.reduce((sum, g) => sum + (g.progress || 0), 0) / myGoals.length) : 0;
+            
+            // Calculate Overall Progress using new weighted system (Individual + Team)
+            const overallProgressData = calculateManagerProgress(myId, myLevel, teamMembers);
+            const config = progressConfigurations || DEFAULT_PROGRESS_CONFIG;
+            const cascadeMode = config.cascadeMode || 'direct';
 
             let h = `
     <div class="animate-in">
@@ -8986,6 +9561,66 @@
                 <button class="btn btn-primary" onclick="loadProgressDashboard()">
                     <i class="fa-solid fa-rotate"></i> &nbsp; Refresh
                 </button>
+            </div>
+        </div>
+
+        <!-- Overall Progress Card (NEW - Individual + Team) -->
+        <div class="card" style="margin-bottom:24px; background:linear-gradient(135deg, #0f172a, #1e293b); color:white; padding:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div>
+                    <h3 style="margin:0; font-size:1.3rem; font-weight:700;">
+                        <i class="fa-solid fa-chart-pie" style="color:#0d9488; margin-right:10px;"></i>
+                        Overall Progress
+                    </h3>
+                    <p style="margin:4px 0 0; font-size:0.85rem; color:#94a3b8;">
+                        Combined Individual (${overallProgressData.weights.individual}%) + Team (${overallProgressData.weights.team}%) Progress
+                        <span style="margin-left:8px; padding:2px 8px; background:rgba(13,148,136,0.2); border-radius:4px; font-size:0.75rem;">
+                            ${cascadeMode === 'full' ? '🔗 Full Cascade' : '👥 Direct Reports Only'}
+                        </span>
+                    </p>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:3rem; font-weight:800; color:#0d9488;" id="overall-progress-value">${overallProgressData.overall}%</div>
+                    <div style="font-size:0.8rem; color:#94a3b8;">Overall Progress</div>
+                </div>
+            </div>
+            
+            <!-- Overall Progress Bar -->
+            <div style="background:#334155; height:16px; border-radius:8px; overflow:hidden; margin-bottom:20px;">
+                <div id="overall-progress-bar" style="height:100%; background:linear-gradient(90deg, #0d9488, #14b8a6); border-radius:8px; transition:width 0.5s ease; width:${overallProgressData.overall}%;"></div>
+            </div>
+            
+            <!-- Individual vs Team Breakdown -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                <!-- Individual Progress -->
+                <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div>
+                            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Individual Objectives</div>
+                            <div style="font-size:0.85rem; color:#e2e8f0; margin-top:2px;">Weight: <strong>${overallProgressData.weights.individual}%</strong></div>
+                        </div>
+                        <div style="font-size:1.8rem; font-weight:800; color:#3b82f6;" id="individual-progress-value">${overallProgressData.individual}%</div>
+                    </div>
+                    <div style="background:#1e293b; height:8px; border-radius:4px; overflow:hidden;">
+                        <div id="individual-progress-bar" style="height:100%; background:linear-gradient(90deg, #3b82f6, #60a5fa); border-radius:4px; transition:width 0.5s ease; width:${overallProgressData.individual}%;"></div>
+                    </div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-top:8px;">${myGoals.length} objectives • Contributes ${(overallProgressData.individual * overallProgressData.weights.individual / 100).toFixed(1)}% to overall</div>
+                </div>
+                
+                <!-- Team Progress -->
+                <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div>
+                            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Team Progress</div>
+                            <div style="font-size:0.85rem; color:#e2e8f0; margin-top:2px;">Weight: <strong>${overallProgressData.weights.team}%</strong></div>
+                        </div>
+                        <div style="font-size:1.8rem; font-weight:800; color:#10b981;" id="team-progress-value">${overallProgressData.team}%</div>
+                    </div>
+                    <div style="background:#1e293b; height:8px; border-radius:4px; overflow:hidden;">
+                        <div id="team-progress-bar" style="height:100%; background:linear-gradient(90deg, #10b981, #34d399); border-radius:4px; transition:width 0.5s ease; width:${overallProgressData.team}%;"></div>
+                    </div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-top:8px;">${teamMembers.length} members • Contributes ${(overallProgressData.team * overallProgressData.weights.team / 100).toFixed(1)}% to overall</div>
+                </div>
             </div>
         </div>
 
@@ -9068,8 +9703,12 @@
             window.progressDashboardData = {
                 myGoals: myGoals,
                 myId: myId,
+                myLevel: myLevel,
                 teamMembers: teamMembers
             };
+            
+            // Setup real-time auto-update
+            setupProgressAutoUpdate();
             
             // Add tab styles
             if (!document.getElementById('progress-tab-styles')) {
