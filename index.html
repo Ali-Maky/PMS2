@@ -4544,14 +4544,205 @@
             localStorage.removeItem('zpms_uid');
             localStorage.removeItem('zpms_time');
             sessionStorage.removeItem('zpms_token');
+            clearDataCache();
             
-            // Show friendly message
-            showToast('Session expired. Please login again.', 'error');
+            // Show session expired modal with countdown
+            showSessionExpiredModal();
+        }
+        
+        function showSessionExpiredModal() {
+            // Remove any existing modal
+            const existingModal = document.getElementById('session-expired-modal');
+            if (existingModal) existingModal.remove();
             
-            // Redirect to login after a short delay
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
+            const modal = document.createElement('div');
+            modal.id = 'session-expired-modal';
+            modal.innerHTML = `
+                <div style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
+                    <div style="background:white; width:90%; max-width:420px; padding:40px; border-radius:24px; text-align:center; animation:scaleIn 0.3s ease; box-shadow:0 25px 50px rgba(0,0,0,0.3);">
+                        <div style="width:80px; height:80px; background:linear-gradient(135deg, #fee2e2, #fecaca); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 24px;">
+                            <i class="fa-solid fa-clock" style="font-size:2.5rem; color:#dc2626;"></i>
+                        </div>
+                        <h2 style="margin:0 0 12px; font-size:1.5rem; font-weight:800; color:#1e293b;">Session Expired</h2>
+                        <p style="margin:0 0 24px; color:#64748b; font-size:1rem; line-height:1.6;">
+                            Your session has expired for security reasons.<br>
+                            Please log in again to continue.
+                        </p>
+                        <div style="background:#f1f5f9; padding:16px; border-radius:12px; margin-bottom:24px;">
+                            <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">Redirecting to login in</div>
+                            <div id="logout-countdown" style="font-size:2.5rem; font-weight:800; color:#dc2626;">5</div>
+                            <div style="font-size:0.85rem; color:#64748b;">seconds</div>
+                        </div>
+                        <button onclick="forceLogout()" style="width:100%; padding:16px 32px; background:linear-gradient(135deg, #0d9488, #14b8a6); color:white; border:none; border-radius:12px; font-size:1rem; font-weight:700; cursor:pointer; transition:all 0.3s;">
+                            <i class="fa-solid fa-right-to-bracket"></i> &nbsp; Login Now
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // Start countdown
+            let countdown = 5;
+            const countdownEl = document.getElementById('logout-countdown');
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdownEl) countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    forceLogout();
+                }
+            }, 1000);
+        }
+        
+        function forceLogout() {
+            // Clear all storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Reload to login page
+            window.location.href = window.location.pathname;
+        }
+        
+        // --- SESSION VALIDATION & AUTO-LOGOUT ---
+        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
+        const SESSION_WARNING_TIME = 5 * 60 * 1000; // Show warning 5 minutes before expiry
+        let sessionTimeoutId = null;
+        let sessionWarningId = null;
+        let lastActivityTime = Date.now();
+        
+        function initSessionManager() {
+            // Track user activity
+            const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+            activityEvents.forEach(event => {
+                document.addEventListener(event, handleUserActivity, { passive: true });
+            });
+            
+            // Start session timer
+            resetSessionTimer();
+            
+            // Check session validity periodically
+            setInterval(checkSessionValidity, 60000); // Check every minute
+        }
+        
+        function handleUserActivity() {
+            const now = Date.now();
+            // Only reset if more than 1 second since last activity (debounce)
+            if (now - lastActivityTime > 1000) {
+                lastActivityTime = now;
+                localStorage.setItem('zpms_last_activity', now.toString());
+                
+                // Reset timer only if warning modal is not showing
+                if (!document.getElementById('session-warning-modal')) {
+                    resetSessionTimer();
+                }
+            }
+        }
+        
+        function resetSessionTimer() {
+            // Clear existing timers
+            if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+            if (sessionWarningId) clearTimeout(sessionWarningId);
+            
+            // Set warning timer (5 minutes before expiry)
+            sessionWarningId = setTimeout(() => {
+                showSessionWarningModal();
+            }, SESSION_TIMEOUT - SESSION_WARNING_TIME);
+            
+            // Set logout timer
+            sessionTimeoutId = setTimeout(() => {
+                handleSessionExpired();
+            }, SESSION_TIMEOUT);
+        }
+        
+        function showSessionWarningModal() {
+            // Don't show if already expired or on login screen
+            if (sessionStorage.getItem('zpms_session_expired')) return;
+            if (document.getElementById('login-screen') && !document.getElementById('login-screen').classList.contains('hidden')) return;
+            
+            // Remove any existing warning modal
+            const existingModal = document.getElementById('session-warning-modal');
+            if (existingModal) existingModal.remove();
+            
+            const modal = document.createElement('div');
+            modal.id = 'session-warning-modal';
+            modal.innerHTML = `
+                <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:99998; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+                    <div style="background:white; width:90%; max-width:400px; padding:32px; border-radius:20px; text-align:center; animation:scaleIn 0.3s ease; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+                        <div style="width:60px; height:60px; background:linear-gradient(135deg, #fef3c7, #fde68a); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
+                            <i class="fa-solid fa-hourglass-half" style="font-size:1.8rem; color:#d97706;"></i>
+                        </div>
+                        <h3 style="margin:0 0 12px; font-size:1.2rem; font-weight:700; color:#1e293b;">Session Expiring Soon</h3>
+                        <p style="margin:0 0 20px; color:#64748b; font-size:0.95rem;">
+                            Your session will expire in <strong id="warning-countdown">5:00</strong> due to inactivity.
+                        </p>
+                        <div style="display:flex; gap:12px;">
+                            <button onclick="extendSession()" style="flex:1; padding:14px; background:linear-gradient(135deg, #0d9488, #14b8a6); color:white; border:none; border-radius:10px; font-weight:700; cursor:pointer;">
+                                <i class="fa-solid fa-rotate"></i> &nbsp; Stay Logged In
+                            </button>
+                            <button onclick="forceLogout()" style="flex:1; padding:14px; background:#f1f5f9; color:#64748b; border:none; border-radius:10px; font-weight:700; cursor:pointer;">
+                                <i class="fa-solid fa-right-from-bracket"></i> &nbsp; Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // Start countdown
+            let secondsLeft = 5 * 60; // 5 minutes
+            const countdownEl = document.getElementById('warning-countdown');
+            const warningCountdownInterval = setInterval(() => {
+                secondsLeft--;
+                if (countdownEl) {
+                    const mins = Math.floor(secondsLeft / 60);
+                    const secs = secondsLeft % 60;
+                    countdownEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+                if (secondsLeft <= 0) {
+                    clearInterval(warningCountdownInterval);
+                }
+            }, 1000);
+            
+            // Store interval ID to clear later
+            modal.dataset.intervalId = warningCountdownInterval;
+        }
+        
+        function extendSession() {
+            // Remove warning modal
+            const modal = document.getElementById('session-warning-modal');
+            if (modal) {
+                const intervalId = modal.dataset.intervalId;
+                if (intervalId) clearInterval(parseInt(intervalId));
+                modal.remove();
+            }
+            
+            // Reset activity time and timers
+            lastActivityTime = Date.now();
+            localStorage.setItem('zpms_last_activity', lastActivityTime.toString());
+            resetSessionTimer();
+            
+            showToast('Session extended successfully', 'success');
+        }
+        
+        function checkSessionValidity() {
+            // Skip if on login screen or already expired
+            if (sessionStorage.getItem('zpms_session_expired')) return;
+            if (document.getElementById('login-screen') && !document.getElementById('login-screen').classList.contains('hidden')) return;
+            
+            // Check if token exists
+            const token = localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token');
+            if (!token) {
+                handleSessionExpired();
+                return;
+            }
+            
+            // Check last activity from other tabs
+            const lastActivity = parseInt(localStorage.getItem('zpms_last_activity') || '0');
+            const now = Date.now();
+            
+            if (lastActivity > 0 && (now - lastActivity) > SESSION_TIMEOUT) {
+                handleSessionExpired();
+            }
         }
         
         // Helper function to force refresh data cache
@@ -4706,6 +4897,7 @@
             const role = getRole(user, hasReports);
             renderNav(role);
             initNotifications();
+            initSessionManager(); // Initialize session timeout tracking
 
             // Check if we should auto-open a scorecard from URL parameter
             checkAutoOpenScorecard();
