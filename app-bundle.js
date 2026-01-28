@@ -4089,7 +4089,7 @@
                             <i class="fa-solid fa-sliders"></i> &nbsp; Rating Mode
                         </h4>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                            <div class="rating-mode-option" onclick="updateRatingMode('level')" style="cursor:pointer;">
+                            <div class="rating-mode-option" onclick="window.updateRatingMode('level')" style="cursor:pointer;">
                                 <div style="background:white; border:3px solid ${!isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
                                             ${!isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
                                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -4117,7 +4117,7 @@
                                 </div>
                             </div>
                             
-                            <div class="rating-mode-option" onclick="updateRatingMode('percentage')" style="cursor:pointer;">
+                            <div class="rating-mode-option" onclick="window.updateRatingMode('percentage')" style="cursor:pointer;">
                                 <div style="background:white; border:3px solid ${isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
                                             ${isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
                                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -4278,10 +4278,13 @@
         
         // Update rating mode
         function updateRatingMode(mode) {
+            console.log('updateRatingMode called with:', mode);
+            console.log('Current ratingConfig.ratingMode:', ratingConfig.ratingMode);
             ratingConfig.ratingMode = mode;
+            console.log('New ratingConfig.ratingMode:', ratingConfig.ratingMode);
             // Reload the configuration UI (this will refresh the page section)
             loadRatingLevelsConfiguration();
-            // Note: Don't show toast here as it triggers before DOM is ready
+            console.log('loadRatingLevelsConfiguration completed');
         }
         
         // Render percentage preview result
