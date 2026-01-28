@@ -4774,6 +4774,8 @@
             const reader = new FileReader();
             reader.onload = async function (e) {
                 try {
+                    const startTime = Date.now();
+                    
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
@@ -4834,34 +4836,51 @@
 
                     showSaving();
 
-                    // --- CHUNKING LOGIC START ---
-                    const CHUNK_SIZE = 20; // Process 20 employees at a time
+                    // --- OPTIMIZED BATCH UPSERT ---
+                    // Instead of individual updates, create batch payload
+                    const CHUNK_SIZE = 50; // Larger chunks for faster processing
                     let success = 0;
                     let fail = 0;
+                    
+                    // Create progress UI
+                    const progressEl = document.getElementById('save-text');
 
                     for (let i = 0; i < empIds.length; i += CHUNK_SIZE) {
                         const chunk = empIds.slice(i, i + CHUNK_SIZE);
+                        
+                        // Update progress
+                        const progress = Math.round((i / empIds.length) * 100);
+                        if (progressEl) progressEl.innerText = `Importing... ${progress}% (${i}/${empIds.length})`;
 
-                        // Update the UI so the user sees progress
-                        document.getElementById('save-text').innerText = `Processing ${i} / ${empIds.length}...`;
+                        // Build batch payload for upsert
+                        const batchPayload = chunk.map(eid => ({
+                            [COL.id]: eid,
+                            goals: grouped[eid]
+                        }));
 
-                        const promises = chunk.map(eid =>
-                            db.from('active_list')
-                                .update({ goals: grouped[eid] })
-                                .eq(COL.id, eid)
-                        );
-
-                        const results = await Promise.all(promises);
-
-                        results.forEach(res => {
-                            if (!res.error) success++; else fail++;
-                        });
+                        try {
+                            // Single batch upsert instead of multiple individual calls
+                            const { error } = await db.from('active_list').upsert(batchPayload);
+                            
+                            if (error) {
+                                console.error("Batch error:", error);
+                                fail += chunk.length;
+                            } else {
+                                success += chunk.length;
+                            }
+                        } catch (err) {
+                            console.error("Chunk error:", err);
+                            fail += chunk.length;
+                        }
                     }
-                    // --- CHUNKING LOGIC END ---
-
+                    
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    
                     showSaved();
                     clearDataCache();
-                    alert(`Import Finished!\n✅ Updated: ${success}\n❌ Failed: ${fail}`);
+                    alert(`Import Finished in ${elapsed}s!\n✅ Updated: ${success}\n❌ Failed: ${fail}`);
+                    
+                    // Refresh data in background
                     allCompanyData = await fetchAllData();
                     inp.value = '';
 
@@ -5159,69 +5178,58 @@
 
                     showSaving();
 
-                    // --- CHUNKING LOGIC START ---
-                    const CHUNK_SIZE = 20;
+                    // --- OPTIMIZED BATCH IMPORT ---
+                    const CHUNK_SIZE = 50; // Larger chunks for speed
                     let success = 0;
                     let fail = 0;
                     const failedIds = [];
+                    const startTime = Date.now();
+                    const progressEl = document.getElementById('save-text');
 
                     for (let i = 0; i < validEmpIds.length; i += CHUNK_SIZE) {
                         const chunk = validEmpIds.slice(i, i + CHUNK_SIZE);
+                        
+                        // Update progress
+                        const progress = Math.round((i / validEmpIds.length) * 100);
+                        if (progressEl) progressEl.innerText = `Importing... ${progress}% (${i}/${validEmpIds.length})`;
 
-                        document.getElementById('save-text').innerText = `Processing ${i} / ${validEmpIds.length}...`;
-
-                        const promises = chunk.map(async eid => {
-                            // Build the payload with goals
+                        // Build batch payload for upsert
+                        const batchPayload = chunk.map(eid => {
                             const payload = {
-                                id: eid,
+                                [COL.id]: eid,
                                 goals: grouped[eid]
                             };
-                            
                             // Add status if available
                             if (statusMap[eid]) {
-                                payload.status = statusMap[eid];
+                                payload[COL.stat] = statusMap[eid];
                             }
-
-                            try {
-                                const res = await fetch(`${API_URL}?action=saveUser`, {
-                                    method: 'POST',
-                                    headers: API_HEADERS,
-                                    body: JSON.stringify({ payload: payload })
-                                });
-                                
-                                if (res.status === 401 || res.status === 403) {
-                                    handleSessionExpired();
-                                    return { error: { message: "Session expired" }, eid };
-                                }
-                                
-                                if (!res.ok) {
-                                    const txt = await res.text();
-                                    return { error: { message: txt || "Update failed" }, eid };
-                                }
-                                return { error: null, eid };
-                            } catch (e) {
-                                return { error: e, eid };
-                            }
+                            return payload;
                         });
 
-                        const results = await Promise.all(promises);
-
-                        results.forEach(res => {
-                            if (!res.error) {
-                                success++;
+                        try {
+                            // Single batch upsert for entire chunk
+                            const { error } = await db.from('active_list').upsert(batchPayload);
+                            
+                            if (error) {
+                                console.error("Batch error:", error);
+                                fail += chunk.length;
+                                failedIds.push(...chunk);
                             } else {
-                                fail++;
-                                failedIds.push(res.eid);
-                                console.error(`Failed to update ${res.eid}:`, res.error);
+                                success += chunk.length;
                             }
-                        });
+                        } catch (err) {
+                            console.error("Chunk error:", err);
+                            fail += chunk.length;
+                            failedIds.push(...chunk);
+                        }
                     }
-                    // --- CHUNKING LOGIC END ---
+                    
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
                     showSaved();
                     clearDataCache();
                     
-                    let resultMsg = `Import Finished!\n✅ Updated: ${success} employees\n❌ Failed: ${fail}\n\n📊 ${ratedCount} ratings imported`;
+                    let resultMsg = `Import Finished in ${elapsed}s!\n✅ Updated: ${success} employees\n❌ Failed: ${fail}\n\n📊 ${ratedCount} ratings imported`;
                     
                     if (failedIds.length > 0) {
                         resultMsg += `\n\nFailed IDs: ${failedIds.slice(0, 10).join(', ')}${failedIds.length > 10 ? '...' : ''}`;
