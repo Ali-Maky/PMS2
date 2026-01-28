@@ -4513,6 +4513,16 @@
             }
         }
         
+        // Expose rating configuration functions to global scope for onclick/onchange handlers
+        window.updateRatingMode = updateRatingMode;
+        window.applyRatingTemplate = applyRatingTemplate;
+        window.updateLevelsCount = updateLevelsCount;
+        window.updateTargetLevel = updateTargetLevel;
+        window.updateLevelProperty = updateLevelProperty;
+        window.resetRatingToDefault = resetRatingToDefault;
+        window.saveRatingLevelsConfig = saveRatingLevelsConfig;
+        window.updatePercentagePreview = updatePercentagePreview;
+        
         // Validate rating configuration
         function validateRatingConfig() {
             const errors = [];
@@ -9518,6 +9528,7 @@
                 badgeEl.textContent = levelInfo.name;
             }
         }
+        window.updateGoalRatingBadge = updateGoalRatingBadge;
         
         // updT is no longer used directly by inputs, but kept for legacy or potential direct internal usage
         function updT(gi, ti, v) { if (!targetUser[COL.goals][gi].targets) targetUser[COL.goals][gi].targets = getEmptyTargets(); targetUser[COL.goals][gi].targets[ti] = v; autoSave(); }
