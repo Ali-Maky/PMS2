@@ -9764,58 +9764,81 @@
                 if (ratingProgress) ratingProgress.style.width = '0%';
             }
         }
+        // Optimized AutoSave with better debouncing and minimal overhead
+        let pendingSave = null;
+        let lastSaveTime = 0;
+        const SAVE_DEBOUNCE = 800; // Wait 800ms after last change before saving
+        const MIN_SAVE_INTERVAL = 2000; // Minimum 2 seconds between saves
+        
         function autoSave() {
+            // Show saving indicator immediately for user feedback
             showSaving();
+            
+            // Clear any pending save
             clearTimeout(saveTimer);
-
+            
+            // Debounce: Wait for user to stop typing
             saveTimer = setTimeout(async () => {
+                // Rate limit: Don't save too frequently
+                const now = Date.now();
+                const timeSinceLastSave = now - lastSaveTime;
+                
+                if (timeSinceLastSave < MIN_SAVE_INTERVAL && pendingSave) {
+                    // Too soon, schedule for later
+                    saveTimer = setTimeout(() => autoSave(), MIN_SAVE_INTERVAL - timeSinceLastSave);
+                    return;
+                }
+                
                 try {
-                    // Prepare the data
-                    let u = {};
-                    u[COL.goals] = targetUser[COL.goals];
+                    // Prepare minimal payload (only what changed)
+                    const payload = {
+                        [COL.id]: targetUser[COL.id],
+                        [COL.goals]: targetUser[COL.goals]
+                    };
 
-                    // --- FIX: ALWAYS INCLUDE THE ID ---
-                    // The secure backend needs this to verify permissions!
-                    u[COL.id] = targetUser[COL.id];
-
-                    // Send to Backend
-                    // We use .upsert() here because it's safer for our new PHP logic
-                    // than the old .update() wrapper.
-                    const { error } = await db.from('active_list').upsert(u);
+                    // Send to Backend using upsert
+                    const { error } = await db.from('active_list').upsert(payload);
 
                     if (error) {
                         console.error("AutoSave Error:", error);
-                        showToast("Save Failed: " + error.message, 'error');
-                        // Visual feedback that it failed
                         document.getElementById('save-text').innerText = "Save Failed";
-                        document.getElementById('save-dot').style.background = "#ef4444"; // Red
+                        document.getElementById('save-dot').style.background = "#ef4444";
                     } else {
+                        lastSaveTime = Date.now();
                         showSaved();
                         
-                        // --- AUTO-REFRESH: Clear cache and update local data ---
-                        // This ensures Reports and Analytics show real-time changes
-                        clearDataCache();
-                        
-                        // Update the local allCompanyData array with the change
+                        // Update local cache silently (no heavy operations)
                         const idx = allCompanyData.findIndex(x => x[COL.id] === targetUser[COL.id]);
                         if (idx !== -1) {
                             allCompanyData[idx][COL.goals] = targetUser[COL.goals];
-                            allCompanyData[idx][COL.stat] = targetUser[COL.stat];
-                        }
-                        
-                        // Refresh notifications to reflect changes
-                        if (typeof refreshNotifications === 'function') {
-                            refreshNotifications();
                         }
                     }
                 } catch (err) {
                     console.error("AutoSave Crash:", err);
-                    showToast("Connection Error", 'error');
+                    document.getElementById('save-text').innerText = "Connection Error";
+                    document.getElementById('save-dot').style.background = "#ef4444";
                 }
-            }, 500);
+            }, SAVE_DEBOUNCE);
         }
-        function showSaving() { document.getElementById('save-status').classList.add('show'); document.getElementById('save-dot').className = 'save-dot saving'; document.getElementById('save-text').innerText = "Saving..."; }
-        function showSaved() { document.getElementById('save-dot').className = 'save-dot saved'; document.getElementById('save-text').innerText = "All changes saved"; setTimeout(() => document.getElementById('save-status').classList.remove('show'), 2000); }
+        
+        function showSaving() { 
+            const status = document.getElementById('save-status');
+            const dot = document.getElementById('save-dot');
+            const text = document.getElementById('save-text');
+            if (status) status.classList.add('show'); 
+            if (dot) dot.className = 'save-dot saving'; 
+            if (text) text.innerText = "Saving..."; 
+        }
+        
+        function showSaved() { 
+            const dot = document.getElementById('save-dot');
+            const text = document.getElementById('save-text');
+            const status = document.getElementById('save-status');
+            if (dot) dot.className = 'save-dot saved'; 
+            if (text) text.innerText = "All changes saved"; 
+            if (status) setTimeout(() => status.classList.remove('show'), 1500); 
+        }
+        
         async function saveDraft() { autoSave(); }
 
         async function submitFinal() {
