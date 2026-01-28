@@ -1248,7 +1248,228 @@
             { title: "Functional Objective 2", weight: 0.30, desc: "", rating: 0, targets: ["", "", "", "", "", ""] },
             { title: "Development Objective", weight: 0.30, desc: "", rating: 0, targets: ["", "", "", "", "", ""] }
         ];
-        const ratingLabels = { 1: "IDLE", 2: "STAGNANT", 3: "WALKER", 4: "RUNNER", 5: "FLYER", 6: "ASTRONAUT" };
+        
+        // =====================================================
+        // DYNAMIC RATING LEVELS SYSTEM
+        // =====================================================
+        
+        // Default rating configuration (6 levels - current system)
+        const DEFAULT_RATING_CONFIG = {
+            cycle: '2025',
+            levelsCount: 6,
+            targetLevel: 4, // Which level is the "Target" level
+            levels: [
+                { level: 6, name: "ASTRONAUT", color: "#0f766e", bgColor: "#ccfbf1", minScore: 90, maxScore: 100, description: "Exceptional performance, exceeds all expectations" },
+                { level: 5, name: "FLYER", color: "#10b981", bgColor: "#d1fae5", minScore: 75, maxScore: 89, description: "Exceeds expectations consistently" },
+                { level: 4, name: "RUNNER", color: "#3b82f6", bgColor: "#dbeafe", minScore: 60, maxScore: 74, description: "Meets expectations fully (Target)" },
+                { level: 3, name: "WALKER", color: "#f59e0b", bgColor: "#fef3c7", minScore: 45, maxScore: 59, description: "Partially meets expectations" },
+                { level: 2, name: "STAGNANT", color: "#ef4444", bgColor: "#fee2e2", minScore: 25, maxScore: 44, description: "Below expectations" },
+                { level: 1, name: "IDLE", color: "#94a3b8", bgColor: "#f1f5f9", minScore: 0, maxScore: 24, description: "Significantly below expectations" }
+            ]
+        };
+        
+        // Rating level templates
+        const RATING_TEMPLATES = {
+            '6-astronaut': {
+                name: '6 Levels (Astronaut Scale)',
+                levelsCount: 6,
+                targetLevel: 4,
+                levels: [
+                    { level: 6, name: "ASTRONAUT", color: "#0f766e", bgColor: "#ccfbf1", minScore: 90, maxScore: 100, description: "Exceptional performance" },
+                    { level: 5, name: "FLYER", color: "#10b981", bgColor: "#d1fae5", minScore: 75, maxScore: 89, description: "Exceeds expectations" },
+                    { level: 4, name: "RUNNER", color: "#3b82f6", bgColor: "#dbeafe", minScore: 60, maxScore: 74, description: "Meets expectations (Target)" },
+                    { level: 3, name: "WALKER", color: "#f59e0b", bgColor: "#fef3c7", minScore: 45, maxScore: 59, description: "Partially meets" },
+                    { level: 2, name: "STAGNANT", color: "#ef4444", bgColor: "#fee2e2", minScore: 25, maxScore: 44, description: "Below expectations" },
+                    { level: 1, name: "IDLE", color: "#94a3b8", bgColor: "#f1f5f9", minScore: 0, maxScore: 24, description: "Significantly below" }
+                ]
+            },
+            '5-standard': {
+                name: '5 Levels (Standard)',
+                levelsCount: 5,
+                targetLevel: 3,
+                levels: [
+                    { level: 5, name: "OUTSTANDING", color: "#0f766e", bgColor: "#ccfbf1", minScore: 85, maxScore: 100, description: "Exceptional performance" },
+                    { level: 4, name: "EXCEEDS", color: "#10b981", bgColor: "#d1fae5", minScore: 70, maxScore: 84, description: "Exceeds expectations" },
+                    { level: 3, name: "MEETS", color: "#3b82f6", bgColor: "#dbeafe", minScore: 50, maxScore: 69, description: "Meets expectations (Target)" },
+                    { level: 2, name: "BELOW", color: "#f59e0b", bgColor: "#fef3c7", minScore: 25, maxScore: 49, description: "Below expectations" },
+                    { level: 1, name: "UNSATISFACTORY", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 24, description: "Unsatisfactory" }
+                ]
+            },
+            '4-simplified': {
+                name: '4 Levels (Simplified)',
+                levelsCount: 4,
+                targetLevel: 2,
+                levels: [
+                    { level: 4, name: "EXCEPTIONAL", color: "#0f766e", bgColor: "#ccfbf1", minScore: 80, maxScore: 100, description: "Exceptional performance" },
+                    { level: 3, name: "PROFICIENT", color: "#10b981", bgColor: "#d1fae5", minScore: 55, maxScore: 79, description: "Proficient (Target)" },
+                    { level: 2, name: "DEVELOPING", color: "#f59e0b", bgColor: "#fef3c7", minScore: 30, maxScore: 54, description: "Developing" },
+                    { level: 1, name: "NEEDS IMPROVEMENT", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 29, description: "Needs improvement" }
+                ]
+            },
+            '3-basic': {
+                name: '3 Levels (Basic)',
+                levelsCount: 3,
+                targetLevel: 2,
+                levels: [
+                    { level: 3, name: "EXCEEDS", color: "#10b981", bgColor: "#d1fae5", minScore: 70, maxScore: 100, description: "Exceeds expectations" },
+                    { level: 2, name: "MEETS", color: "#3b82f6", bgColor: "#dbeafe", minScore: 40, maxScore: 69, description: "Meets expectations (Target)" },
+                    { level: 1, name: "BELOW", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 39, description: "Below expectations" }
+                ]
+            }
+        };
+        
+        // Current active rating configuration (loaded from DB or default)
+        let ratingConfig = JSON.parse(JSON.stringify(DEFAULT_RATING_CONFIG));
+        
+        // Dynamic rating labels (generated from config)
+        let ratingLabels = {};
+        
+        // Initialize rating labels from config
+        function initRatingLabels() {
+            ratingLabels = {};
+            ratingConfig.levels.forEach(lvl => {
+                ratingLabels[lvl.level] = lvl.name;
+            });
+        }
+        
+        // Get rating label by level number
+        function getRatingLabel(level) {
+            const lvl = ratingConfig.levels.find(l => l.level === level);
+            return lvl ? lvl.name : 'N/A';
+        }
+        
+        // Get rating color by level number
+        function getRatingColor(level) {
+            const lvl = ratingConfig.levels.find(l => l.level === level);
+            return lvl ? lvl.color : '#94a3b8';
+        }
+        
+        // Get rating background color by level number
+        function getRatingBgColor(level) {
+            const lvl = ratingConfig.levels.find(l => l.level === level);
+            return lvl ? lvl.bgColor : '#f1f5f9';
+        }
+        
+        // Get CSS class for rating level
+        function getRatingClass(level) {
+            return `lvl-${level}`;
+        }
+        
+        // Get levels count
+        function getLevelsCount() {
+            return ratingConfig.levelsCount;
+        }
+        
+        // Get target level (the "Target" benchmark level)
+        function getTargetLevel() {
+            return ratingConfig.targetLevel;
+        }
+        
+        // Get all levels sorted from highest to lowest
+        function getAllLevels() {
+            return [...ratingConfig.levels].sort((a, b) => b.level - a.level);
+        }
+        
+        // Get level headers for scorecard targets (from highest to lowest)
+        function getLevelHeaders() {
+            return getAllLevels().map(lvl => {
+                const isTarget = lvl.level === ratingConfig.targetLevel;
+                return isTarget ? `${lvl.name} (Target)` : lvl.name;
+            });
+        }
+        
+        // Generate empty targets array based on current levels count
+        function getEmptyTargets() {
+            return Array(ratingConfig.levelsCount).fill('');
+        }
+        
+        // Load rating configuration from database
+        async function loadRatingConfiguration() {
+            try {
+                const configId = `rating_config_${currentCycle}`;
+                const { data, error } = await db.from('company_settings').select('data').eq('id', configId).single();
+                
+                if (data && data.data) {
+                    const savedConfig = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                    ratingConfig = { ...DEFAULT_RATING_CONFIG, ...savedConfig };
+                } else {
+                    // Use default configuration
+                    ratingConfig = JSON.parse(JSON.stringify(DEFAULT_RATING_CONFIG));
+                    ratingConfig.cycle = currentCycle;
+                }
+                
+                // Initialize labels
+                initRatingLabels();
+                
+                // Generate dynamic CSS for rating levels
+                generateRatingCSS();
+                
+                console.log(`Rating config loaded for cycle ${currentCycle}:`, ratingConfig.levelsCount, 'levels');
+            } catch (err) {
+                console.error('Error loading rating configuration:', err);
+                ratingConfig = JSON.parse(JSON.stringify(DEFAULT_RATING_CONFIG));
+                initRatingLabels();
+                generateRatingCSS();
+            }
+        }
+        
+        // Save rating configuration to database
+        async function saveRatingConfiguration() {
+            try {
+                const configId = `rating_config_${currentCycle}`;
+                const { error } = await db.from('company_settings').upsert({
+                    id: configId,
+                    data: ratingConfig
+                });
+                
+                if (error) throw error;
+                
+                showToast('Rating configuration saved successfully!', 'success');
+                return true;
+            } catch (err) {
+                console.error('Error saving rating configuration:', err);
+                showToast('Failed to save rating configuration', 'error');
+                return false;
+            }
+        }
+        
+        // Generate dynamic CSS for current rating levels
+        function generateRatingCSS() {
+            // Remove old dynamic styles
+            const oldStyle = document.getElementById('dynamic-rating-styles');
+            if (oldStyle) oldStyle.remove();
+            
+            // Create new styles
+            let css = '';
+            ratingConfig.levels.forEach(lvl => {
+                css += `
+                    .lvl-${lvl.level} { 
+                        background: ${lvl.color}; 
+                        color: white; 
+                    }
+                    .lvl-${lvl.level}-bg { 
+                        background: ${lvl.bgColor}; 
+                        color: ${lvl.color}; 
+                    }
+                `;
+            });
+            
+            // Add lvl-0 for pending/not rated
+            css += `
+                .lvl-0 { 
+                    background: #f1f5f9; 
+                    color: #64748b; 
+                }
+            `;
+            
+            const style = document.createElement('style');
+            style.id = 'dynamic-rating-styles';
+            style.innerHTML = css;
+            document.head.appendChild(style);
+        }
+        
+        // Initialize rating labels from default config on load
+        initRatingLabels();
 
         let user, targetUser, isManager, isDirectSupervisor, isRegistering, isAdminSearchMode;
         let masterData = { rating: 0, goals: [] };
@@ -2464,6 +2685,9 @@
             
             // Load progress configurations in parallel (non-blocking)
             loadPromises.push(loadProgressConfigurations().catch(e => console.warn('Progress config load failed:', e)));
+            
+            // Load rating levels configuration in parallel (non-blocking)
+            loadPromises.push(loadRatingConfiguration().catch(e => console.warn('Rating config load failed:', e)));
 
             // --- SPEED OPTIMIZATION START ---
             // 1. Try to load from session cache first (Instant Load)
@@ -2632,6 +2856,9 @@
                 <div class="admin-tab" id="tab-progress-config" onclick="switchAdminTab('progress-config')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-bars-progress"></i> <span>Progress</span>
                 </div>
+                <div class="admin-tab" id="tab-rating-levels" onclick="switchAdminTab('rating-levels')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <i class="fa-solid fa-star-half-stroke"></i> <span>Rating Levels</span>
+                </div>
                 <div class="admin-tab" id="tab-search" onclick="switchAdminTab('search')" style="padding: 20px 24px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <i class="fa-solid fa-magnifying-glass"></i> <span>Search</span>
                 </div>
@@ -2685,6 +2912,7 @@
             else if (t === 'cycle') loadCycleManagement();   // Cycle Management
             else if (t === 'weights') loadWeightConfiguration(); // Weight Configuration
             else if (t === 'progress-config') loadProgressConfiguration(); // Progress Weights Configuration
+            else if (t === 'rating-levels') loadRatingLevelsConfiguration(); // Rating Levels Configuration
             else if (t === 'search') loadAdminSearch();
         }
         
@@ -3739,6 +3967,387 @@
                     </div>
                 </div>
             `;
+        }
+        
+        // =====================================================
+        // RATING LEVELS CONFIGURATION UI
+        // =====================================================
+        
+        async function loadRatingLevelsConfiguration() {
+            // Load current configuration
+            await loadRatingConfiguration();
+            
+            const content = `
+            <div class="animate-in">
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.3rem; font-weight:700;">
+                                <i class="fa-solid fa-star-half-stroke" style="color:var(--primary); margin-right:10px;"></i>
+                                Rating Levels Configuration
+                            </h3>
+                            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">
+                                Configure the rating scale for cycle ${currentCycle}. Changes affect all scorecards in this cycle.
+                            </p>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <button class="btn btn-outline" onclick="resetRatingToDefault()">
+                                <i class="fa-solid fa-rotate-left"></i> &nbsp; Reset to Default
+                            </button>
+                            <button class="btn btn-primary" onclick="saveRatingLevelsConfig()">
+                                <i class="fa-solid fa-save"></i> &nbsp; Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Template Selection -->
+                    <div style="background:#f8fafc; border-radius:12px; padding:20px; margin-bottom:24px;">
+                        <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
+                            <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary);"></i> &nbsp; Quick Templates
+                        </h4>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+                            ${Object.entries(RATING_TEMPLATES).map(([key, template]) => `
+                                <div class="template-card" onclick="applyRatingTemplate('${key}')" 
+                                     style="background:white; border:2px solid ${ratingConfig.levelsCount === template.levelsCount ? 'var(--primary)' : 'var(--border)'}; 
+                                            border-radius:10px; padding:16px; cursor:pointer; transition:all 0.2s;
+                                            ${ratingConfig.levelsCount === template.levelsCount ? 'box-shadow: 0 0 0 3px var(--primary-light);' : ''}">
+                                    <div style="font-weight:700; margin-bottom:4px;">${template.name}</div>
+                                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                        ${template.levels.map(l => `
+                                            <span style="width:20px; height:20px; border-radius:50%; background:${l.color}; display:inline-block;" title="${l.name}"></span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <!-- Number of Levels -->
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:20px; margin-bottom:24px;">
+                        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div>
+                                <label style="font-weight:700; font-size:0.9rem; color:#166534;">Number of Rating Levels</label>
+                                <p style="font-size:0.8rem; color:#15803d; margin:4px 0 0;">Choose between 3 and 10 levels</p>
+                            </div>
+                            <select id="levels-count-select" onchange="updateLevelsCount(this.value)" 
+                                    style="padding:12px 20px; border:2px solid #22c55e; border-radius:10px; font-weight:700; font-size:1.1rem; background:white;">
+                                ${[3,4,5,6,7,8,9,10].map(n => `
+                                    <option value="${n}" ${ratingConfig.levelsCount === n ? 'selected' : ''}>${n} Levels</option>
+                                `).join('')}
+                            </select>
+                            <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:0.85rem; color:#166534;">Target Level:</span>
+                                <select id="target-level-select" onchange="updateTargetLevel(this.value)"
+                                        style="padding:8px 16px; border:2px solid #22c55e; border-radius:8px; font-weight:600;">
+                                    ${Array.from({length: ratingConfig.levelsCount}, (_, i) => ratingConfig.levelsCount - i).map(n => `
+                                        <option value="${n}" ${ratingConfig.targetLevel === n ? 'selected' : ''}>Level ${n}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Levels Configuration Table -->
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+                            <thead>
+                                <tr style="background:var(--primary); color:white;">
+                                    <th style="padding:14px; text-align:center; width:60px;">Level</th>
+                                    <th style="padding:14px; text-align:left;">Name</th>
+                                    <th style="padding:14px; text-align:center; width:80px;">Color</th>
+                                    <th style="padding:14px; text-align:center; width:100px;">Min Score %</th>
+                                    <th style="padding:14px; text-align:center; width:100px;">Max Score %</th>
+                                    <th style="padding:14px; text-align:left;">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rating-levels-tbody">
+                                ${renderRatingLevelsRows()}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Preview Section -->
+                    <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
+                        <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
+                            <i class="fa-solid fa-eye" style="color:var(--primary);"></i> &nbsp; Preview
+                        </h4>
+                        <div style="background:#f8fafc; border-radius:12px; padding:20px;">
+                            <div style="margin-bottom:16px; font-size:0.85rem; color:var(--text-muted);">
+                                This is how the rating scale will appear in scorecards:
+                            </div>
+                            <div id="rating-preview" style="display:flex; gap:8px; flex-wrap:wrap;">
+                                ${renderRatingPreview()}
+                            </div>
+                            
+                            <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+                                <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">Target columns in scorecard:</div>
+                                <div style="display:flex; gap:4px; overflow-x:auto; padding-bottom:8px;">
+                                    ${renderTargetColumnsPreview()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Warning -->
+                    <div style="margin-top:24px; background:#fef3c7; border:1px solid #fcd34d; border-radius:12px; padding:16px; display:flex; align-items:flex-start; gap:12px;">
+                        <i class="fa-solid fa-triangle-exclamation" style="color:#d97706; font-size:1.2rem;"></i>
+                        <div>
+                            <div style="font-weight:700; color:#92400e;">Important Notice</div>
+                            <div style="font-size:0.85rem; color:#a16207; margin-top:4px;">
+                                Changing the rating levels will affect all scorecards in cycle ${currentCycle}. 
+                                Existing ratings will be preserved but may need manual adjustment if reducing the number of levels.
+                                It's recommended to configure this at the start of a new cycle.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `;
+            
+            document.getElementById('admin-content').innerHTML = content;
+        }
+        
+        // Render rating levels table rows
+        function renderRatingLevelsRows() {
+            return ratingConfig.levels.map((lvl, index) => {
+                const isTarget = lvl.level === ratingConfig.targetLevel;
+                return `
+                <tr style="border-bottom:1px solid var(--border); ${isTarget ? 'background:#dbeafe;' : ''}">
+                    <td style="padding:12px; text-align:center;">
+                        <div style="width:36px; height:36px; background:${lvl.color}; color:white; border-radius:50%; 
+                                    display:flex; align-items:center; justify-content:center; font-weight:800; margin:0 auto;">
+                            ${lvl.level}
+                        </div>
+                        ${isTarget ? '<div style="font-size:0.65rem; color:#1d4ed8; font-weight:700; margin-top:4px;">TARGET</div>' : ''}
+                    </td>
+                    <td style="padding:12px;">
+                        <input type="text" value="${lvl.name}" onchange="updateLevelProperty(${index}, 'name', this.value.toUpperCase())"
+                               style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-weight:700; text-transform:uppercase;">
+                    </td>
+                    <td style="padding:12px; text-align:center;">
+                        <input type="color" value="${lvl.color}" onchange="updateLevelProperty(${index}, 'color', this.value)"
+                               style="width:50px; height:40px; border:none; border-radius:8px; cursor:pointer;">
+                    </td>
+                    <td style="padding:12px;">
+                        <input type="number" value="${lvl.minScore}" min="0" max="100" 
+                               onchange="updateLevelProperty(${index}, 'minScore', parseInt(this.value))"
+                               style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; text-align:center; font-weight:600;">
+                    </td>
+                    <td style="padding:12px;">
+                        <input type="number" value="${lvl.maxScore}" min="0" max="100"
+                               onchange="updateLevelProperty(${index}, 'maxScore', parseInt(this.value))"
+                               style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; text-align:center; font-weight:600;">
+                    </td>
+                    <td style="padding:12px;">
+                        <input type="text" value="${lvl.description || ''}" onchange="updateLevelProperty(${index}, 'description', this.value)"
+                               style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px;" placeholder="Optional description">
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+        
+        // Render rating preview badges
+        function renderRatingPreview() {
+            return ratingConfig.levels.map(lvl => {
+                const isTarget = lvl.level === ratingConfig.targetLevel;
+                return `
+                <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                    <span class="badge-rating" style="background:${lvl.color}; color:white; padding:8px 16px; border-radius:8px; font-weight:700;">
+                        ${lvl.level} - ${lvl.name}
+                    </span>
+                    ${isTarget ? '<span style="font-size:0.65rem; color:#1d4ed8; font-weight:700;">TARGET</span>' : ''}
+                </div>
+                `;
+            }).join('');
+        }
+        
+        // Render target columns preview
+        function renderTargetColumnsPreview() {
+            return ratingConfig.levels.map(lvl => {
+                const isTarget = lvl.level === ratingConfig.targetLevel;
+                return `
+                <div style="min-width:100px; text-align:center; padding:12px; background:${isTarget ? '#dbeafe' : '#f8fafc'}; 
+                            border:1px solid ${isTarget ? '#3b82f6' : 'var(--border)'}; border-radius:8px;">
+                    <div style="font-size:0.7rem; font-weight:700; color:${lvl.color}; margin-bottom:4px;">
+                        ${lvl.name}${isTarget ? ' (Target)' : ''}
+                    </div>
+                    <div style="font-size:0.85rem; color:var(--text-muted);">-</div>
+                </div>
+                `;
+            }).join('');
+        }
+        
+        // Apply a rating template
+        function applyRatingTemplate(templateKey) {
+            const template = RATING_TEMPLATES[templateKey];
+            if (!template) return;
+            
+            ratingConfig.levelsCount = template.levelsCount;
+            ratingConfig.targetLevel = template.targetLevel;
+            ratingConfig.levels = JSON.parse(JSON.stringify(template.levels));
+            
+            // Reinitialize labels
+            initRatingLabels();
+            generateRatingCSS();
+            
+            // Reload the UI
+            loadRatingLevelsConfiguration();
+            showToast(`Applied "${template.name}" template`, 'success');
+        }
+        
+        // Update number of levels
+        function updateLevelsCount(count) {
+            const newCount = parseInt(count);
+            if (newCount < 3 || newCount > 10) return;
+            
+            const currentCount = ratingConfig.levelsCount;
+            
+            if (newCount > currentCount) {
+                // Add more levels
+                for (let i = currentCount + 1; i <= newCount; i++) {
+                    const colors = ['#0f766e', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#64748b', '#0ea5e9', '#14b8a6'];
+                    ratingConfig.levels.unshift({
+                        level: i,
+                        name: `LEVEL ${i}`,
+                        color: colors[(i - 1) % colors.length],
+                        bgColor: '#f1f5f9',
+                        minScore: Math.round(((i - 1) / newCount) * 100),
+                        maxScore: Math.round((i / newCount) * 100) - 1,
+                        description: ''
+                    });
+                }
+                // Fix max score for highest level
+                ratingConfig.levels[0].maxScore = 100;
+            } else if (newCount < currentCount) {
+                // Remove levels from top
+                ratingConfig.levels = ratingConfig.levels.filter(l => l.level <= newCount);
+            }
+            
+            // Renumber levels
+            ratingConfig.levels.sort((a, b) => b.level - a.level);
+            ratingConfig.levels.forEach((lvl, i) => {
+                lvl.level = newCount - i;
+            });
+            
+            ratingConfig.levelsCount = newCount;
+            
+            // Adjust target level if needed
+            if (ratingConfig.targetLevel > newCount) {
+                ratingConfig.targetLevel = Math.ceil(newCount / 2);
+            }
+            
+            // Reinitialize labels
+            initRatingLabels();
+            generateRatingCSS();
+            
+            // Reload the UI
+            loadRatingLevelsConfiguration();
+        }
+        
+        // Update target level
+        function updateTargetLevel(level) {
+            ratingConfig.targetLevel = parseInt(level);
+            loadRatingLevelsConfiguration();
+        }
+        
+        // Update individual level property
+        function updateLevelProperty(index, property, value) {
+            if (ratingConfig.levels[index]) {
+                ratingConfig.levels[index][property] = value;
+                
+                // If changing color, also update bgColor (lighter version)
+                if (property === 'color') {
+                    // Simple bgColor generation (could be improved)
+                    ratingConfig.levels[index].bgColor = value + '20';
+                }
+                
+                // Reinitialize labels if name changed
+                if (property === 'name') {
+                    initRatingLabels();
+                }
+                
+                // Regenerate CSS if color changed
+                if (property === 'color') {
+                    generateRatingCSS();
+                }
+                
+                // Update preview
+                const preview = document.getElementById('rating-preview');
+                if (preview) preview.innerHTML = renderRatingPreview();
+            }
+        }
+        
+        // Reset to default configuration
+        function resetRatingToDefault() {
+            showConfirm(
+                'Reset to Default',
+                'This will reset all rating levels to the default 6-level Astronaut scale. Continue?',
+                'Reset',
+                'danger',
+                () => {
+                    ratingConfig = JSON.parse(JSON.stringify(DEFAULT_RATING_CONFIG));
+                    ratingConfig.cycle = currentCycle;
+                    initRatingLabels();
+                    generateRatingCSS();
+                    loadRatingLevelsConfiguration();
+                    showToast('Rating configuration reset to default', 'success');
+                }
+            );
+        }
+        
+        // Save rating levels configuration
+        async function saveRatingLevelsConfig() {
+            // Validate configuration
+            const errors = validateRatingConfig();
+            if (errors.length > 0) {
+                showToast(errors[0], 'error');
+                return;
+            }
+            
+            showSaving();
+            
+            // Update cycle
+            ratingConfig.cycle = currentCycle;
+            
+            const success = await saveRatingConfiguration();
+            
+            if (success) {
+                showSaved();
+                // Reinitialize labels and CSS
+                initRatingLabels();
+                generateRatingCSS();
+            }
+        }
+        
+        // Validate rating configuration
+        function validateRatingConfig() {
+            const errors = [];
+            
+            // Check level names
+            const names = ratingConfig.levels.map(l => l.name);
+            const uniqueNames = new Set(names);
+            if (uniqueNames.size !== names.length) {
+                errors.push('Level names must be unique');
+            }
+            
+            // Check for empty names
+            if (ratingConfig.levels.some(l => !l.name || l.name.trim() === '')) {
+                errors.push('All levels must have a name');
+            }
+            
+            // Check score ranges don't overlap and cover 0-100
+            const sortedLevels = [...ratingConfig.levels].sort((a, b) => a.minScore - b.minScore);
+            for (let i = 0; i < sortedLevels.length; i++) {
+                if (sortedLevels[i].minScore > sortedLevels[i].maxScore) {
+                    errors.push(`Level ${sortedLevels[i].level}: Min score cannot be greater than max score`);
+                }
+                if (i > 0 && sortedLevels[i].minScore <= sortedLevels[i-1].maxScore) {
+                    errors.push('Score ranges should not overlap');
+                }
+            }
+            
+            return errors;
         }
         
         // --- DIRECTORY TAB (ADD/EDIT/DELETE USERS) ---
@@ -8293,12 +8902,13 @@
                                     <span class="pro-unit-badge" style="background:var(--primary-light); font-size:0.65rem;">Weight: ${(g.myWeight * 100).toFixed(1)}%</span>
                                 </div>
                                 <div class="segment-bar">
-                                    ${[1, 2, 3, 4, 5, 6].map(n => {
-                            const isAchieved = (n === g.rating);
-                            return `<div class="segment ${n === 4 ? 'is-target' : ''} ${isAchieved ? 'active' : ''}">
-                                                    ${n === 4 ? '<div class="target-badge">TARGET</div>' : ''}
-                                                    <div class="seg-num">${n}</div>
-                                                    <div class="seg-val">${g.targets[n - 1] || '-'}</div>
+                                    ${getAllLevels().map((lvl, idx) => {
+                            const isAchieved = (lvl.level === g.rating);
+                            const isTarget = (lvl.level === ratingConfig.targetLevel);
+                            return `<div class="segment ${isTarget ? 'is-target' : ''} ${isAchieved ? 'active' : ''}">
+                                                    ${isTarget ? '<div class="target-badge">TARGET</div>' : ''}
+                                                    <div class="seg-num">${lvl.level}</div>
+                                                    <div class="seg-val">${g.targets && g.targets[idx] ? g.targets[idx] : '-'}</div>
                                                 </div>`;
                         }).join('')}
                                 </div>
@@ -8442,7 +9052,15 @@
             const targetId = (targetUser[COL.id] || '').toString();
             const viewingSelf = (myId === targetId);
             const uRole = getRole(user);
-            const tHeaders = ['IDLE', 'STAGNANT', 'WALKER', 'RUNNER (Target)', 'FLYER', 'ASTRONAUT'];
+            
+            // DYNAMIC: Get headers from rating config
+            const tHeaders = getAllLevels().map(lvl => {
+                const isTarget = lvl.level === ratingConfig.targetLevel;
+                return isTarget ? `${lvl.name} (Target)` : lvl.name;
+            });
+            
+            // Get target index (which column is the target)
+            const targetIndex = ratingConfig.levels.findIndex(l => l.level === ratingConfig.targetLevel);
 
             document.getElementById('goal-list').innerHTML = targetUser[COL.goals].map((g, i) => {
                 let ratingDisplay = `<span class="rating-badge pending"><i class="fa-solid fa-lock"></i> &nbsp; Pending HR</span>`;
@@ -8451,12 +9069,17 @@
                 // Validation: Highlight 0% weight goals
                 const isInvalid = (!g.weight || parseFloat(g.weight) === 0);
 
+                // DYNAMIC: Generate rating options from config
+                const ratingOptions = getAllLevels().map(lvl => 
+                    `<option value="${lvl.level}" ${g.rating == lvl.level ? 'selected' : ''}>${lvl.level} - ${lvl.name}</option>`
+                ).join('');
+
                 // Case A: Manager/Admin is currently reviewing/editing
                 if (isDirectSupervisor && edit) {
                     ratingDisplay = `
                 <select class="rating-select" onchange="updG(${i},'rating',this.value)" style="padding:8px; border-radius:8px; border:1px solid var(--primary); font-weight:700;">
                     <option value="0">Rate Goal...</option>
-                    ${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${g.rating == n ? 'selected' : ''}>${n} - ${ratingLabels[n]}</option>`).join('')}
+                    ${ratingOptions}
                 </select>`;
 
                     commentHtml = `
@@ -8469,7 +9092,7 @@
                 }
                 // Case B: Approved Scorecard (Visible to everyone)
                 else if (stat === 'Approved' || stat === 'Published') {
-                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${ratingLabels[g.rating]}</span>`;
+                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
                     if (g.comment) {
                         commentHtml = `
                     <div style="margin-top:15px; background:var(--primary-light); padding:15px; border-radius:10px; border-left:4px solid var(--primary);">
@@ -8481,7 +9104,7 @@
                 // Case C: Admin Search Mode - Always show scores (read-only)
                 else if (isAdminSearchMode) {
                     const ratingVal = g.rating || 0;
-                    const ratingLbl = ratingLabels[ratingVal] || 'Not Rated';
+                    const ratingLbl = getRatingLabel(ratingVal) || 'Not Rated';
                     ratingDisplay = ratingVal > 0 
                         ? `<span class="badge-rating lvl-${ratingVal}">${ratingVal} - ${ratingLbl}</span>`
                         : `<span class="rating-badge pending" style="background:#f1f5f9; color:#64748b;"><i class="fa-solid fa-minus"></i> &nbsp; Not Yet Rated</span>`;
@@ -8495,7 +9118,7 @@
                 }
                 // Case D: Submitted to HR (Hidden from Employee, visible to Manager/Admin)
                 else if (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole))) {
-                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${ratingLabels[g.rating]}</span>`;
+                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
                     if (g.comment) {
                         commentHtml = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"><strong>Draft Comment:</strong> ${g.comment}</div>`;
                     }
@@ -8520,9 +9143,9 @@
 
             <div class="pro-targets-container">
                 ${tHeaders.map((h, ti) => `
-                    <div class="pro-target-item ${ti === 3 ? 'is-target' : ''}">
+                    <div class="pro-target-item ${ti === targetIndex ? 'is-target' : ''}">
                         <div class="pro-target-header">${h}</div>
-                        <div style="padding:10px; text-align:center; font-size:0.85rem; color:var(--text-main); font-weight:600;">${g.targets[ti] || '-'}</div>
+                        <div style="padding:10px; text-align:center; font-size:0.85rem; color:var(--text-main); font-weight:600;">${g.targets && g.targets[ti] ? g.targets[ti] : '-'}</div>
                     </div>`).join('')}
             </div>
 
@@ -8636,7 +9259,7 @@
             autoSave();
         }
         // updT is no longer used directly by inputs, but kept for legacy or potential direct internal usage
-        function updT(gi, ti, v) { if (!targetUser[COL.goals][gi].targets) targetUser[COL.goals][gi].targets = Array(6).fill(''); targetUser[COL.goals][gi].targets[ti] = v; autoSave(); }
+        function updT(gi, ti, v) { if (!targetUser[COL.goals][gi].targets) targetUser[COL.goals][gi].targets = getEmptyTargets(); targetUser[COL.goals][gi].targets[ti] = v; autoSave(); }
         function addG() { openGoalModal(); }
 
         async function delG(i) { if (confirm("Delete goal?")) { targetUser[COL.goals].splice(i, 1); renderGoals(true); calc(); autoSave(); } }
