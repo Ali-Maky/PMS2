@@ -4279,8 +4279,9 @@
         // Update rating mode
         function updateRatingMode(mode) {
             ratingConfig.ratingMode = mode;
+            // Reload the configuration UI (this will refresh the page section)
             loadRatingLevelsConfiguration();
-            showToast(`Switched to ${mode === 'percentage' ? 'Percentage' : 'Level'}-based rating`, 'info');
+            // Note: Don't show toast here as it triggers before DOM is ready
         }
         
         // Render percentage preview result
