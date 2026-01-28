@@ -9161,7 +9161,17 @@
                 if (canEdit) {
                     h += `<button class="btn btn-outline" onclick="saveDraft()"><i class="fa-regular fa-floppy-disk"></i> &nbsp; Save Draft</button>`;
 
-                    let btnText = viewingSelf ? "Submit to Manager" : "Approve & Submit to HR";
+                    // Check if user is CEO/L1 (no manager, submits directly to HR)
+                    const userLevel = (targetUser[COL.lvl] || "").toString().trim().toUpperCase();
+                    const userJob = (targetUser[COL.job] || "").toString().trim().toUpperCase();
+                    const isCEO = userLevel === 'L1' || userJob === 'CEO' || (userJob.startsWith('CHIEF ') && userJob.endsWith(' OFFICER'));
+                    
+                    let btnText = "Submit";
+                    if (viewingSelf) {
+                        btnText = isCEO ? "Submit" : "Submit to Manager";
+                    } else {
+                        btnText = "Approve & Submit to HR";
+                    }
 
                     // If Admin is editing, they move it to 'Approved' (Intermediate), NOT 'Published'
                     if (uRole === 'Admin' || uRole === 'Master') {
@@ -9813,9 +9823,21 @@
             let confirmMsg = "Are you sure you want to proceed?";
             let newStatus = "";
 
+            // Check if user is CEO/L1 (no manager, submits directly to HR)
+            const userLevel = (targetUser[COL.lvl] || "").toString().trim().toUpperCase();
+            const userJob = (targetUser[COL.job] || "").toString().trim().toUpperCase();
+            const isCEO = userLevel === 'L1' || userJob === 'CEO' || (userJob.startsWith('CHIEF ') && userJob.endsWith(' OFFICER'));
+
             if (viewingSelf) {
-                confirmMsg = "Submit to Manager? You won't be able to edit your goals anymore.";
-                newStatus = "Submitted to Manager";
+                if (isCEO) {
+                    // CEO submits directly to HR (skips manager)
+                    confirmMsg = "Submit directly to HR? You won't be able to edit your goals anymore.";
+                    newStatus = "Submitted to HR";
+                } else {
+                    // Regular employee submits to manager
+                    confirmMsg = "Submit to Manager? You won't be able to edit your goals anymore.";
+                    newStatus = "Submitted to Manager";
+                }
             } else if (isDirectSupervisor && stat === 'Submitted to Manager') {
                 // --- VALIDATION: Check if manager rated all individual objectives ---
                 const goals = targetUser[COL.goals] || [];
