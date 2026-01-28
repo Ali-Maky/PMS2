@@ -4089,7 +4089,7 @@
                             <i class="fa-solid fa-sliders"></i> &nbsp; Rating Mode
                         </h4>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                            <label onclick="updateRatingMode('level')" style="cursor:pointer;">
+                            <div class="rating-mode-option" onclick="updateRatingMode('level')" style="cursor:pointer;">
                                 <div style="background:white; border:3px solid ${!isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
                                             ${!isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
                                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -4101,6 +4101,7 @@
                                             <div style="font-weight:700; font-size:1rem; color:#1f2937;">Level-Based Rating</div>
                                             <div style="font-size:0.8rem; color:#6b7280;">Simple 1, 2, 3, 4, 5... selection</div>
                                         </div>
+                                        ${!isPercentageMode ? '<i class="fa-solid fa-circle-check" style="margin-left:auto; color:#22c55e; font-size:1.5rem;"></i>' : ''}
                                     </div>
                                     <div style="font-size:0.85rem; color:#4b5563; line-height:1.5;">
                                         Manager selects a <strong>level number</strong> directly (e.g., Level 4 = Runner). 
@@ -4114,9 +4115,9 @@
                                         <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">5</span>
                                     </div>
                                 </div>
-                            </label>
+                            </div>
                             
-                            <label onclick="updateRatingMode('percentage')" style="cursor:pointer;">
+                            <div class="rating-mode-option" onclick="updateRatingMode('percentage')" style="cursor:pointer;">
                                 <div style="background:white; border:3px solid ${isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
                                             ${isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
                                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -4128,6 +4129,7 @@
                                             <div style="font-weight:700; font-size:1rem; color:#1f2937;">Percentage-Based Rating</div>
                                             <div style="font-size:0.8rem; color:#6b7280;">0-100% with level ranges</div>
                                         </div>
+                                        ${isPercentageMode ? '<i class="fa-solid fa-circle-check" style="margin-left:auto; color:#22c55e; font-size:1.5rem;"></i>' : ''}
                                     </div>
                                     <div style="font-size:0.85rem; color:#4b5563; line-height:1.5;">
                                         Manager enters a <strong>percentage score</strong> (0-100%). System automatically maps to level based on configured ranges.
@@ -4139,7 +4141,7 @@
                                         <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">70%+</span>
                                     </div>
                                 </div>
-                            </label>
+                            </div>
                         </div>
                     </div>
                     
