@@ -4054,10 +4054,18 @@
         // RATING LEVELS CONFIGURATION UI
         // =====================================================
         
-        async function loadRatingLevelsConfiguration() {
-            // Load current configuration
-            await loadRatingConfiguration();
+        async function loadRatingLevelsConfiguration(skipDbLoad = false) {
+            // Load current configuration from DB (only if not skipping)
+            if (!skipDbLoad) {
+                await loadRatingConfiguration();
+            }
             
+            // Render the UI with current in-memory config
+            renderRatingLevelsUI();
+        }
+        
+        // Render the Rating Levels UI (without loading from DB)
+        function renderRatingLevelsUI() {
             const isPercentageMode = ratingConfig.ratingMode === 'percentage';
             
             const content = `
@@ -4282,9 +4290,9 @@
             console.log('Current ratingConfig.ratingMode:', ratingConfig.ratingMode);
             ratingConfig.ratingMode = mode;
             console.log('New ratingConfig.ratingMode:', ratingConfig.ratingMode);
-            // Reload the configuration UI (this will refresh the page section)
-            loadRatingLevelsConfiguration();
-            console.log('loadRatingLevelsConfiguration completed');
+            // Re-render the UI without reloading from DB (pass true to skip DB load)
+            renderRatingLevelsUI();
+            console.log('renderRatingLevelsUI completed');
         }
         
         // Render percentage preview result
@@ -4388,9 +4396,8 @@
             initRatingLabels();
             generateRatingCSS();
             
-            // Reload the UI
-            loadRatingLevelsConfiguration();
-            // Note: Toast removed - UI refresh shows the change
+            // Re-render the UI without reloading from DB
+            renderRatingLevelsUI();
         }
         
         // Update number of levels
@@ -4438,14 +4445,14 @@
             initRatingLabels();
             generateRatingCSS();
             
-            // Reload the UI
-            loadRatingLevelsConfiguration();
+            // Re-render the UI without reloading from DB
+            renderRatingLevelsUI();
         }
         
         // Update target level
         function updateTargetLevel(level) {
             ratingConfig.targetLevel = parseInt(level);
-            loadRatingLevelsConfiguration();
+            renderRatingLevelsUI();
         }
         
         // Update individual level property
@@ -4487,8 +4494,7 @@
                     ratingConfig.cycle = currentCycle;
                     initRatingLabels();
                     generateRatingCSS();
-                    loadRatingLevelsConfiguration();
-                    // Note: Toast removed - UI refresh shows the change
+                    renderRatingLevelsUI();
                 }
             );
         }
