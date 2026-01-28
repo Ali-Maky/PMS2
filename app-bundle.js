@@ -1253,9 +1253,14 @@
         // DYNAMIC RATING LEVELS SYSTEM
         // =====================================================
         
+        // Rating Mode: 'level' or 'percentage'
+        // - level: Manager rates 1, 2, 3, 4, 5, 6 (simple level selection)
+        // - percentage: Manager enters 0-100%, system maps to level based on ranges
+        
         // Default rating configuration (6 levels - current system)
         const DEFAULT_RATING_CONFIG = {
             cycle: '2025',
+            ratingMode: 'level', // 'level' or 'percentage'
             levelsCount: 6,
             targetLevel: 4, // Which level is the "Target" level
             levels: [
@@ -1270,8 +1275,9 @@
         
         // Rating level templates
         const RATING_TEMPLATES = {
-            '6-astronaut': {
+            '6-level-astronaut': {
                 name: '6 Levels (Astronaut Scale)',
+                ratingMode: 'level',
                 levelsCount: 6,
                 targetLevel: 4,
                 levels: [
@@ -1283,8 +1289,9 @@
                     { level: 1, name: "IDLE", color: "#94a3b8", bgColor: "#f1f5f9", minScore: 0, maxScore: 24, description: "Significantly below" }
                 ]
             },
-            '5-standard': {
+            '5-level-standard': {
                 name: '5 Levels (Standard)',
+                ratingMode: 'level',
                 levelsCount: 5,
                 targetLevel: 3,
                 levels: [
@@ -1295,19 +1302,34 @@
                     { level: 1, name: "UNSATISFACTORY", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 24, description: "Unsatisfactory" }
                 ]
             },
-            '4-simplified': {
-                name: '4 Levels (Simplified)',
+            '5-percentage': {
+                name: '5 Levels (Percentage Mode)',
+                ratingMode: 'percentage',
+                levelsCount: 5,
+                targetLevel: 3,
+                levels: [
+                    { level: 5, name: "EXCEPTIONAL", color: "#0f766e", bgColor: "#ccfbf1", minScore: 90, maxScore: 100, description: "90-100%" },
+                    { level: 4, name: "EXCEEDS EXPECTATIONS", color: "#10b981", bgColor: "#d1fae5", minScore: 70, maxScore: 89, description: "70-89%" },
+                    { level: 3, name: "MEETS EXPECTATIONS", color: "#3b82f6", bgColor: "#dbeafe", minScore: 50, maxScore: 69, description: "50-69% (Target)" },
+                    { level: 2, name: "BELOW EXPECTATIONS", color: "#f59e0b", bgColor: "#fef3c7", minScore: 30, maxScore: 49, description: "30-49%" },
+                    { level: 1, name: "NEEDS IMPROVEMENT", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 29, description: "0-29%" }
+                ]
+            },
+            '4-percentage': {
+                name: '4 Levels (Percentage Mode)',
+                ratingMode: 'percentage',
                 levelsCount: 4,
                 targetLevel: 2,
                 levels: [
-                    { level: 4, name: "EXCEPTIONAL", color: "#0f766e", bgColor: "#ccfbf1", minScore: 80, maxScore: 100, description: "Exceptional performance" },
-                    { level: 3, name: "PROFICIENT", color: "#10b981", bgColor: "#d1fae5", minScore: 55, maxScore: 79, description: "Proficient (Target)" },
-                    { level: 2, name: "DEVELOPING", color: "#f59e0b", bgColor: "#fef3c7", minScore: 30, maxScore: 54, description: "Developing" },
-                    { level: 1, name: "NEEDS IMPROVEMENT", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 29, description: "Needs improvement" }
+                    { level: 4, name: "OUTSTANDING", color: "#0f766e", bgColor: "#ccfbf1", minScore: 80, maxScore: 100, description: "80-100%" },
+                    { level: 3, name: "PROFICIENT", color: "#10b981", bgColor: "#d1fae5", minScore: 55, maxScore: 79, description: "55-79%" },
+                    { level: 2, name: "DEVELOPING", color: "#f59e0b", bgColor: "#fef3c7", minScore: 30, maxScore: 54, description: "30-54% (Target)" },
+                    { level: 1, name: "NEEDS IMPROVEMENT", color: "#ef4444", bgColor: "#fee2e2", minScore: 0, maxScore: 29, description: "0-29%" }
                 ]
             },
-            '3-basic': {
-                name: '3 Levels (Basic)',
+            '3-level-simple': {
+                name: '3 Levels (Simple)',
+                ratingMode: 'level',
                 levelsCount: 3,
                 targetLevel: 2,
                 levels: [
@@ -1330,6 +1352,11 @@
             ratingConfig.levels.forEach(lvl => {
                 ratingLabels[lvl.level] = lvl.name;
             });
+        }
+        
+        // Get rating mode ('level' or 'percentage')
+        function getRatingMode() {
+            return ratingConfig.ratingMode || 'level';
         }
         
         // Get rating label by level number
@@ -1383,6 +1410,60 @@
             return Array(ratingConfig.levelsCount).fill('');
         }
         
+        // Convert percentage score to level (for percentage mode)
+        function percentageToLevel(percentage) {
+            const pct = parseFloat(percentage) || 0;
+            // Find the level that matches this percentage range
+            const matchedLevel = ratingConfig.levels.find(lvl => 
+                pct >= lvl.minScore && pct <= lvl.maxScore
+            );
+            return matchedLevel ? matchedLevel.level : 1;
+        }
+        
+        // Get level info from percentage (for percentage mode)
+        function getLevelFromPercentage(percentage) {
+            const pct = parseFloat(percentage) || 0;
+            const matchedLevel = ratingConfig.levels.find(lvl => 
+                pct >= lvl.minScore && pct <= lvl.maxScore
+            );
+            return matchedLevel || ratingConfig.levels[ratingConfig.levels.length - 1];
+        }
+        
+        // Convert level to percentage midpoint (for display in percentage mode)
+        function levelToPercentage(level) {
+            const lvl = ratingConfig.levels.find(l => l.level === level);
+            if (!lvl) return 0;
+            return Math.round((lvl.minScore + lvl.maxScore) / 2);
+        }
+        
+        // Get the score value for calculation based on mode
+        function getRatingScoreValue(ratingValue) {
+            if (getRatingMode() === 'percentage') {
+                // In percentage mode, ratingValue is the actual percentage (0-100)
+                return parseFloat(ratingValue) || 0;
+            } else {
+                // In level mode, convert level to a score (e.g., 1-6 becomes comparable score)
+                // Use the midpoint of the level's score range
+                const lvl = ratingConfig.levels.find(l => l.level === parseInt(ratingValue));
+                if (lvl) {
+                    return (lvl.minScore + lvl.maxScore) / 2;
+                }
+                return 0;
+            }
+        }
+        
+        // Format rating for display
+        function formatRatingDisplay(ratingValue) {
+            if (getRatingMode() === 'percentage') {
+                const pct = parseFloat(ratingValue) || 0;
+                const levelInfo = getLevelFromPercentage(pct);
+                return `${pct}% (${levelInfo.name})`;
+            } else {
+                const lvl = parseInt(ratingValue) || 0;
+                return `${lvl} - ${getRatingLabel(lvl)}`;
+            }
+        }
+        
         // Load rating configuration from database
         async function loadRatingConfiguration() {
             try {
@@ -1404,7 +1485,7 @@
                 // Generate dynamic CSS for rating levels
                 generateRatingCSS();
                 
-                console.log(`Rating config loaded for cycle ${currentCycle}:`, ratingConfig.levelsCount, 'levels');
+                console.log(`Rating config loaded for cycle ${currentCycle}:`, ratingConfig.levelsCount, 'levels,', ratingConfig.ratingMode, 'mode');
             } catch (err) {
                 console.error('Error loading rating configuration:', err);
                 ratingConfig = JSON.parse(JSON.stringify(DEFAULT_RATING_CONFIG));
@@ -3977,6 +4058,8 @@
             // Load current configuration
             await loadRatingConfiguration();
             
+            const isPercentageMode = ratingConfig.ratingMode === 'percentage';
+            
             const content = `
             <div class="animate-in">
                 <div class="card">
@@ -4000,45 +4083,111 @@
                         </div>
                     </div>
                     
+                    <!-- Rating Mode Selection -->
+                    <div style="background:linear-gradient(135deg, #f0fdf4, #dcfce7); border:2px solid #22c55e; border-radius:16px; padding:24px; margin-bottom:24px;">
+                        <h4 style="margin:0 0 16px; font-size:1.1rem; font-weight:700; color:#166534;">
+                            <i class="fa-solid fa-sliders"></i> &nbsp; Rating Mode
+                        </h4>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                            <label onclick="updateRatingMode('level')" style="cursor:pointer;">
+                                <div style="background:white; border:3px solid ${!isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
+                                            ${!isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
+                                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                                        <div style="width:40px; height:40px; background:${!isPercentageMode ? '#22c55e' : '#e5e7eb'}; color:${!isPercentageMode ? 'white' : '#6b7280'}; 
+                                                    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+                                            <i class="fa-solid fa-list-ol"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight:700; font-size:1rem; color:#1f2937;">Level-Based Rating</div>
+                                            <div style="font-size:0.8rem; color:#6b7280;">Simple 1, 2, 3, 4, 5... selection</div>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:0.85rem; color:#4b5563; line-height:1.5;">
+                                        Manager selects a <strong>level number</strong> directly (e.g., Level 4 = Runner). 
+                                        Best for simple, straightforward evaluations.
+                                    </div>
+                                    <div style="margin-top:12px; display:flex; gap:6px;">
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">1</span>
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">2</span>
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">3</span>
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">4</span>
+                                        <span style="background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">5</span>
+                                    </div>
+                                </div>
+                            </label>
+                            
+                            <label onclick="updateRatingMode('percentage')" style="cursor:pointer;">
+                                <div style="background:white; border:3px solid ${isPercentageMode ? '#22c55e' : '#e5e7eb'}; border-radius:12px; padding:20px; transition:all 0.2s;
+                                            ${isPercentageMode ? 'box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);' : ''}">
+                                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                                        <div style="width:40px; height:40px; background:${isPercentageMode ? '#22c55e' : '#e5e7eb'}; color:${isPercentageMode ? 'white' : '#6b7280'}; 
+                                                    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+                                            <i class="fa-solid fa-percent"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight:700; font-size:1rem; color:#1f2937;">Percentage-Based Rating</div>
+                                            <div style="font-size:0.8rem; color:#6b7280;">0-100% with level ranges</div>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:0.85rem; color:#4b5563; line-height:1.5;">
+                                        Manager enters a <strong>percentage score</strong> (0-100%). System automatically maps to level based on configured ranges.
+                                    </div>
+                                    <div style="margin-top:12px; display:flex; gap:6px;">
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">0-29%</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">30-49%</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">50-69%</span>
+                                        <span style="background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600;">70%+</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    
                     <!-- Template Selection -->
                     <div style="background:#f8fafc; border-radius:12px; padding:20px; margin-bottom:24px;">
                         <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
                             <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary);"></i> &nbsp; Quick Templates
                         </h4>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
-                            ${Object.entries(RATING_TEMPLATES).map(([key, template]) => `
+                            ${Object.entries(RATING_TEMPLATES).map(([key, template]) => {
+                                const isSelected = ratingConfig.levelsCount === template.levelsCount && ratingConfig.ratingMode === template.ratingMode;
+                                const modeIcon = template.ratingMode === 'percentage' ? 'fa-percent' : 'fa-list-ol';
+                                return `
                                 <div class="template-card" onclick="applyRatingTemplate('${key}')" 
-                                     style="background:white; border:2px solid ${ratingConfig.levelsCount === template.levelsCount ? 'var(--primary)' : 'var(--border)'}; 
+                                     style="background:white; border:2px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}; 
                                             border-radius:10px; padding:16px; cursor:pointer; transition:all 0.2s;
-                                            ${ratingConfig.levelsCount === template.levelsCount ? 'box-shadow: 0 0 0 3px var(--primary-light);' : ''}">
-                                    <div style="font-weight:700; margin-bottom:4px;">${template.name}</div>
+                                            ${isSelected ? 'box-shadow: 0 0 0 3px var(--primary-light);' : ''}">
+                                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                        <i class="fa-solid ${modeIcon}" style="color:${template.ratingMode === 'percentage' ? '#f59e0b' : '#3b82f6'}; font-size:0.8rem;"></i>
+                                        <span style="font-weight:700; font-size:0.9rem;">${template.name}</span>
+                                    </div>
                                     <div style="display:flex; gap:4px; flex-wrap:wrap;">
                                         ${template.levels.map(l => `
-                                            <span style="width:20px; height:20px; border-radius:50%; background:${l.color}; display:inline-block;" title="${l.name}"></span>
+                                            <span style="width:18px; height:18px; border-radius:50%; background:${l.color}; display:inline-block;" title="${l.name}"></span>
                                         `).join('')}
                                     </div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                     
                     <!-- Number of Levels -->
-                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:20px; margin-bottom:24px;">
+                    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:12px; padding:20px; margin-bottom:24px;">
                         <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <div>
-                                <label style="font-weight:700; font-size:0.9rem; color:#166534;">Number of Rating Levels</label>
-                                <p style="font-size:0.8rem; color:#15803d; margin:4px 0 0;">Choose between 3 and 10 levels</p>
+                                <label style="font-weight:700; font-size:0.9rem; color:#0369a1;">Number of Rating Levels</label>
+                                <p style="font-size:0.8rem; color:#0284c7; margin:4px 0 0;">Choose between 3 and 10 levels</p>
                             </div>
                             <select id="levels-count-select" onchange="updateLevelsCount(this.value)" 
-                                    style="padding:12px 20px; border:2px solid #22c55e; border-radius:10px; font-weight:700; font-size:1.1rem; background:white;">
+                                    style="padding:12px 20px; border:2px solid #0ea5e9; border-radius:10px; font-weight:700; font-size:1.1rem; background:white;">
                                 ${[3,4,5,6,7,8,9,10].map(n => `
                                     <option value="${n}" ${ratingConfig.levelsCount === n ? 'selected' : ''}>${n} Levels</option>
                                 `).join('')}
                             </select>
                             <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:0.85rem; color:#166534;">Target Level:</span>
+                                <span style="font-size:0.85rem; color:#0369a1;">Target Level:</span>
                                 <select id="target-level-select" onchange="updateTargetLevel(this.value)"
-                                        style="padding:8px 16px; border:2px solid #22c55e; border-radius:8px; font-weight:600;">
+                                        style="padding:8px 16px; border:2px solid #0ea5e9; border-radius:8px; font-weight:600;">
                                     ${Array.from({length: ratingConfig.levelsCount}, (_, i) => ratingConfig.levelsCount - i).map(n => `
                                         <option value="${n}" ${ratingConfig.targetLevel === n ? 'selected' : ''}>Level ${n}</option>
                                     `).join('')}
@@ -4055,8 +4204,8 @@
                                     <th style="padding:14px; text-align:center; width:60px;">Level</th>
                                     <th style="padding:14px; text-align:left;">Name</th>
                                     <th style="padding:14px; text-align:center; width:80px;">Color</th>
-                                    <th style="padding:14px; text-align:center; width:100px;">Min Score %</th>
-                                    <th style="padding:14px; text-align:center; width:100px;">Max Score %</th>
+                                    <th style="padding:14px; text-align:center; width:100px;">${isPercentageMode ? 'Min %' : 'Min Score'}</th>
+                                    <th style="padding:14px; text-align:center; width:100px;">${isPercentageMode ? 'Max %' : 'Max Score'}</th>
                                     <th style="padding:14px; text-align:left;">Description</th>
                                 </tr>
                             </thead>
@@ -4069,12 +4218,30 @@
                     <!-- Preview Section -->
                     <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
                         <h4 style="margin:0 0 16px; font-size:1rem; font-weight:700;">
-                            <i class="fa-solid fa-eye" style="color:var(--primary);"></i> &nbsp; Preview
+                            <i class="fa-solid fa-eye" style="color:var(--primary);"></i> &nbsp; Preview - How Managers Will Rate
                         </h4>
                         <div style="background:#f8fafc; border-radius:12px; padding:20px;">
-                            <div style="margin-bottom:16px; font-size:0.85rem; color:var(--text-muted);">
-                                This is how the rating scale will appear in scorecards:
-                            </div>
+                            ${isPercentageMode ? `
+                                <div style="margin-bottom:16px;">
+                                    <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">
+                                        In <strong>Percentage Mode</strong>, managers will enter a score like this:
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:12px; background:white; padding:12px 16px; border-radius:10px; border:1px solid var(--border); max-width:400px;">
+                                        <span style="font-weight:600;">Score:</span>
+                                        <input type="number" id="preview-pct-input" min="0" max="100" value="75" 
+                                               oninput="updatePercentagePreview(this.value)"
+                                               style="width:80px; padding:8px 12px; border:2px solid var(--primary); border-radius:8px; font-weight:700; font-size:1.1rem; text-align:center;">
+                                        <span style="font-weight:600;">%</span>
+                                        <span style="margin-left:auto;" id="preview-pct-result">
+                                            ${renderPercentagePreviewResult(75)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div style="margin-bottom:16px; font-size:0.85rem; color:var(--text-muted);">
+                                    In <strong>Level Mode</strong>, managers will select from these options:
+                                </div>
+                            `}
                             <div id="rating-preview" style="display:flex; gap:8px; flex-wrap:wrap;">
                                 ${renderRatingPreview()}
                             </div>
@@ -4094,8 +4261,8 @@
                         <div>
                             <div style="font-weight:700; color:#92400e;">Important Notice</div>
                             <div style="font-size:0.85rem; color:#a16207; margin-top:4px;">
-                                Changing the rating levels will affect all scorecards in cycle ${currentCycle}. 
-                                Existing ratings will be preserved but may need manual adjustment if reducing the number of levels.
+                                Changing the rating mode or levels will affect all scorecards in cycle ${currentCycle}. 
+                                Existing ratings will be preserved but may need manual adjustment.
                                 It's recommended to configure this at the start of a new cycle.
                             </div>
                         </div>
@@ -4105,6 +4272,29 @@
             `;
             
             document.getElementById('admin-content').innerHTML = content;
+        }
+        
+        // Update rating mode
+        function updateRatingMode(mode) {
+            ratingConfig.ratingMode = mode;
+            loadRatingLevelsConfiguration();
+            showToast(`Switched to ${mode === 'percentage' ? 'Percentage' : 'Level'}-based rating`, 'info');
+        }
+        
+        // Render percentage preview result
+        function renderPercentagePreviewResult(pct) {
+            const levelInfo = getLevelFromPercentage(pct);
+            return `<span class="badge-rating" style="background:${levelInfo.color}; color:white; padding:6px 14px; border-radius:8px; font-weight:700;">
+                ${levelInfo.name}
+            </span>`;
+        }
+        
+        // Update percentage preview (called on input)
+        function updatePercentagePreview(value) {
+            const resultEl = document.getElementById('preview-pct-result');
+            if (resultEl) {
+                resultEl.innerHTML = renderPercentagePreviewResult(parseFloat(value) || 0);
+            }
         }
         
         // Render rating levels table rows
@@ -4185,6 +4375,7 @@
             
             ratingConfig.levelsCount = template.levelsCount;
             ratingConfig.targetLevel = template.targetLevel;
+            ratingConfig.ratingMode = template.ratingMode || 'level';
             ratingConfig.levels = JSON.parse(JSON.stringify(template.levels));
             
             // Reinitialize labels
@@ -9061,6 +9252,9 @@
             
             // Get target index (which column is the target)
             const targetIndex = ratingConfig.levels.findIndex(l => l.level === ratingConfig.targetLevel);
+            
+            // Check rating mode
+            const isPercentageMode = getRatingMode() === 'percentage';
 
             document.getElementById('goal-list').innerHTML = targetUser[COL.goals].map((g, i) => {
                 let ratingDisplay = `<span class="rating-badge pending"><i class="fa-solid fa-lock"></i> &nbsp; Pending HR</span>`;
@@ -9069,18 +9263,47 @@
                 // Validation: Highlight 0% weight goals
                 const isInvalid = (!g.weight || parseFloat(g.weight) === 0);
 
-                // DYNAMIC: Generate rating options from config
-                const ratingOptions = getAllLevels().map(lvl => 
-                    `<option value="${lvl.level}" ${g.rating == lvl.level ? 'selected' : ''}>${lvl.level} - ${lvl.name}</option>`
-                ).join('');
+                // Get rating value and level info
+                const ratingVal = g.rating || 0;
+                let levelInfo = null;
+                
+                if (isPercentageMode) {
+                    // In percentage mode, g.rating stores the percentage (0-100)
+                    levelInfo = getLevelFromPercentage(ratingVal);
+                } else {
+                    // In level mode, g.rating stores the level number (1-6)
+                    levelInfo = ratingConfig.levels.find(l => l.level === ratingVal);
+                }
 
                 // Case A: Manager/Admin is currently reviewing/editing
                 if (isDirectSupervisor && edit) {
-                    ratingDisplay = `
-                <select class="rating-select" onchange="updG(${i},'rating',this.value)" style="padding:8px; border-radius:8px; border:1px solid var(--primary); font-weight:700;">
-                    <option value="0">Rate Goal...</option>
-                    ${ratingOptions}
-                </select>`;
+                    if (isPercentageMode) {
+                        // PERCENTAGE MODE: Show percentage input
+                        const currentPct = ratingVal || '';
+                        const currentLevelInfo = getLevelFromPercentage(currentPct);
+                        ratingDisplay = `
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <input type="number" min="0" max="100" step="1" value="${currentPct}" 
+                                   onchange="updG(${i},'rating',parseFloat(this.value)||0); updateGoalRatingBadge(${i}, this.value);"
+                                   style="width:80px; padding:8px 12px; border:2px solid var(--primary); border-radius:8px; font-weight:700; font-size:1rem; text-align:center;"
+                                   placeholder="0-100">
+                            <span style="font-weight:600;">%</span>
+                            <span id="goal-rating-badge-${i}" class="badge-rating" style="background:${currentLevelInfo ? currentLevelInfo.color : '#94a3b8'}; color:white; padding:6px 12px; border-radius:8px; font-weight:600; font-size:0.8rem;">
+                                ${currentLevelInfo ? currentLevelInfo.name : 'Enter %'}
+                            </span>
+                        </div>`;
+                    } else {
+                        // LEVEL MODE: Show level dropdown
+                        const ratingOptions = getAllLevels().map(lvl => 
+                            `<option value="${lvl.level}" ${g.rating == lvl.level ? 'selected' : ''}>${lvl.level} - ${lvl.name}</option>`
+                        ).join('');
+                        
+                        ratingDisplay = `
+                        <select class="rating-select" onchange="updG(${i},'rating',this.value)" style="padding:8px; border-radius:8px; border:1px solid var(--primary); font-weight:700;">
+                            <option value="0">Rate Goal...</option>
+                            ${ratingOptions}
+                        </select>`;
+                    }
 
                     commentHtml = `
                 <div style="margin-top:15px; background:#f0f9ff; padding:15px; border-radius:10px; border:1px solid #bae6fd;">
@@ -9092,7 +9315,15 @@
                 }
                 // Case B: Approved Scorecard (Visible to everyone)
                 else if (stat === 'Approved' || stat === 'Published') {
-                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
+                    if (isPercentageMode && levelInfo) {
+                        ratingDisplay = `<span class="badge-rating" style="background:${levelInfo.color}; color:white; padding:8px 14px; border-radius:8px; font-weight:700;">
+                            ${ratingVal}% - ${levelInfo.name}
+                        </span>`;
+                    } else if (levelInfo) {
+                        ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${levelInfo.name}</span>`;
+                    } else {
+                        ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
+                    }
                     if (g.comment) {
                         commentHtml = `
                     <div style="margin-top:15px; background:var(--primary-light); padding:15px; border-radius:10px; border-left:4px solid var(--primary);">
@@ -9103,11 +9334,18 @@
                 }
                 // Case C: Admin Search Mode - Always show scores (read-only)
                 else if (isAdminSearchMode) {
-                    const ratingVal = g.rating || 0;
-                    const ratingLbl = getRatingLabel(ratingVal) || 'Not Rated';
-                    ratingDisplay = ratingVal > 0 
-                        ? `<span class="badge-rating lvl-${ratingVal}">${ratingVal} - ${ratingLbl}</span>`
-                        : `<span class="rating-badge pending" style="background:#f1f5f9; color:#64748b;"><i class="fa-solid fa-minus"></i> &nbsp; Not Yet Rated</span>`;
+                    if (ratingVal > 0) {
+                        if (isPercentageMode && levelInfo) {
+                            ratingDisplay = `<span class="badge-rating" style="background:${levelInfo.color}; color:white; padding:8px 14px; border-radius:8px; font-weight:700;">
+                                ${ratingVal}% - ${levelInfo.name}
+                            </span>`;
+                        } else {
+                            const ratingLbl = getRatingLabel(ratingVal) || 'Not Rated';
+                            ratingDisplay = `<span class="badge-rating lvl-${ratingVal}">${ratingVal} - ${ratingLbl}</span>`;
+                        }
+                    } else {
+                        ratingDisplay = `<span class="rating-badge pending" style="background:#f1f5f9; color:#64748b;"><i class="fa-solid fa-minus"></i> &nbsp; Not Yet Rated</span>`;
+                    }
                     if (g.comment) {
                         commentHtml = `
                     <div style="margin-top:15px; background:#f0f9ff; padding:15px; border-radius:10px; border-left:4px solid #3b82f6;">
@@ -9118,7 +9356,13 @@
                 }
                 // Case D: Submitted to HR (Hidden from Employee, visible to Manager/Admin)
                 else if (!viewingSelf && (isManager || ['Admin', 'Master'].includes(uRole))) {
-                    ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
+                    if (isPercentageMode && levelInfo) {
+                        ratingDisplay = `<span class="badge-rating" style="background:${levelInfo.color}; color:white; padding:8px 14px; border-radius:8px; font-weight:700;">
+                            ${ratingVal}% - ${levelInfo.name}
+                        </span>`;
+                    } else {
+                        ratingDisplay = `<span class="badge-rating lvl-${g.rating}">${g.rating} - ${getRatingLabel(g.rating)}</span>`;
+                    }
                     if (g.comment) {
                         commentHtml = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"><strong>Draft Comment:</strong> ${g.comment}</div>`;
                     }
@@ -9151,7 +9395,7 @@
 
             <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Achievement Level</span>
+                    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Achievement ${isPercentageMode ? 'Score' : 'Level'}</span>
                     ${ratingDisplay}
                 </div>
                 
@@ -9246,7 +9490,10 @@
 
         function updG(i, f, v) {
             // 1. Convert to number if the field is the rating
-            if (f === 'rating') v = parseInt(v);
+            if (f === 'rating') {
+                // In percentage mode, keep as float; in level mode, keep as int
+                v = getRatingMode() === 'percentage' ? parseFloat(v) : parseInt(v);
+            }
 
             // 2. Update the data in the array
             targetUser[COL.goals][i][f] = v;
@@ -9258,6 +9505,18 @@
             // 4. Save to Supabase
             autoSave();
         }
+        
+        // Helper function to update rating badge when percentage is entered
+        function updateGoalRatingBadge(goalIndex, percentageValue) {
+            const badgeEl = document.getElementById(`goal-rating-badge-${goalIndex}`);
+            if (badgeEl) {
+                const pct = parseFloat(percentageValue) || 0;
+                const levelInfo = getLevelFromPercentage(pct);
+                badgeEl.style.background = levelInfo.color;
+                badgeEl.textContent = levelInfo.name;
+            }
+        }
+        
         // updT is no longer used directly by inputs, but kept for legacy or potential direct internal usage
         function updT(gi, ti, v) { if (!targetUser[COL.goals][gi].targets) targetUser[COL.goals][gi].targets = getEmptyTargets(); targetUser[COL.goals][gi].targets[ti] = v; autoSave(); }
         function addG() { openGoalModal(); }
