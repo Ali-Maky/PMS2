@@ -4214,8 +4214,10 @@
                                     <th style="padding:14px; text-align:center; width:60px;">Level</th>
                                     <th style="padding:14px; text-align:left;">Name</th>
                                     <th style="padding:14px; text-align:center; width:80px;">Color</th>
-                                    <th style="padding:14px; text-align:center; width:100px;">${isPercentageMode ? 'Min %' : 'Min Score'}</th>
-                                    <th style="padding:14px; text-align:center; width:100px;">${isPercentageMode ? 'Max %' : 'Max Score'}</th>
+                                    ${isPercentageMode ? `
+                                    <th style="padding:14px; text-align:center; width:100px;">Min %</th>
+                                    <th style="padding:14px; text-align:center; width:100px;">Max %</th>
+                                    ` : ''}
                                     <th style="padding:14px; text-align:left;">Description</th>
                                 </tr>
                             </thead>
@@ -4313,6 +4315,7 @@
         
         // Render rating levels table rows
         function renderRatingLevelsRows() {
+            const isPercentageMode = getRatingMode() === 'percentage';
             return ratingConfig.levels.map((lvl, index) => {
                 const isTarget = lvl.level === ratingConfig.targetLevel;
                 return `
@@ -4332,6 +4335,7 @@
                         <input type="color" value="${lvl.color}" onchange="updateLevelProperty(${index}, 'color', this.value)"
                                style="width:50px; height:40px; border:none; border-radius:8px; cursor:pointer;">
                     </td>
+                    ${isPercentageMode ? `
                     <td style="padding:12px;">
                         <input type="number" value="${lvl.minScore}" min="0" max="100" 
                                onchange="updateLevelProperty(${index}, 'minScore', parseInt(this.value))"
@@ -4342,6 +4346,7 @@
                                onchange="updateLevelProperty(${index}, 'maxScore', parseInt(this.value))"
                                style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; text-align:center; font-weight:600;">
                     </td>
+                    ` : ''}
                     <td style="padding:12px;">
                         <input type="text" value="${lvl.description || ''}" onchange="updateLevelProperty(${index}, 'description', this.value)"
                                style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px;" placeholder="Optional description">
