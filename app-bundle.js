@@ -9223,10 +9223,47 @@
                 return;
             }
 
+            // Find the current status of this scorecard
+            let currentStatus = 'Draft';
+            if (typeof allCompanyData !== 'undefined') {
+                const record = allCompanyData.find(u => u[COL.id].toString() === id.toString());
+                if (record) currentStatus = record[COL.stat] || 'Draft';
+            }
+            
+            // Determine where to send it back based on current status
+            let newStatus = 'Draft (Returned by Manager)';
+            let confirmTitle = "Return to Employee";
+            let confirmMsg = "This will move the scorecard back to 'Draft' status for the employee. Continue?";
+            let confirmBtn = "Return to Draft";
+            let successMsg = "Returned to Employee";
+            
+            if (currentStatus === 'Approved') {
+                // Rejecting from "Ready to Publish" - send back to HR review queue
+                newStatus = 'Submitted to HR';
+                confirmTitle = "Return to HR Review";
+                confirmMsg = "This will move the scorecard back to HR review queue (Submitted to HR). Continue?";
+                confirmBtn = "Return to HR";
+                successMsg = "Returned to HR Review";
+            } else if (currentStatus === 'Submitted to HR') {
+                // Rejecting from HR review - send back to manager
+                newStatus = 'Submitted to Manager';
+                confirmTitle = "Return to Manager";
+                confirmMsg = "This will move the scorecard back to the manager for re-review. Continue?";
+                confirmBtn = "Return to Manager";
+                successMsg = "Returned to Manager";
+            } else if (currentStatus === 'Submitted to Manager') {
+                // Rejecting from manager review - send back to employee draft
+                newStatus = 'Draft (Returned by Manager)';
+                confirmTitle = "Return to Employee";
+                confirmMsg = "This will move the scorecard back to 'Draft' status for the employee to revise. Continue?";
+                confirmBtn = "Return to Draft";
+                successMsg = "Returned to Employee";
+            }
+
             showConfirm(
-                "Return to Employee",
-                "This will move the scorecard back to 'Draft' status for the employee. Continue?",
-                "Return to Draft",
+                confirmTitle,
+                confirmMsg,
+                confirmBtn,
                 "danger",
                 async () => {
                     showSaving();
@@ -9235,7 +9272,7 @@
                         // Prepare secure payload with ID for the PHP backend
                         const payload = {
                             [COL.id]: id,
-                            [COL.stat]: 'Draft (Returned by Manager)'
+                            [COL.stat]: newStatus
                         };
 
                         // Use UPSERT to satisfy backend security requirements
@@ -9245,17 +9282,17 @@
                             throw new Error(error.message || "Unauthorized or Connection Failed");
                         }
 
-                        showToast("Returned to Employee", 'success');
+                        showToast(successMsg, 'success');
 
                         // --- UI SAFETY REFRESH ---
 
                         // Update global data if synced
                         if (typeof allCompanyData !== 'undefined') {
                             const globalItem = allCompanyData.find(u => u[COL.id].toString() === id.toString());
-                            if (globalItem) globalItem[COL.stat] = 'Draft (Returned by Manager)';
+                            if (globalItem) globalItem[COL.stat] = newStatus;
                         }
 
-                        // Force a reload after a short delay to re-sync the manager's team view
+                        // Force a reload after a short delay to re-sync the view
                         setTimeout(() => {
                             location.reload();
                         }, 1000);
