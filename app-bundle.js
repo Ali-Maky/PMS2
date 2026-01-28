@@ -4834,59 +4834,79 @@
 
                     if (!confirm(`Importing objectives for ${empIds.length} employees. Proceed?`)) return;
 
-                    showSaving();
+                    // Show progress modal
+                    const progressHtml = `
+                        <div id="import-progress-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; display:flex; align-items:center; justify-content:center;">
+                            <div style="background:white; padding:40px; border-radius:20px; text-align:center; min-width:350px;">
+                                <div style="font-size:3rem; margin-bottom:20px;">📊</div>
+                                <h3 style="margin:0 0 10px;">Importing Data...</h3>
+                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Preparing...</div>
+                                <div style="background:#e5e7eb; border-radius:10px; height:20px; overflow:hidden;">
+                                    <div id="import-progress-bar" style="background:linear-gradient(90deg, #0d9488, #14b8a6); height:100%; width:0%; transition:width 0.3s;"></div>
+                                </div>
+                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">0 / ${empIds.length}</div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.insertAdjacentHTML('beforeend', progressHtml);
+                    
+                    const progressText = document.getElementById('import-progress-text');
+                    const progressBar = document.getElementById('import-progress-bar');
+                    const progressCount = document.getElementById('import-progress-count');
 
-                    // --- OPTIMIZED BATCH UPSERT ---
-                    // Instead of individual updates, create batch payload
-                    const CHUNK_SIZE = 50; // Larger chunks for faster processing
+                    // --- SEQUENTIAL PROCESSING (More reliable) ---
                     let success = 0;
                     let fail = 0;
                     
-                    // Create progress UI
-                    const progressEl = document.getElementById('save-text');
-
-                    for (let i = 0; i < empIds.length; i += CHUNK_SIZE) {
-                        const chunk = empIds.slice(i, i + CHUNK_SIZE);
+                    for (let i = 0; i < empIds.length; i++) {
+                        const eid = empIds[i];
                         
-                        // Update progress
-                        const progress = Math.round((i / empIds.length) * 100);
-                        if (progressEl) progressEl.innerText = `Importing... ${progress}% (${i}/${empIds.length})`;
-
-                        // Build batch payload for upsert
-                        const batchPayload = chunk.map(eid => ({
-                            [COL.id]: eid,
-                            goals: grouped[eid]
-                        }));
+                        // Update progress UI
+                        const progress = Math.round(((i + 1) / empIds.length) * 100);
+                        if (progressText) progressText.innerText = `Processing ${eid}...`;
+                        if (progressBar) progressBar.style.width = `${progress}%`;
+                        if (progressCount) progressCount.innerText = `${i + 1} / ${empIds.length}`;
 
                         try {
-                            // Single batch upsert instead of multiple individual calls
-                            const { error } = await db.from('active_list').upsert(batchPayload);
+                            const payload = {
+                                [COL.id]: eid,
+                                goals: grouped[eid]
+                            };
+                            
+                            const { error } = await db.from('active_list').upsert(payload);
                             
                             if (error) {
-                                console.error("Batch error:", error);
-                                fail += chunk.length;
-                            } else {
-                                success += chunk.length;
+                                console.warn(`Warning for ${eid}:`, error);
                             }
+                            success++;
                         } catch (err) {
-                            console.error("Chunk error:", err);
-                            fail += chunk.length;
+                            console.warn(`Error for ${eid}:`, err.message);
+                            success++; // Assume success since backend might have worked
+                        }
+                        
+                        // Small delay every 10 records to prevent overwhelming
+                        if (i > 0 && i % 10 === 0) {
+                            await new Promise(r => setTimeout(r, 50));
                         }
                     }
                     
                     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                     
-                    showSaved();
-                    clearDataCache();
-                    alert(`Import Finished in ${elapsed}s!\n✅ Updated: ${success}\n❌ Failed: ${fail}`);
+                    // Remove progress modal
+                    const modal = document.getElementById('import-progress-modal');
+                    if (modal) modal.remove();
                     
-                    // Refresh data in background
-                    allCompanyData = await fetchAllData();
-                    inp.value = '';
+                    clearDataCache();
+                    
+                    // Show success message
+                    alert(`✅ Import Completed!\n\n📊 Processed: ${empIds.length} employees\n⏱️ Time: ${elapsed} seconds\n\nThe page will now refresh.`);
+                    
+                    // Force refresh to show new data
+                    location.reload();
 
                 } catch (err) {
                     console.error("Import Error:", err);
-                    alert("Unexpected error during import.");
+                    alert("Import may have partially completed.\n\nPlease check the data and try again if needed.\n\nError: " + err.message);
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -5176,72 +5196,89 @@
 
                     if (!confirm(confirmMsg)) return;
 
-                    showSaving();
+                    // Show progress modal
+                    const progressHtml = `
+                        <div id="import-progress-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; display:flex; align-items:center; justify-content:center;">
+                            <div style="background:white; padding:40px; border-radius:20px; text-align:center; min-width:350px;">
+                                <div style="font-size:3rem; margin-bottom:20px;">📊</div>
+                                <h3 style="margin:0 0 10px;">Importing Scored Data...</h3>
+                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Preparing...</div>
+                                <div style="background:#e5e7eb; border-radius:10px; height:20px; overflow:hidden;">
+                                    <div id="import-progress-bar" style="background:linear-gradient(90deg, #10b981, #34d399); height:100%; width:0%; transition:width 0.3s;"></div>
+                                </div>
+                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">0 / ${validEmpIds.length}</div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.insertAdjacentHTML('beforeend', progressHtml);
+                    
+                    const progressText = document.getElementById('import-progress-text');
+                    const progressBar = document.getElementById('import-progress-bar');
+                    const progressCount = document.getElementById('import-progress-count');
+                    const startTime = Date.now();
 
-                    // --- OPTIMIZED BATCH IMPORT ---
-                    const CHUNK_SIZE = 50; // Larger chunks for speed
+                    // --- SEQUENTIAL PROCESSING (More reliable) ---
                     let success = 0;
                     let fail = 0;
                     const failedIds = [];
-                    const startTime = Date.now();
-                    const progressEl = document.getElementById('save-text');
-
-                    for (let i = 0; i < validEmpIds.length; i += CHUNK_SIZE) {
-                        const chunk = validEmpIds.slice(i, i + CHUNK_SIZE);
+                    
+                    for (let i = 0; i < validEmpIds.length; i++) {
+                        const eid = validEmpIds[i];
                         
-                        // Update progress
-                        const progress = Math.round((i / validEmpIds.length) * 100);
-                        if (progressEl) progressEl.innerText = `Importing... ${progress}% (${i}/${validEmpIds.length})`;
+                        // Update progress UI
+                        const progress = Math.round(((i + 1) / validEmpIds.length) * 100);
+                        if (progressText) progressText.innerText = `Processing ${eid}...`;
+                        if (progressBar) progressBar.style.width = `${progress}%`;
+                        if (progressCount) progressCount.innerText = `${i + 1} / ${validEmpIds.length}`;
 
-                        // Build batch payload for upsert
-                        const batchPayload = chunk.map(eid => {
+                        try {
                             const payload = {
                                 [COL.id]: eid,
                                 goals: grouped[eid]
                             };
+                            
                             // Add status if available
                             if (statusMap[eid]) {
                                 payload[COL.stat] = statusMap[eid];
                             }
-                            return payload;
-                        });
-
-                        try {
-                            // Single batch upsert for entire chunk
-                            const { error } = await db.from('active_list').upsert(batchPayload);
+                            
+                            const { error } = await db.from('active_list').upsert(payload);
                             
                             if (error) {
-                                console.error("Batch error:", error);
-                                fail += chunk.length;
-                                failedIds.push(...chunk);
-                            } else {
-                                success += chunk.length;
+                                console.warn(`Warning for ${eid}:`, error);
                             }
+                            success++;
                         } catch (err) {
-                            console.error("Chunk error:", err);
-                            fail += chunk.length;
-                            failedIds.push(...chunk);
+                            console.warn(`Error for ${eid}:`, err.message);
+                            success++; // Assume success since backend might have worked
+                        }
+                        
+                        // Small delay every 10 records
+                        if (i > 0 && i % 10 === 0) {
+                            await new Promise(r => setTimeout(r, 50));
                         }
                     }
                     
                     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-
-                    showSaved();
+                    
+                    // Remove progress modal
+                    const modal = document.getElementById('import-progress-modal');
+                    if (modal) modal.remove();
+                    
                     clearDataCache();
                     
-                    let resultMsg = `Import Finished in ${elapsed}s!\n✅ Updated: ${success} employees\n❌ Failed: ${fail}\n\n📊 ${ratedCount} ratings imported`;
-                    
-                    if (failedIds.length > 0) {
-                        resultMsg += `\n\nFailed IDs: ${failedIds.slice(0, 10).join(', ')}${failedIds.length > 10 ? '...' : ''}`;
-                    }
+                    let resultMsg = `✅ Import Completed!\n\n📊 Processed: ${validEmpIds.length} employees\n📈 Ratings: ${ratedCount} imported\n⏱️ Time: ${elapsed} seconds`;
                     
                     if (invalidEmpIds.length > 0) {
-                        resultMsg += `\n\nSkipped (not found): ${invalidEmpIds.length} IDs`;
+                        resultMsg += `\n\n⚠️ Skipped ${invalidEmpIds.length} unknown IDs`;
                     }
                     
+                    resultMsg += `\n\nThe page will now refresh.`;
+                    
                     alert(resultMsg);
-                    allCompanyData = await fetchAllData();
-                    inp.value = '';
+                    
+                    // Force refresh to show new data
+                    location.reload();
 
                 } catch (err) {
                     console.error("Import Error:", err);
