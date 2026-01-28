@@ -4387,7 +4387,7 @@
             
             // Reload the UI
             loadRatingLevelsConfiguration();
-            showToast(`Applied "${template.name}" template`, 'success');
+            // Note: Toast removed - UI refresh shows the change
         }
         
         // Update number of levels
@@ -4485,7 +4485,7 @@
                     initRatingLabels();
                     generateRatingCSS();
                     loadRatingLevelsConfiguration();
-                    showToast('Rating configuration reset to default', 'success');
+                    // Note: Toast removed - UI refresh shows the change
                 }
             );
         }
@@ -10140,6 +10140,10 @@
         // --- GLOBAL UI HELPERS ---
         function showToast(msg, type = 'success') {
             const c = document.getElementById('toast-container');
+            if (!c) {
+                console.log(`Toast (${type}): ${msg}`);
+                return; // Silently fail if container doesn't exist
+            }
             const t = document.createElement('div');
             t.className = `toast ${type}`;
             // SECURITY: Auto-escape message to prevent XSS
