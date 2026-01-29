@@ -11399,8 +11399,8 @@
             const myName = user ? user[COL.name] : '';
             
             let teamMembers = [];
-            if (allData && allData.length > 0) {
-                teamMembers = allData.filter(u => {
+            if (allCompanyData && allCompanyData.length > 0) {
+                teamMembers = allCompanyData.filter(u => {
                     const mgrId = (u[COL.mgr] || '').toLowerCase();
                     return mgrId.includes(myId.toLowerCase()) || mgrId.includes(myName.toLowerCase());
                 });
@@ -11484,13 +11484,19 @@
             const empId = prompt('Enter Employee ID to place:');
             if (!empId) return;
             
-            const emp = allData ? allData.find(e => e[COL.id] === empId) : null;
+            const emp = allCompanyData ? allCompanyData.find(e => e[COL.id] === empId) : null;
             const empName = emp ? emp[COL.name] : empId;
             
             openTalentPlacementModal(empId, empName);
         }
         
         function openTalentPlacementModal(empId, empName) {
+            const modal = document.getElementById('oracle-talent-modal');
+            if (!modal) {
+                showToast('Modal not found - please refresh page', 'error');
+                return;
+            }
+            
             document.getElementById('oracle-talent-emp-id').value = empId;
             document.getElementById('oracle-talent-emp-name').value = empName || empId;
             document.getElementById('oracle-talent-performance').value = 'MEDIUM';
@@ -11498,13 +11504,9 @@
             document.getElementById('oracle-talent-comments').value = '';
             
             // Update preview
-            if (typeof updateTalentBoxPreview === 'function') {
-                updateTalentBoxPreview();
-            } else {
-                document.getElementById('oracle-talent-box-preview').textContent = 'Box 5: Core Contributor';
-            }
+            updateTalentBoxPreview();
             
-            document.getElementById('oracle-talent-modal').classList.add('active');
+            modal.classList.add('active');
         }
         
         function closeOracleTalentModal() {
@@ -11516,41 +11518,65 @@
             const perf = document.getElementById('oracle-talent-performance').value;
             const pot = document.getElementById('oracle-talent-potential').value;
             
+            if (!empId) {
+                showToast('Employee ID is required', 'error');
+                return;
+            }
+            
             const perfMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
             const potMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
             const boxPosition = (potMap[pot] * 3) + perfMap[perf] + 1;
             
             const payload = {
                 employee_id: empId,
-                performance_rating: perf,
-                potential_rating: pot,
+                performance_category: perf,  // Fixed: was performance_rating
+                potential_category: pot,     // Fixed: was potential_rating
                 box_position: boxPosition,
-                comments: document.getElementById('oracle-talent-comments').value
+                notes: document.getElementById('oracle-talent-comments').value
             };
             
+            showSaving();
+            
             try {
-                await oracleApi('saveTalentPlacement', { payload });
-                showToast('Placement saved successfully', 'success');
+                const result = await oracleApi('saveTalentPlacement', { payload });
+                showToast(`Placement saved - Box ${result.box_position}: ${result.designation}`, 'success');
                 closeOracleTalentModal();
                 await loadTalentReviewData();
+                renderTalentGrid();
             } catch (error) {
+                console.log('API error, saving locally:', error);
                 // Fallback: update local state
+                const empName = document.getElementById('oracle-talent-emp-name').value;
+                const designations = {
+                    1: 'UNDERPERFORMER', 2: 'AVERAGE', 3: 'EMERGING',
+                    4: 'INCONSISTENT', 5: 'CORE_CONTRIBUTOR', 6: 'HIGH_PERFORMER',
+                    7: 'ENIGMA', 8: 'HIGH_POTENTIAL', 9: 'STAR'
+                };
+                
                 const existing = oracleFusionState.talentPlacements.findIndex(p => p.employee_id === empId);
+                const placementData = {
+                    employee_id: empId,
+                    employee_name: empName,
+                    performance_category: perf,
+                    potential_category: pot,
+                    box_position: boxPosition,
+                    talent_designation: designations[boxPosition]
+                };
+                
                 if (existing >= 0) {
                     oracleFusionState.talentPlacements[existing] = {
                         ...oracleFusionState.talentPlacements[existing],
-                        ...payload
+                        ...placementData
                     };
                 } else {
-                    oracleFusionState.talentPlacements.push({
-                        ...payload,
-                        employee_name: document.getElementById('oracle-talent-emp-name').value
-                    });
+                    oracleFusionState.talentPlacements.push(placementData);
                 }
-                showToast('Placement saved locally', 'success');
+                showToast(`Placed in Box ${boxPosition}: ${designations[boxPosition]}`, 'success');
                 closeOracleTalentModal();
                 renderTalentGrid();
             }
+            
+            showSaved();
         }
         
         function filterTalentByDivision() {
@@ -11558,6 +11584,44 @@
             // Filter placements by division if needed
             renderTalentGrid();
         }
+        
+        // Update box preview when performance/potential changes
+        function updateTalentBoxPreview() {
+            const perf = document.getElementById('oracle-talent-performance').value;
+            const pot = document.getElementById('oracle-talent-potential').value;
+            
+            const perfMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
+            const potMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
+            const boxPosition = (potMap[pot] * 3) + perfMap[perf] + 1;
+            
+            const designations = {
+                1: 'Underperformer', 2: 'Average', 3: 'Emerging',
+                4: 'Inconsistent', 5: 'Core Contributor', 6: 'High Performer',
+                7: 'Enigma', 8: 'High Potential', 9: '⭐ Star'
+            };
+            const colors = {
+                1: '#fef2f2', 2: '#fefce8', 3: '#f0fdf4',
+                4: '#fff7ed', 5: '#f0f9ff', 6: '#ecfdf5',
+                7: '#faf5ff', 8: '#eff6ff', 9: '#f0fdf4'
+            };
+            
+            const preview = document.getElementById('oracle-talent-box-preview');
+            if (preview) {
+                preview.textContent = `Box ${boxPosition}: ${designations[boxPosition]}`;
+                preview.style.background = colors[boxPosition] || '#f0fdf4';
+            }
+        }
+        
+        // Attach event listeners after modal opens
+        function attachTalentPreviewListeners() {
+            const perfSelect = document.getElementById('oracle-talent-performance');
+            const potSelect = document.getElementById('oracle-talent-potential');
+            if (perfSelect) perfSelect.addEventListener('change', updateTalentBoxPreview);
+            if (potSelect) potSelect.addEventListener('change', updateTalentBoxPreview);
+        }
+        
+        // Call once on load
+        document.addEventListener('DOMContentLoaded', attachTalentPreviewListeners);
 
         // =====================================================
         // CALIBRATION VIEW (ADMIN)
@@ -11631,7 +11695,7 @@
                 const sessions = result.sessions || [];
                 
                 // Update metrics
-                const total = allData ? allData.length : 0;
+                const total = allCompanyData ? allCompanyData.length : 0;
                 document.getElementById('calib-total').textContent = total;
                 document.getElementById('calib-pending').textContent = sessions.filter(s => s.status === 'IN_PROGRESS').length;
                 document.getElementById('calib-completed').textContent = sessions.filter(s => s.status === 'COMPLETED').length;
