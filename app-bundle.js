@@ -2265,7 +2265,7 @@
         // --- DATA CACHE CONFIGURATION ---
         const DATA_CACHE_KEY = 'zpms_data_cache';
         const DATA_CACHE_TIME_KEY = 'zpms_data_cache_time';
-        const DATA_CACHE_EXPIRY = 10 * 60 * 1000; // 10 minutes cache (increased from 5)
+        const DATA_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes cache for faster loads
         const TEAM_CACHE_KEY = 'zpms_team_cache';
         const SETTINGS_CACHE_KEY = 'zpms_settings_cache';
         
@@ -4734,18 +4734,25 @@
             const pass = document.getElementById('u-pass').value;
             if (pass) payload['password'] = pass;
 
-            // Using Upsert for both Add and Edit
+            showSaving();
             const { error } = await db.from('active_list').upsert(payload);
 
             if (error) {
                 alert("Error saving user: " + error.message);
             } else {
-                alert("User saved successfully!");
+                showToast("User saved!", 'success');
                 closeUserModal();
-                // Refresh local data
-                allCompanyData = await fetchAllData();
+                // Update local cache instead of full refresh
+                const existingIdx = allCompanyData.findIndex(u => u[COL.id] === uId);
+                if (existingIdx !== -1) {
+                    Object.assign(allCompanyData[existingIdx], payload);
+                } else {
+                    allCompanyData.push(payload);
+                }
+                updateLocalCache(uId, payload);
                 loadAdminDirectory();
             }
+            showSaved();
         }
 
         async function deleteUser(id) {
@@ -7044,6 +7051,9 @@
                     if (ids.includes(u[COL.id])) u[COL.stat] = 'Approved';
                 });
 
+                // OPTIMIZED: Also update the main cache
+                ids.forEach(id => updateLocalCache(id, { [COL.stat]: 'Approved' }));
+
                 filterAdminTable();
 
             } catch (err) {
@@ -7077,8 +7087,8 @@
                         if (typeof filterAdminTable === 'function') filterAdminTable();
                     }
 
-                    // Sync database state by reloading
-                    setTimeout(() => location.reload(), 1000);
+                    // OPTIMIZED: Update local cache instead of reload
+                    updateLocalCache(id, { [COL.stat]: 'Published' });
 
                 } catch (err) {
                     console.error("Publish Error:", err);
@@ -7116,7 +7126,8 @@
                 adminCache = adminCache.filter(u => !ids.includes(u[COL.id]));
                 if (typeof filterAdminTable === 'function') filterAdminTable();
 
-                setTimeout(() => location.reload(), 1000);
+                // OPTIMIZED: Update local cache for all published items
+                ids.forEach(id => updateLocalCache(id, { [COL.stat]: 'Published' }));
 
             } catch (err) {
                 console.error("Bulk Publish Error:", err);
@@ -7155,7 +7166,8 @@
 
                     if (typeof filterAdminTable === 'function') filterAdminTable();
 
-                    setTimeout(() => location.reload(), 1000);
+                    // OPTIMIZED: Update local cache instead of reload
+                    updateLocalCache(id, { [COL.stat]: 'Approved' });
 
                 } catch (err) {
                     console.error("Unpublish Error:", err);
@@ -9337,10 +9349,15 @@
                             if (globalItem) globalItem[COL.stat] = newStatus;
                         }
 
-                        // Force a reload after a short delay to re-sync the view
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1000);
+                        // OPTIMIZED: Update local cache and re-render instead of reload
+                        updateLocalCache(id, { [COL.stat]: newStatus });
+                        
+                        // Refresh the admin table if visible
+                        if (typeof filterAdminTable === 'function') filterAdminTable();
+                        
+                        // Close any modals
+                        const modal = document.getElementById('hr-modal');
+                        if (modal) modal.style.display = 'none';
 
                     } catch (err) {
                         console.error("Rejection Error:", err);
@@ -9812,58 +9829,75 @@
         // Optimized AutoSave with better debouncing and minimal overhead
         let pendingSave = null;
         let lastSaveTime = 0;
-        const SAVE_DEBOUNCE = 800; // Wait 800ms after last change before saving
-        const MIN_SAVE_INTERVAL = 2000; // Minimum 2 seconds between saves
+        let isSaving = false;
+        const SAVE_DEBOUNCE = 150; // Reduced: 150ms for fast typing response
+        const MIN_SAVE_INTERVAL = 200; // Reduced: 200ms minimum between saves
         
-        function autoSave() {
-            // Show saving indicator immediately for user feedback
-            showSaving();
+        // INSTANT SAVE - for button clicks (no debounce)
+        async function saveNow(showIndicator = true) {
+            if (isSaving) return; // Prevent duplicate saves
+            isSaving = true;
             
-            // Clear any pending save
+            if (showIndicator) showSaving();
+            
+            try {
+                const payload = {
+                    [COL.id]: targetUser[COL.id],
+                    [COL.goals]: targetUser[COL.goals]
+                };
+
+                const { error } = await db.from('active_list').upsert(payload);
+
+                if (error) {
+                    console.error("Save Error:", error);
+                    showSaveError("Save Failed");
+                    return false;
+                } else {
+                    lastSaveTime = Date.now();
+                    if (showIndicator) showSaved();
+                    updateLocalCache(targetUser[COL.id], { [COL.goals]: targetUser[COL.goals] });
+                    return true;
+                }
+            } catch (err) {
+                console.error("Save Crash:", err);
+                showSaveError("Connection Error");
+                return false;
+            } finally {
+                isSaving = false;
+            }
+        }
+        
+        // DEBOUNCED SAVE - for auto-save while typing
+        function autoSave() {
+            showSaving();
             clearTimeout(saveTimer);
             
-            // Debounce: Wait for user to stop typing
             saveTimer = setTimeout(async () => {
-                // Rate limit: Don't save too frequently
                 const now = Date.now();
-                const timeSinceLastSave = now - lastSaveTime;
-                
-                if (timeSinceLastSave < MIN_SAVE_INTERVAL && pendingSave) {
-                    // Too soon, schedule for later
-                    saveTimer = setTimeout(() => autoSave(), MIN_SAVE_INTERVAL - timeSinceLastSave);
+                if (now - lastSaveTime < MIN_SAVE_INTERVAL) {
+                    saveTimer = setTimeout(() => autoSave(), MIN_SAVE_INTERVAL - (now - lastSaveTime));
                     return;
                 }
-                
-                try {
-                    // Prepare minimal payload (only what changed)
-                    const payload = {
-                        [COL.id]: targetUser[COL.id],
-                        [COL.goals]: targetUser[COL.goals]
-                    };
-
-                    // Send to Backend using upsert
-                    const { error } = await db.from('active_list').upsert(payload);
-
-                    if (error) {
-                        console.error("AutoSave Error:", error);
-                        document.getElementById('save-text').innerText = "Save Failed";
-                        document.getElementById('save-dot').style.background = "#ef4444";
-                    } else {
-                        lastSaveTime = Date.now();
-                        showSaved();
-                        
-                        // Update local cache silently (no heavy operations)
-                        const idx = allCompanyData.findIndex(x => x[COL.id] === targetUser[COL.id]);
-                        if (idx !== -1) {
-                            allCompanyData[idx][COL.goals] = targetUser[COL.goals];
-                        }
-                    }
-                } catch (err) {
-                    console.error("AutoSave Crash:", err);
-                    document.getElementById('save-text').innerText = "Connection Error";
-                    document.getElementById('save-dot').style.background = "#ef4444";
-                }
+                await saveNow(false);
+                showSaved();
             }, SAVE_DEBOUNCE);
+        }
+        
+        // Update local cache without re-fetching
+        function updateLocalCache(id, updates) {
+            const idx = allCompanyData.findIndex(x => x[COL.id] === id);
+            if (idx !== -1) {
+                Object.assign(allCompanyData[idx], updates);
+                // Update sessionStorage cache too
+                try {
+                    sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify(allCompanyData));
+                    sessionStorage.setItem(DATA_CACHE_TIME_KEY, Date.now().toString());
+                } catch(e) { /* ignore cache errors */ }
+            }
+            // Update data index if exists
+            if (dataIndex && dataIndex[id]) {
+                Object.assign(dataIndex[id], updates);
+            }
         }
         
         function showSaving() { 
@@ -9881,10 +9915,17 @@
             const status = document.getElementById('save-status');
             if (dot) dot.className = 'save-dot saved'; 
             if (text) text.innerText = "All changes saved"; 
-            if (status) setTimeout(() => status.classList.remove('show'), 1500); 
+            if (status) setTimeout(() => status.classList.remove('show'), 800); 
         }
         
-        async function saveDraft() { autoSave(); }
+        function showSaveError(msg) {
+            const dot = document.getElementById('save-dot');
+            const text = document.getElementById('save-text');
+            if (dot) dot.style.background = "#ef4444";
+            if (text) text.innerText = msg;
+        }
+        
+        async function saveDraft() { await saveNow(); }
 
         async function submitFinal() {
             // --- 1. VALIDATION: Check for 0% Weight Goals ---
@@ -9987,9 +10028,15 @@
                     }
                 } else {
                     logActivity('SUBMIT', `Status changed to: ${newStatus}`, targetUser[COL.id]);
-                    showToast("Success! Reloading...", 'success');
-                    // Small delay to ensure the DB processes before reload
-                    setTimeout(() => location.reload(), 1000);
+                    
+                    // OPTIMIZED: Update local data instead of reloading page
+                    targetUser[COL.stat] = newStatus;
+                    updateLocalCache(targetUser[COL.id], { [COL.stat]: newStatus, [COL.goals]: targetUser[COL.goals] });
+                    
+                    showToast(`Status updated to: ${newStatus}`, 'success');
+                    
+                    // Re-render the current view
+                    loadEval(targetUser[COL.id]);
                 }
             });
         }
@@ -9999,8 +10046,11 @@
                 if (error) showToast("Error: " + error.message, 'error');
                 else {
                     logActivity('REJECT', 'Scorecard returned to employee', targetUser[COL.id]);
+                    // OPTIMIZED: Update local data instead of reload
+                    targetUser[COL.stat] = 'Returned';
+                    updateLocalCache(targetUser[COL.id], { [COL.stat]: 'Returned' });
                     showToast("Card returned to Employee", 'success');
-                    setTimeout(() => location.reload(), 1500);
+                    loadEval(targetUser[COL.id]);
                 }
             });
         }
