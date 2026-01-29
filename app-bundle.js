@@ -10463,3 +10463,687 @@
             // This opens the modal that shows the manager list and weight boxes
             openDivisionWeights(goalIndex, divName);
         });
+
+        // =====================================================
+        // ORACLE FUSION HCM - ENHANCED FEATURES (v3.0)
+        // =====================================================
+        
+        // Oracle Fusion State Management
+        const oracleFusionState = {
+            goals: [],
+            goalPlans: [],
+            checkIns: [],
+            feedbackRequests: [],
+            developmentPlans: [],
+            developmentActivities: [],
+            talentPlacements: [],
+            performanceDocuments: [],
+            competencies: [],
+            ratingModels: [],
+            reviewPeriods: [],
+            notifications: [],
+            unreadNotificationCount: 0
+        };
+
+        // =====================================================
+        // ORACLE FUSION API HELPERS
+        // =====================================================
+        
+        async function oracleApi(action, payload = null) {
+            const token = localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token');
+            const url = `${API_URL}?action=${action}`;
+            
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            if (token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            if (payload) {
+                options.body = JSON.stringify(payload);
+            }
+            
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || data.error || 'API Error');
+                }
+                
+                return data;
+            } catch (error) {
+                console.error(`Oracle API Error [${action}]:`, error);
+                throw error;
+            }
+        }
+
+        async function oracleApiGet(action, params = {}) {
+            const token = localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token');
+            let url = `${API_URL}?action=${action}`;
+            
+            Object.keys(params).forEach(key => {
+                if (params[key] !== null && params[key] !== undefined) {
+                    url += `&${key}=${encodeURIComponent(params[key])}`;
+                }
+            });
+            
+            const options = {
+                method: 'GET',
+                headers: {}
+            };
+            
+            if (token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            const response = await fetch(url, options);
+            return await response.json();
+        }
+
+        // =====================================================
+        // ORACLE FUSION - GOALS MANAGEMENT
+        // =====================================================
+        
+        async function loadOracleGoals(employeeId = null) {
+            try {
+                const empId = employeeId || (user ? user[COL.id] : null);
+                const result = await oracleApiGet('getGoals', { employee_id: empId });
+                oracleFusionState.goals = result.goals || [];
+                return oracleFusionState.goals;
+            } catch (error) {
+                console.error('Error loading Oracle goals:', error);
+                oracleFusionState.goals = [];
+                return [];
+            }
+        }
+
+        async function loadGoalPlans(employeeId = null) {
+            try {
+                const empId = employeeId || (user ? user[COL.id] : null);
+                const result = await oracleApiGet('getGoalPlans', { employee_id: empId });
+                oracleFusionState.goalPlans = result.plans || [];
+                return oracleFusionState.goalPlans;
+            } catch (error) {
+                console.error('Error loading goal plans:', error);
+                return [];
+            }
+        }
+
+        async function createGoalPlan(planData) {
+            try {
+                const result = await oracleApi('createGoalPlan', { payload: planData });
+                if (result.success) {
+                    showToast('Goal plan created successfully', 'success');
+                    await loadGoalPlans();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error creating goal plan: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function saveOracleGoal(goalData) {
+            try {
+                const result = await oracleApi('saveGoal', { payload: goalData });
+                if (result.success) {
+                    showToast('Goal saved successfully', 'success');
+                    await loadOracleGoals();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error saving goal: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function updateOracleGoalProgress(goalId, actualValue) {
+            try {
+                const result = await oracleApi('updateGoalProgress', { 
+                    payload: { id: goalId, actual_value: actualValue } 
+                });
+                if (result.success) {
+                    showToast(`Progress updated to ${result.progress}%`, 'success');
+                    await loadOracleGoals();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error updating progress: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function deleteOracleGoal(goalId) {
+            try {
+                const result = await oracleApi('deleteGoal', { id: goalId });
+                if (result.success) {
+                    showToast('Goal deleted', 'success');
+                    await loadOracleGoals();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error deleting goal: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - CHECK-INS
+        // =====================================================
+        
+        async function loadCheckIns(employeeId = null, managerId = null) {
+            try {
+                const params = {};
+                if (employeeId) params.employee_id = employeeId;
+                if (managerId) params.manager_id = managerId;
+                
+                const result = await oracleApiGet('getCheckIns', params);
+                oracleFusionState.checkIns = result.check_ins || [];
+                return oracleFusionState.checkIns;
+            } catch (error) {
+                console.error('Error loading check-ins:', error);
+                return [];
+            }
+        }
+
+        async function createCheckIn(checkInData) {
+            try {
+                const result = await oracleApi('createCheckIn', { payload: checkInData });
+                if (result.success) {
+                    showToast('Check-in scheduled', 'success');
+                    await loadCheckIns();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error scheduling check-in: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function completeCheckIn(checkInId, notes, actionItems) {
+            try {
+                const result = await oracleApi('completeCheckIn', { 
+                    payload: { 
+                        id: checkInId, 
+                        discussion_notes: notes,
+                        action_items: actionItems
+                    } 
+                });
+                if (result.success) {
+                    showToast('Check-in completed', 'success');
+                    await loadCheckIns();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error completing check-in: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - 360° FEEDBACK
+        // =====================================================
+        
+        async function loadFeedbackRequests(asParticipant = false) {
+            try {
+                const result = await oracleApiGet('getFeedbackRequests', { 
+                    as_participant: asParticipant ? 'true' : null 
+                });
+                oracleFusionState.feedbackRequests = result.requests || [];
+                return oracleFusionState.feedbackRequests;
+            } catch (error) {
+                console.error('Error loading feedback requests:', error);
+                return [];
+            }
+        }
+
+        async function createFeedbackRequest(requestData) {
+            try {
+                const result = await oracleApi('createFeedbackRequest', { payload: requestData });
+                if (result.success) {
+                    showToast('Feedback request sent', 'success');
+                    await loadFeedbackRequests();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error sending feedback request: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function submitFeedback(feedbackData) {
+            try {
+                const result = await oracleApi('submitFeedback', { payload: feedbackData });
+                if (result.success) {
+                    showToast('Feedback submitted', 'success');
+                    await loadFeedbackRequests();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error submitting feedback: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - DEVELOPMENT PLANS (IDP)
+        // =====================================================
+        
+        async function loadDevelopmentPlans(employeeId = null) {
+            try {
+                const empId = employeeId || (user ? user[COL.id] : null);
+                const result = await oracleApiGet('getDevelopmentPlans', { employee_id: empId });
+                oracleFusionState.developmentPlans = result.plans || [];
+                return oracleFusionState.developmentPlans;
+            } catch (error) {
+                console.error('Error loading development plans:', error);
+                return [];
+            }
+        }
+
+        async function createDevelopmentPlan(planData) {
+            try {
+                const result = await oracleApi('createDevelopmentPlan', { payload: planData });
+                if (result.success) {
+                    showToast('Development plan created', 'success');
+                    await loadDevelopmentPlans();
+                }
+                return result;
+            } catch (error) {
+                showToast('Error creating development plan: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function loadDevelopmentActivities(planId) {
+            try {
+                const result = await oracleApiGet('getDevelopmentActivities', { development_plan_id: planId });
+                oracleFusionState.developmentActivities = result.activities || [];
+                return oracleFusionState.developmentActivities;
+            } catch (error) {
+                console.error('Error loading development activities:', error);
+                return [];
+            }
+        }
+
+        async function saveDevelopmentActivity(activityData) {
+            try {
+                const result = await oracleApi('saveDevelopmentActivity', { payload: activityData });
+                if (result.success) {
+                    showToast('Activity saved', 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error saving activity: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - TALENT REVIEW (9-BOX)
+        // =====================================================
+        
+        async function loadTalentReviews() {
+            try {
+                const result = await oracleApiGet('getTalentReviews');
+                return result.reviews || [];
+            } catch (error) {
+                console.error('Error loading talent reviews:', error);
+                return [];
+            }
+        }
+
+        async function createTalentReview(reviewData) {
+            try {
+                const result = await oracleApi('createTalentReview', { payload: reviewData });
+                if (result.success) {
+                    showToast('Talent review created', 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error creating talent review: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function loadTalentPlacements(reviewId, division = null) {
+            try {
+                const params = { talent_review_id: reviewId };
+                if (division) params.division = division;
+                
+                const result = await oracleApiGet('getTalentPlacements', params);
+                oracleFusionState.talentPlacements = result.placements || [];
+                return oracleFusionState.talentPlacements;
+            } catch (error) {
+                console.error('Error loading talent placements:', error);
+                return [];
+            }
+        }
+
+        async function saveTalentPlacement(placementData) {
+            try {
+                const result = await oracleApi('saveTalentPlacement', { payload: placementData });
+                if (result.success) {
+                    showToast(`Placement saved: ${result.designation}`, 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error saving placement: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - PERFORMANCE DOCUMENTS
+        // =====================================================
+        
+        async function loadPerformanceDocuments(employeeId = null, status = null) {
+            try {
+                const params = {};
+                if (employeeId) params.employee_id = employeeId;
+                if (status) params.status = status;
+                
+                const result = await oracleApiGet('getPerformanceDocuments', params);
+                oracleFusionState.performanceDocuments = result.documents || [];
+                return oracleFusionState.performanceDocuments;
+            } catch (error) {
+                console.error('Error loading performance documents:', error);
+                return [];
+            }
+        }
+
+        async function createPerformanceDocument(docData) {
+            try {
+                const result = await oracleApi('createPerformanceDocument', { payload: docData });
+                if (result.success) {
+                    showToast('Performance document created', 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error creating document: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function transitionPerformanceDocument(docId, newStatus) {
+            try {
+                const result = await oracleApi('transitionDocument', { 
+                    payload: { id: docId, status: newStatus } 
+                });
+                if (result.success) {
+                    showToast(`Document transitioned to ${newStatus}`, 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error transitioning document: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - NOTIFICATIONS
+        // =====================================================
+        
+        async function loadOracleNotifications(unreadOnly = false) {
+            try {
+                const result = await oracleApiGet('getNotifications', { 
+                    unread_only: unreadOnly ? 'true' : 'false' 
+                });
+                oracleFusionState.notifications = result.notifications || [];
+                oracleFusionState.unreadNotificationCount = result.unread_count || 0;
+                return oracleFusionState.notifications;
+            } catch (error) {
+                console.error('Error loading notifications:', error);
+                return [];
+            }
+        }
+
+        async function markOracleNotificationRead(notificationId) {
+            try {
+                await oracleApi('markNotificationRead', { id: notificationId });
+                await loadOracleNotifications();
+            } catch (error) {
+                console.error('Error marking notification read:', error);
+            }
+        }
+
+        async function markAllOracleNotificationsRead() {
+            try {
+                await oracleApi('markNotificationRead', { mark_all: true });
+                await loadOracleNotifications();
+                showToast('All notifications marked as read', 'success');
+            } catch (error) {
+                showToast('Error marking notifications', 'error');
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - COMPETENCIES
+        // =====================================================
+        
+        async function loadCompetencies(category = null) {
+            try {
+                const params = {};
+                if (category) params.category = category;
+                
+                const result = await oracleApiGet('getCompetencies', params);
+                oracleFusionState.competencies = result.competencies || [];
+                return oracleFusionState.competencies;
+            } catch (error) {
+                console.error('Error loading competencies:', error);
+                return [];
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - ANALYTICS & DASHBOARD
+        // =====================================================
+        
+        async function loadDashboardStats(division = null) {
+            try {
+                const params = {};
+                if (division) params.division = division;
+                
+                const result = await oracleApiGet('getDashboardStats', params);
+                return result;
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+                return {};
+            }
+        }
+
+        async function loadRatingDistribution(division = null) {
+            try {
+                const params = {};
+                if (division) params.division = division;
+                
+                const result = await oracleApiGet('getRatingDistribution', params);
+                return result.distribution || [];
+            } catch (error) {
+                console.error('Error loading rating distribution:', error);
+                return [];
+            }
+        }
+
+        async function loadCompletionTrends() {
+            try {
+                const result = await oracleApiGet('getCompletionTrends');
+                return result.trends || [];
+            } catch (error) {
+                console.error('Error loading completion trends:', error);
+                return [];
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - CALIBRATION
+        // =====================================================
+        
+        async function loadCalibrationSessions(division = null) {
+            try {
+                const params = {};
+                if (division) params.division = division;
+                
+                const result = await oracleApiGet('getCalibrationSessions', params);
+                return result.sessions || [];
+            } catch (error) {
+                console.error('Error loading calibration sessions:', error);
+                return [];
+            }
+        }
+
+        async function createCalibrationSession(sessionData) {
+            try {
+                const result = await oracleApi('createCalibrationSession', { payload: sessionData });
+                if (result.success) {
+                    showToast('Calibration session created', 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error creating calibration session: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function saveCalibrationAdjustment(adjustmentData) {
+            try {
+                const result = await oracleApi('saveCalibrationAdjustment', { payload: adjustmentData });
+                if (result.success) {
+                    showToast('Calibration adjustment saved', 'success');
+                }
+                return result;
+            } catch (error) {
+                showToast('Error saving adjustment: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - RATING MODELS
+        // =====================================================
+        
+        async function loadRatingModels(modelType = null) {
+            try {
+                const params = {};
+                if (modelType) params.model_type = modelType;
+                
+                const result = await oracleApiGet('getRatingModels', params);
+                oracleFusionState.ratingModels = result.models || [];
+                return oracleFusionState.ratingModels;
+            } catch (error) {
+                console.error('Error loading rating models:', error);
+                return [];
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - REVIEW PERIODS
+        // =====================================================
+        
+        async function loadReviewPeriods(cycle = null) {
+            try {
+                const params = {};
+                if (cycle) params.cycle = cycle;
+                
+                const result = await oracleApiGet('getReviewPeriods', params);
+                oracleFusionState.reviewPeriods = result.periods || [];
+                return oracleFusionState.reviewPeriods;
+            } catch (error) {
+                console.error('Error loading review periods:', error);
+                return [];
+            }
+        }
+
+        // =====================================================
+        // ORACLE FUSION - HELPER FUNCTIONS
+        // =====================================================
+        
+        function formatOracleDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                return new Date(dateStr).toLocaleDateString('en-US', { 
+                    month: 'short', day: 'numeric', year: 'numeric' 
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        function formatOracleDateTime(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                return new Date(dateStr).toLocaleString('en-US', { 
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit'
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        function getOracleStatusBadgeClass(status) {
+            if (!status) return 'status-draft';
+            const s = status.toLowerCase();
+            if (s.includes('complete') || s.includes('approved') || s.includes('published')) return 'status-approved';
+            if (s.includes('progress') || s.includes('review') || s.includes('pending')) return 'status-pending';
+            if (s.includes('reject') || s.includes('return') || s.includes('cancel')) return 'status-returned';
+            return 'status-draft';
+        }
+
+        function formatOracleStatus(status) {
+            if (!status) return 'Draft';
+            return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        function get9BoxDesignation(boxPosition) {
+            const designations = {
+                9: { name: '⭐ Star', color: '#059669' },
+                8: { name: 'High Potential', color: '#3b82f6' },
+                7: { name: 'Enigma', color: '#8b5cf6' },
+                6: { name: 'High Performer', color: '#10b981' },
+                5: { name: 'Core Contributor', color: '#6b7280' },
+                4: { name: 'Inconsistent', color: '#f59e0b' },
+                3: { name: 'Emerging', color: '#06b6d4' },
+                2: { name: 'Average', color: '#9ca3af' },
+                1: { name: 'Risk', color: '#ef4444' }
+            };
+            return designations[boxPosition] || { name: 'Unknown', color: '#6b7280' };
+        }
+
+        // =====================================================
+        // INITIALIZATION - LOAD ORACLE FUSION DATA
+        // =====================================================
+        
+        async function initOracleFusion() {
+            if (!user || !user[COL.id]) return;
+            
+            try {
+                // Load notifications
+                await loadOracleNotifications();
+                
+                // Pre-load some data in background
+                loadOracleGoals().catch(e => console.log('Goals not loaded:', e));
+                loadCheckIns().catch(e => console.log('Check-ins not loaded:', e));
+                
+                console.log('✅ Oracle Fusion features initialized');
+            } catch (error) {
+                console.error('Error initializing Oracle Fusion:', error);
+            }
+        }
+
+        // Call initialization after login
+        const originalCompleteLoginProcess = typeof completeLoginProcess === 'function' ? completeLoginProcess : null;
+        if (originalCompleteLoginProcess) {
+            completeLoginProcess = function() {
+                originalCompleteLoginProcess();
+                setTimeout(initOracleFusion, 1000);
+            };
+        }
+
+        console.log('✅ Oracle Fusion HCM Module Loaded (v3.0)');
