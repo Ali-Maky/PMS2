@@ -134,34 +134,33 @@
                 <input type="text" class="otp-digit" maxlength="1" style="width:50px; height:60px; font-size:1.5rem; text-align:center; border:2px solid #e5e7eb; border-radius:12px; font-weight:700;" onkeyup="focusNext(this)">
                 <input type="text" class="otp-digit" maxlength="1" style="width:50px; height:60px; font-size:1.5rem; text-align:center; border:2px solid #e5e7eb; border-radius:12px; font-weight:700;" onkeyup="focusNext(this)">
             </div>
-            <button class="btn btn-primary" onclick="verifyOTP()" style="width:100%; justify-content:center; padding:14px; font-size:1rem;">Verify & Login</button>
-            <div style="margin-top:16px; font-size:0.85rem; color:#6b7280; cursor:pointer; text-decoration:underline;" onclick="resendOTP()">Resend Code</div>
+            <button onclick="verifyOtp()" class="btn btn-primary" style="width:100%; padding:14px; font-weight:700;">Verify Code</button>
+            <p style="color:#6b7280; margin-top:16px; font-size:0.9rem;">Didn't receive code? <span onclick="resendOtp()" style="color:var(--primary); cursor:pointer; font-weight:600;">Resend</span></p>
         </div>
     </div>
 
-    <!-- Login Screen -->
-    <div id="login-screen" class="hidden">
-        <div id="view-id" class="login-card">
-            <div class="login-logo"><i class="fa-solid fa-rocket"></i></div>
-            <h1 style="color:var(--text-main); margin:0 0 8px 0; font-size:1.8rem; font-weight:800;">Zain Performance Management System</h1>
-            <p style="color:var(--text-muted); margin-bottom:32px; font-weight:500;">Enterprise Performance Management</p>
-            <div style="text-align:left; margin-bottom:24px;">
+    <!-- Login Container -->
+    <div id="login-container">
+        <div class="login-card" id="step-id">
+            <div class="login-logo"><i class="fa-solid fa-bolt"></i></div>
+            <h2 style="margin:0 0 8px 0; font-weight:800; font-size:1.5rem; color:var(--text-main);">Welcome Back</h2>
+            <p style="color:var(--text-muted); margin-bottom:32px; font-size:0.95rem;">Enter your Employee ID to continue</p>
+            <div style="margin-bottom:20px; text-align:left;">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Employee ID</label>
-                <input type="text" id="inp-id" class="login-input" placeholder="e.g. ZIQ03130" onkeypress="if(event.key==='Enter') checkID()">
+                <input type="text" id="inp-id" class="login-input" placeholder="ZIQ..." autofocus onkeypress="if(event.key==='Enter') checkEmployeeId()">
             </div>
-            <button onclick="checkID()" class="login-btn" id="btn-check">Continue <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i></button>
-            <p id="err-id" style="color:var(--danger); margin-top:16px; font-weight:600; font-size:0.9rem; display:none;"><i class="fa-solid fa-circle-exclamation"></i> ID not found</p>
+            <button onclick="checkEmployeeId()" class="login-btn" id="btn-check">Continue</button>
+            <p id="err-id" style="color:var(--danger); margin-top:16px; font-weight:600; font-size:0.9rem; display:none;"><i class="fa-solid fa-circle-exclamation"></i> Employee ID not found</p>
         </div>
-
-        <div id="view-pass" class="login-card hidden">
+        <div class="login-card hidden" id="step-pass">
             <div class="login-logo"><i class="fa-solid fa-lock"></i></div>
-            <h1 id="lbl-welcome" style="color:var(--text-main); margin:0 0 8px 0; font-size:1.8rem; font-weight:800;">Welcome Back</h1>
-            <p style="color:var(--text-muted); margin-bottom:32px; font-weight:500;">Please enter your password</p>
-            <div style="text-align:left; margin-bottom:24px;">
+            <h2 style="margin:0 0 8px 0; font-weight:800; font-size:1.5rem; color:var(--text-main);">Hello, <span id="disp-name">User</span></h2>
+            <p style="color:var(--text-muted); margin-bottom:32px; font-size:0.95rem;" id="pass-subtitle">Enter your password to continue</p>
+            <div style="margin-bottom:20px; text-align:left;">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Password</label>
                 <input type="password" id="inp-pass" class="login-input" placeholder="••••••••" onkeypress="if(event.key==='Enter') doLogin()">
             </div>
-            <div id="grp-confirm" style="text-align:left; margin-bottom:24px;" class="hidden">
+            <div id="confirm-pass-row" class="hidden" style="margin-bottom:20px; text-align:left;">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Confirm Password</label>
                 <input type="password" id="inp-confirm" class="login-input" placeholder="••••••••" onkeypress="if(event.key==='Enter') doLogin()">
             </div>
@@ -219,6 +218,148 @@
             </div>
             <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
                 <button class="btn btn-primary" onclick="saveDivisionWeights()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Preview Modal -->
+    <div id="bulk-preview-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
+        <div style="width:min(900px,95vw); max-height:90vh; background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden; display:flex; flex-direction:column;">
+            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:800; font-size:1.05rem;">Import Preview</div>
+                    <div id="bulk-preview-count" style="color:#6b7280; font-size:0.9rem; margin-top:4px;">0 records to import</div>
+                </div>
+                <button class="btn btn-outline" onclick="closeBulkPreview()">Cancel</button>
+            </div>
+            <div style="flex:1; overflow:auto; padding:18px 22px;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr id="bulk-preview-header" style="background:#f8fafc;"></tr>
+                    </thead>
+                    <tbody id="bulk-preview-body"></tbody>
+                </table>
+            </div>
+            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn btn-outline" onclick="closeBulkPreview()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmBulkImport()"><i class="fa-solid fa-upload"></i> Import All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div id="goal-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
+        <div style="width:min(600px,95vw); max-height:90vh; background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden; display:flex; flex-direction:column;">
+            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:800; font-size:1.05rem;" id="goal-modal-title">Add Goal</div>
+                <button class="btn btn-outline" onclick="closeGoalModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="flex:1; overflow:auto; padding:18px 22px;">
+                <input type="hidden" id="goal-edit-id">
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Goal Title *</label>
+                    <input id="goal-title" class="login-input" placeholder="Enter goal title...">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Description</label>
+                    <textarea id="goal-desc" class="login-input" rows="3" placeholder="Describe the goal..."></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Category</label>
+                        <select id="goal-category" class="login-input">
+                            <option value="OPERATIONAL">Operational</option>
+                            <option value="STRATEGIC">Strategic</option>
+                            <option value="DEVELOPMENT">Development</option>
+                            <option value="FINANCIAL">Financial</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Priority</label>
+                        <select id="goal-priority" class="login-input">
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM" selected>Medium</option>
+                            <option value="HIGH">High</option>
+                            <option value="CRITICAL">Critical</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Weight (%)</label>
+                        <input id="goal-weight" type="number" class="login-input" value="0" min="0" max="100">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Target Value</label>
+                        <input id="goal-target" type="number" class="login-input" value="100">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Unit</label>
+                        <select id="goal-unit" class="login-input">
+                            <option value="%">%</option>
+                            <option value="count">Count</option>
+                            <option value="currency">Currency</option>
+                            <option value="hours">Hours</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Start Date</label>
+                        <input id="goal-start" type="date" class="login-input">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Due Date</label>
+                        <input id="goal-due" type="date" class="login-input">
+                    </div>
+                </div>
+            </div>
+            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn btn-outline" onclick="closeGoalModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveGoalFromModal()"><i class="fa-solid fa-check"></i> Save Goal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Check-in Modal -->
+    <div id="checkin-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
+        <div style="width:min(550px,95vw); background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden;">
+            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:800; font-size:1.05rem;">Schedule Check-in</div>
+                <button class="btn btn-outline" onclick="closeCheckinModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="padding:18px 22px;">
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Date & Time *</label>
+                    <input id="checkin-date" type="datetime-local" class="login-input">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Meeting Type</label>
+                    <select id="checkin-type" class="login-input">
+                        <option value="ONE_ON_ONE">1:1 Meeting</option>
+                        <option value="PROGRESS_REVIEW">Progress Review</option>
+                        <option value="COACHING">Coaching Session</option>
+                        <option value="CAREER_DISCUSSION">Career Discussion</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Topics to Discuss</label>
+                    <textarea id="checkin-topics" class="login-input" rows="3" placeholder="Enter topics..."></textarea>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" id="checkin-virtual" style="width:18px; height:18px;">
+                        <span style="font-size:0.9rem;">Virtual Meeting</span>
+                    </label>
+                </div>
+                <div id="checkin-link-row" class="hidden" style="margin-bottom:15px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Meeting Link</label>
+                    <input id="checkin-link" class="login-input" placeholder="https://...">
+                </div>
+            </div>
+            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn btn-outline" onclick="closeCheckinModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveCheckin()"><i class="fa-solid fa-calendar-check"></i> Schedule</button>
             </div>
         </div>
     </div>
