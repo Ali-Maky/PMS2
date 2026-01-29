@@ -42,6 +42,508 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+    
+    <!-- Oracle Fusion UI Styles -->
+    <style>
+        /* Oracle Fusion Enhanced UI Styles */
+        .oracle-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+            margin-bottom: 20px;
+        }
+        
+        .oracle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .oracle-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+        
+        .oracle-header p {
+            margin: 8px 0 0;
+            color: var(--text-muted);
+        }
+        
+        .oracle-tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        
+        .oracle-tab {
+            padding: 12px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        
+        .oracle-tab:hover {
+            color: var(--primary);
+        }
+        
+        .oracle-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        
+        .oracle-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .oracle-metric {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+        }
+        
+        .oracle-metric-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.4rem;
+        }
+        
+        .oracle-metric-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+        
+        .oracle-metric-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        
+        .oracle-progress-bar {
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .oracle-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #14b8a6);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .oracle-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .oracle-badge-success { background: #d1fae5; color: #059669; }
+        .oracle-badge-warning { background: #fef3c7; color: #d97706; }
+        .oracle-badge-danger { background: #fee2e2; color: #dc2626; }
+        .oracle-badge-info { background: #dbeafe; color: #2563eb; }
+        .oracle-badge-default { background: #f3f4f6; color: #6b7280; }
+        .oracle-badge-primary { background: #ccfbf1; color: #0d9488; }
+        
+        .oracle-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #14b8a6);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+        
+        .oracle-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        
+        .oracle-empty i {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        
+        .oracle-empty h3 {
+            margin: 0 0 8px;
+            color: var(--text-main);
+        }
+        
+        .oracle-empty p {
+            margin: 0 0 20px;
+        }
+        
+        /* 9-Box Grid Styles */
+        .nine-box-container {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 24px;
+        }
+        
+        @media (max-width: 1024px) {
+            .nine-box-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .nine-box-grid {
+            position: relative;
+            padding: 40px 20px 60px 60px;
+        }
+        
+        .nine-box-cells {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        
+        .nine-box-cell {
+            min-height: 140px;
+            border-radius: 12px;
+            padding: 12px;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .nine-box-cell:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        
+        .nine-box-cell .box-title {
+            font-weight: 700;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+        
+        .nine-box-cell .box-count {
+            font-size: 1.5rem;
+            font-weight: 800;
+            position: absolute;
+            top: 12px;
+            right: 12px;
+        }
+        
+        .box-1 { background: linear-gradient(135deg, #fee2e2, #fecaca); }
+        .box-2 { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+        .box-3 { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+        .box-4 { background: linear-gradient(135deg, #fed7aa, #fdba74); }
+        .box-5 { background: linear-gradient(135deg, #e0f2fe, #bae6fd); }
+        .box-6 { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+        .box-7 { background: linear-gradient(135deg, #fce7f3, #fbcfe8); }
+        .box-8 { background: linear-gradient(135deg, #c7d2fe, #a5b4fc); }
+        .box-9 { background: linear-gradient(135deg, #bbf7d0, #86efac); }
+        
+        .nine-box-label-y {
+            position: absolute;
+            left: 15px;
+            top: 40px;
+            bottom: 60px;
+            width: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        
+        .nine-box-label-y-title {
+            position: absolute;
+            left: -10px;
+            top: 50%;
+            transform: rotate(-90deg) translateX(-50%);
+            transform-origin: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        
+        .nine-box-label-x {
+            position: absolute;
+            bottom: 25px;
+            left: 60px;
+            right: 20px;
+            display: flex;
+            justify-content: space-around;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        
+        .nine-box-label-x-title {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: 700;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .box-employees {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        
+        .box-employee {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .box-employee:hover {
+            transform: scale(1.15);
+        }
+        
+        .talent-stats .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .talent-stats .stat-item:last-child {
+            border-bottom: none;
+        }
+        
+        .talent-stats .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        .talent-stats .stat-value {
+            font-weight: 700;
+        }
+        
+        /* Goal Card Styles */
+        .goal-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            border-left: 4px solid var(--primary);
+            transition: box-shadow 0.2s;
+        }
+        
+        .goal-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        
+        .goal-card.priority-high {
+            border-left-color: #ef4444;
+        }
+        
+        .goal-card.priority-critical {
+            border-left-color: #dc2626;
+        }
+        
+        /* Check-in Card Styles */
+        .checkin-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .checkin-card .checkin-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        /* Feedback Card Styles */
+        .feedback-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        
+        /* Development Activity Timeline */
+        .activity-timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        
+        .activity-timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e5e7eb;
+        }
+        
+        .activity-item {
+            position: relative;
+            padding-bottom: 24px;
+        }
+        
+        .activity-item::before {
+            content: '';
+            position: absolute;
+            left: -26px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--primary);
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+        
+        .activity-item.completed::before {
+            background: #10b981;
+            box-shadow: 0 0 0 2px #10b981;
+        }
+        
+        /* Modal Styles */
+        .oracle-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .oracle-modal.active {
+            display: flex;
+        }
+        
+        .oracle-modal-content {
+            background: white;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+        }
+        
+        .oracle-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .oracle-modal-header h3 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        
+        .oracle-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .oracle-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        
+        .oracle-form-group {
+            margin-bottom: 20px;
+        }
+        
+        .oracle-form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .oracle-form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        @media (max-width: 500px) {
+            .oracle-form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -134,33 +636,34 @@
                 <input type="text" class="otp-digit" maxlength="1" style="width:50px; height:60px; font-size:1.5rem; text-align:center; border:2px solid #e5e7eb; border-radius:12px; font-weight:700;" onkeyup="focusNext(this)">
                 <input type="text" class="otp-digit" maxlength="1" style="width:50px; height:60px; font-size:1.5rem; text-align:center; border:2px solid #e5e7eb; border-radius:12px; font-weight:700;" onkeyup="focusNext(this)">
             </div>
-            <button onclick="verifyOtp()" class="btn btn-primary" style="width:100%; padding:14px; font-weight:700;">Verify Code</button>
-            <p style="color:#6b7280; margin-top:16px; font-size:0.9rem;">Didn't receive code? <span onclick="resendOtp()" style="color:var(--primary); cursor:pointer; font-weight:600;">Resend</span></p>
+            <button class="btn btn-primary" onclick="verifyOTP()" style="width:100%; justify-content:center; padding:14px; font-size:1rem;">Verify & Login</button>
+            <div style="margin-top:16px; font-size:0.85rem; color:#6b7280; cursor:pointer; text-decoration:underline;" onclick="resendOTP()">Resend Code</div>
         </div>
     </div>
 
-    <!-- Login Container -->
-    <div id="login-container">
-        <div class="login-card" id="step-id">
-            <div class="login-logo"><i class="fa-solid fa-bolt"></i></div>
-            <h2 style="margin:0 0 8px 0; font-weight:800; font-size:1.5rem; color:var(--text-main);">Welcome Back</h2>
-            <p style="color:var(--text-muted); margin-bottom:32px; font-size:0.95rem;">Enter your Employee ID to continue</p>
-            <div style="margin-bottom:20px; text-align:left;">
+    <!-- Login Screen -->
+    <div id="login-screen" class="hidden">
+        <div id="view-id" class="login-card">
+            <div class="login-logo"><i class="fa-solid fa-rocket"></i></div>
+            <h1 style="color:var(--text-main); margin:0 0 8px 0; font-size:1.8rem; font-weight:800;">Zain Performance Management System</h1>
+            <p style="color:var(--text-muted); margin-bottom:32px; font-weight:500;">Enterprise Performance Management</p>
+            <div style="text-align:left; margin-bottom:24px;">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Employee ID</label>
-                <input type="text" id="inp-id" class="login-input" placeholder="ZIQ..." autofocus onkeypress="if(event.key==='Enter') checkEmployeeId()">
+                <input type="text" id="inp-id" class="login-input" placeholder="e.g. ZIQ03130" onkeypress="if(event.key==='Enter') checkID()">
             </div>
-            <button onclick="checkEmployeeId()" class="login-btn" id="btn-check">Continue</button>
-            <p id="err-id" style="color:var(--danger); margin-top:16px; font-weight:600; font-size:0.9rem; display:none;"><i class="fa-solid fa-circle-exclamation"></i> Employee ID not found</p>
+            <button onclick="checkID()" class="login-btn" id="btn-check">Continue <i class="fa-solid fa-arrow-right" style="margin-left:8px;"></i></button>
+            <p id="err-id" style="color:var(--danger); margin-top:16px; font-weight:600; font-size:0.9rem; display:none;"><i class="fa-solid fa-circle-exclamation"></i> ID not found</p>
         </div>
-        <div class="login-card hidden" id="step-pass">
+
+        <div id="view-pass" class="login-card hidden">
             <div class="login-logo"><i class="fa-solid fa-lock"></i></div>
-            <h2 style="margin:0 0 8px 0; font-weight:800; font-size:1.5rem; color:var(--text-main);">Hello, <span id="disp-name">User</span></h2>
-            <p style="color:var(--text-muted); margin-bottom:32px; font-size:0.95rem;" id="pass-subtitle">Enter your password to continue</p>
-            <div style="margin-bottom:20px; text-align:left;">
+            <h1 id="lbl-welcome" style="color:var(--text-main); margin:0 0 8px 0; font-size:1.8rem; font-weight:800;">Welcome Back</h1>
+            <p style="color:var(--text-muted); margin-bottom:32px; font-weight:500;">Please enter your password</p>
+            <div style="text-align:left; margin-bottom:24px;">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Password</label>
                 <input type="password" id="inp-pass" class="login-input" placeholder="••••••••" onkeypress="if(event.key==='Enter') doLogin()">
             </div>
-            <div id="confirm-pass-row" class="hidden" style="margin-bottom:20px; text-align:left;">
+            <div id="grp-confirm" style="text-align:left; margin-bottom:24px;" class="hidden">
                 <label style="font-size:0.75rem; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;">Confirm Password</label>
                 <input type="password" id="inp-confirm" class="login-input" placeholder="••••••••" onkeypress="if(event.key==='Enter') doLogin()">
             </div>
@@ -222,61 +725,39 @@
         </div>
     </div>
 
-    <!-- Bulk Import Preview Modal -->
-    <div id="bulk-preview-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
-        <div style="width:min(900px,95vw); max-height:90vh; background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden; display:flex; flex-direction:column;">
-            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div style="font-weight:800; font-size:1.05rem;">Import Preview</div>
-                    <div id="bulk-preview-count" style="color:#6b7280; font-size:0.9rem; margin-top:4px;">0 records to import</div>
-                </div>
-                <button class="btn btn-outline" onclick="closeBulkPreview()">Cancel</button>
-            </div>
-            <div style="flex:1; overflow:auto; padding:18px 22px;">
-                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
-                    <thead>
-                        <tr id="bulk-preview-header" style="background:#f8fafc;"></tr>
-                    </thead>
-                    <tbody id="bulk-preview-body"></tbody>
-                </table>
-            </div>
-            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
-                <button class="btn btn-outline" onclick="closeBulkPreview()">Cancel</button>
-                <button class="btn btn-primary" onclick="confirmBulkImport()"><i class="fa-solid fa-upload"></i> Import All</button>
-            </div>
-        </div>
-    </div>
-
+    <!-- ==================== ORACLE FUSION MODALS ==================== -->
+    
     <!-- Goal Modal -->
-    <div id="goal-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
-        <div style="width:min(600px,95vw); max-height:90vh; background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden; display:flex; flex-direction:column;">
-            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-                <div style="font-weight:800; font-size:1.05rem;" id="goal-modal-title">Add Goal</div>
-                <button class="btn btn-outline" onclick="closeGoalModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div id="oracle-goal-modal" class="oracle-modal">
+        <div class="oracle-modal-content">
+            <div class="oracle-modal-header">
+                <h3 id="oracle-goal-modal-title"><i class="fa-solid fa-bullseye" style="margin-right:8px; color:var(--primary);"></i> Add Goal</h3>
+                <button onclick="closeOracleGoalModal()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div style="flex:1; overflow:auto; padding:18px 22px;">
-                <input type="hidden" id="goal-edit-id">
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Goal Title *</label>
-                    <input id="goal-title" class="login-input" placeholder="Enter goal title...">
+            <div class="oracle-modal-body">
+                <input type="hidden" id="oracle-goal-id">
+                <div class="oracle-form-group">
+                    <label>Goal Title *</label>
+                    <input id="oracle-goal-title" class="login-input" placeholder="Enter goal title...">
                 </div>
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Description</label>
-                    <textarea id="goal-desc" class="login-input" rows="3" placeholder="Describe the goal..."></textarea>
+                <div class="oracle-form-group">
+                    <label>Description</label>
+                    <textarea id="oracle-goal-desc" class="login-input" rows="3" placeholder="Describe the goal and expected outcomes..."></textarea>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Category</label>
-                        <select id="goal-category" class="login-input">
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Category</label>
+                        <select id="oracle-goal-category" class="login-input">
                             <option value="OPERATIONAL">Operational</option>
                             <option value="STRATEGIC">Strategic</option>
                             <option value="DEVELOPMENT">Development</option>
                             <option value="FINANCIAL">Financial</option>
+                            <option value="CUSTOMER">Customer</option>
                         </select>
                     </div>
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Priority</label>
-                        <select id="goal-priority" class="login-input">
+                    <div class="oracle-form-group">
+                        <label>Priority</label>
+                        <select id="oracle-goal-priority" class="login-input">
                             <option value="LOW">Low</option>
                             <option value="MEDIUM" selected>Medium</option>
                             <option value="HIGH">High</option>
@@ -284,85 +765,255 @@
                         </select>
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-bottom:15px;">
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Weight (%)</label>
-                        <input id="goal-weight" type="number" class="login-input" value="0" min="0" max="100">
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Weight (%)</label>
+                        <input id="oracle-goal-weight" type="number" class="login-input" value="0" min="0" max="100">
                     </div>
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Target Value</label>
-                        <input id="goal-target" type="number" class="login-input" value="100">
+                    <div class="oracle-form-group">
+                        <label>Target Value</label>
+                        <input id="oracle-goal-target" type="number" class="login-input" value="100">
                     </div>
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Unit</label>
-                        <select id="goal-unit" class="login-input">
-                            <option value="%">%</option>
+                </div>
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Unit of Measure</label>
+                        <select id="oracle-goal-unit" class="login-input">
+                            <option value="%">Percentage (%)</option>
                             <option value="count">Count</option>
                             <option value="currency">Currency</option>
                             <option value="hours">Hours</option>
+                            <option value="days">Days</option>
+                            <option value="score">Score</option>
+                        </select>
+                    </div>
+                    <div class="oracle-form-group">
+                        <label>Source</label>
+                        <select id="oracle-goal-source" class="login-input">
+                            <option value="SELF">Self-Created</option>
+                            <option value="MANAGER">Manager Assigned</option>
+                            <option value="LIBRARY">From Goal Library</option>
+                            <option value="CASCADE">Cascaded from Above</option>
                         </select>
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Start Date</label>
-                        <input id="goal-start" type="date" class="login-input">
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Start Date</label>
+                        <input id="oracle-goal-start" type="date" class="login-input">
                     </div>
-                    <div>
-                        <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Due Date</label>
-                        <input id="goal-due" type="date" class="login-input">
+                    <div class="oracle-form-group">
+                        <label>Due Date</label>
+                        <input id="oracle-goal-due" type="date" class="login-input">
                     </div>
                 </div>
             </div>
-            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
-                <button class="btn btn-outline" onclick="closeGoalModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveGoalFromModal()"><i class="fa-solid fa-check"></i> Save Goal</button>
+            <div class="oracle-modal-footer">
+                <button class="btn btn-outline" onclick="closeOracleGoalModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveOracleGoalFromModal()"><i class="fa-solid fa-check"></i> Save Goal</button>
             </div>
         </div>
     </div>
 
     <!-- Check-in Modal -->
-    <div id="checkin-modal" class="hidden" style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;">
-        <div style="width:min(550px,95vw); background:white; border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.25); overflow:hidden;">
-            <div style="padding:18px 22px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-                <div style="font-weight:800; font-size:1.05rem;">Schedule Check-in</div>
-                <button class="btn btn-outline" onclick="closeCheckinModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div id="oracle-checkin-modal" class="oracle-modal">
+        <div class="oracle-modal-content">
+            <div class="oracle-modal-header">
+                <h3><i class="fa-solid fa-comments" style="margin-right:8px; color:var(--primary);"></i> Schedule Check-in</h3>
+                <button onclick="closeOracleCheckinModal()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div style="padding:18px 22px;">
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Date & Time *</label>
-                    <input id="checkin-date" type="datetime-local" class="login-input">
-                </div>
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Meeting Type</label>
-                    <select id="checkin-type" class="login-input">
+            <div class="oracle-modal-body">
+                <div class="oracle-form-group">
+                    <label>Meeting Type *</label>
+                    <select id="oracle-checkin-type" class="login-input">
                         <option value="ONE_ON_ONE">1:1 Meeting</option>
                         <option value="PROGRESS_REVIEW">Progress Review</option>
                         <option value="COACHING">Coaching Session</option>
                         <option value="CAREER_DISCUSSION">Career Discussion</option>
+                        <option value="GOAL_SETTING">Goal Setting</option>
+                        <option value="FEEDBACK">Feedback Session</option>
                     </select>
                 </div>
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Topics to Discuss</label>
-                    <textarea id="checkin-topics" class="login-input" rows="3" placeholder="Enter topics..."></textarea>
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Date & Time *</label>
+                        <input id="oracle-checkin-date" type="datetime-local" class="login-input">
+                    </div>
+                    <div class="oracle-form-group">
+                        <label>Duration (minutes)</label>
+                        <select id="oracle-checkin-duration" class="login-input">
+                            <option value="15">15 minutes</option>
+                            <option value="30" selected>30 minutes</option>
+                            <option value="45">45 minutes</option>
+                            <option value="60">1 hour</option>
+                            <option value="90">1.5 hours</option>
+                        </select>
+                    </div>
                 </div>
-                <div style="margin-bottom:15px;">
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                        <input type="checkbox" id="checkin-virtual" style="width:18px; height:18px;">
-                        <span style="font-size:0.9rem;">Virtual Meeting</span>
+                <div class="oracle-form-group">
+                    <label>Topics to Discuss</label>
+                    <textarea id="oracle-checkin-topics" class="login-input" rows="3" placeholder="Enter topics (one per line)..."></textarea>
+                </div>
+                <div class="oracle-form-group">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-size:0.9rem;">
+                        <input type="checkbox" id="oracle-checkin-virtual" style="width:18px; height:18px;">
+                        Virtual Meeting
                     </label>
                 </div>
-                <div id="checkin-link-row" class="hidden" style="margin-bottom:15px;">
-                    <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Meeting Link</label>
-                    <input id="checkin-link" class="login-input" placeholder="https://...">
+                <div class="oracle-form-group" id="oracle-checkin-link-group" style="display:none;">
+                    <label>Meeting Link</label>
+                    <input id="oracle-checkin-link" class="login-input" placeholder="https://meet.google.com/...">
                 </div>
             </div>
-            <div style="padding:16px 22px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px;">
-                <button class="btn btn-outline" onclick="closeCheckinModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveCheckin()"><i class="fa-solid fa-calendar-check"></i> Schedule</button>
+            <div class="oracle-modal-footer">
+                <button class="btn btn-outline" onclick="closeOracleCheckinModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveOracleCheckin()"><i class="fa-solid fa-calendar-check"></i> Schedule</button>
             </div>
         </div>
     </div>
+
+    <!-- Feedback Request Modal -->
+    <div id="oracle-feedback-modal" class="oracle-modal">
+        <div class="oracle-modal-content">
+            <div class="oracle-modal-header">
+                <h3><i class="fa-solid fa-star-half-stroke" style="margin-right:8px; color:var(--primary);"></i> Request 360° Feedback</h3>
+                <button onclick="closeOracleFeedbackModal()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="oracle-modal-body">
+                <div class="oracle-form-group">
+                    <label>Feedback For</label>
+                    <input id="oracle-feedback-employee" class="login-input" placeholder="Select employee..." readonly>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Participant Role *</label>
+                    <select id="oracle-feedback-role" class="login-input">
+                        <option value="PEER">Peer</option>
+                        <option value="DIRECT_REPORT">Direct Report</option>
+                        <option value="SKIP_LEVEL_MANAGER">Skip-Level Manager</option>
+                        <option value="CROSS_FUNCTIONAL">Cross-Functional Partner</option>
+                        <option value="EXTERNAL">External (Customer/Vendor)</option>
+                    </select>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Due Date</label>
+                    <input id="oracle-feedback-due" type="date" class="login-input">
+                </div>
+                <div class="oracle-form-group">
+                    <label>Questions / Areas to Cover</label>
+                    <textarea id="oracle-feedback-questions" class="login-input" rows="4" placeholder="What specific areas should the feedback cover?"></textarea>
+                </div>
+                <div class="oracle-form-group">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none; font-size:0.9rem;">
+                        <input type="checkbox" id="oracle-feedback-anonymous" style="width:18px; height:18px;" checked>
+                        Anonymous Feedback
+                    </label>
+                </div>
+            </div>
+            <div class="oracle-modal-footer">
+                <button class="btn btn-outline" onclick="closeOracleFeedbackModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="sendOracleFeedbackRequest()"><i class="fa-solid fa-paper-plane"></i> Send Request</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Development Plan Modal -->
+    <div id="oracle-devplan-modal" class="oracle-modal">
+        <div class="oracle-modal-content">
+            <div class="oracle-modal-header">
+                <h3><i class="fa-solid fa-graduation-cap" style="margin-right:8px; color:var(--primary);"></i> Create Development Plan</h3>
+                <button onclick="closeOracleDevPlanModal()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="oracle-modal-body">
+                <div class="oracle-form-group">
+                    <label>Plan Name *</label>
+                    <input id="oracle-devplan-name" class="login-input" placeholder="My Development Plan 2025">
+                </div>
+                <div class="oracle-form-group">
+                    <label>Career Aspiration</label>
+                    <textarea id="oracle-devplan-aspiration" class="login-input" rows="2" placeholder="Where do you see yourself in 2-3 years?"></textarea>
+                </div>
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Target Role</label>
+                        <input id="oracle-devplan-role" class="login-input" placeholder="e.g., Senior Manager">
+                    </div>
+                    <div class="oracle-form-group">
+                        <label>Target Timeline</label>
+                        <select id="oracle-devplan-timeline" class="login-input">
+                            <option value="6_MONTHS">6 Months</option>
+                            <option value="1_YEAR" selected>1 Year</option>
+                            <option value="2_YEARS">2 Years</option>
+                            <option value="3_YEARS">3 Years</option>
+                            <option value="5_YEARS">5 Years</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Key Strengths</label>
+                    <textarea id="oracle-devplan-strengths" class="login-input" rows="2" placeholder="What are your key strengths?"></textarea>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Development Areas</label>
+                    <textarea id="oracle-devplan-areas" class="login-input" rows="2" placeholder="What areas need development?"></textarea>
+                </div>
+            </div>
+            <div class="oracle-modal-footer">
+                <button class="btn btn-outline" onclick="closeOracleDevPlanModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveOracleDevPlan()"><i class="fa-solid fa-check"></i> Create Plan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Talent Placement Modal -->
+    <div id="oracle-talent-modal" class="oracle-modal">
+        <div class="oracle-modal-content" style="max-width:500px;">
+            <div class="oracle-modal-header">
+                <h3><i class="fa-solid fa-user-check" style="margin-right:8px; color:var(--primary);"></i> Place Employee in 9-Box</h3>
+                <button onclick="closeOracleTalentModal()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="oracle-modal-body">
+                <input type="hidden" id="oracle-talent-emp-id">
+                <div class="oracle-form-group">
+                    <label>Employee</label>
+                    <input id="oracle-talent-emp-name" class="login-input" readonly style="background:#f3f4f6;">
+                </div>
+                <div class="oracle-form-row">
+                    <div class="oracle-form-group">
+                        <label>Performance Rating *</label>
+                        <select id="oracle-talent-performance" class="login-input">
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM" selected>Medium</option>
+                            <option value="HIGH">High</option>
+                        </select>
+                    </div>
+                    <div class="oracle-form-group">
+                        <label>Potential Rating *</label>
+                        <select id="oracle-talent-potential" class="login-input">
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM" selected>Medium</option>
+                            <option value="HIGH">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Resulting Box Position</label>
+                    <div id="oracle-talent-box-preview" style="padding:16px; background:#f0fdf4; border-radius:12px; text-align:center; font-weight:700; font-size:1.1rem; color:var(--primary);">
+                        Box 5: Core Contributor
+                    </div>
+                </div>
+                <div class="oracle-form-group">
+                    <label>Comments</label>
+                    <textarea id="oracle-talent-comments" class="login-input" rows="2" placeholder="Optional notes about this placement..."></textarea>
+                </div>
+            </div>
+            <div class="oracle-modal-footer">
+                <button class="btn btn-outline" onclick="closeOracleTalentModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveOracleTalentPlacement()"><i class="fa-solid fa-check"></i> Save Placement</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== END ORACLE FUSION MODALS ==================== -->
 
     <!-- Offline Indicator -->
     <div id="offline-indicator" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#ef4444; color:white; padding:12px 24px; border-radius:12px; font-weight:600; z-index:99999; box-shadow:0 4px 20px rgba(0,0,0,0.3);">
@@ -433,6 +1084,32 @@
             deferredPrompt = e;
             console.log('PWA install available');
         });
+        
+        // Oracle Modal Helpers
+        document.getElementById('oracle-checkin-virtual').addEventListener('change', function() {
+            document.getElementById('oracle-checkin-link-group').style.display = this.checked ? 'block' : 'none';
+        });
+        
+        // 9-Box preview update
+        function updateTalentBoxPreview() {
+            const perf = document.getElementById('oracle-talent-performance').value;
+            const pot = document.getElementById('oracle-talent-potential').value;
+            
+            const perfMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
+            const potMap = { 'LOW': 0, 'MEDIUM': 1, 'HIGH': 2 };
+            
+            const box = (potMap[pot] * 3) + perfMap[perf] + 1;
+            const designations = {
+                1: 'Risk', 2: 'Average', 3: 'Emerging',
+                4: 'Inconsistent', 5: 'Core Contributor', 6: 'High Performer',
+                7: 'Enigma', 8: 'High Potential', 9: '⭐ Star'
+            };
+            
+            document.getElementById('oracle-talent-box-preview').textContent = `Box ${box}: ${designations[box]}`;
+        }
+        
+        document.getElementById('oracle-talent-performance')?.addEventListener('change', updateTalentBoxPreview);
+        document.getElementById('oracle-talent-potential')?.addEventListener('change', updateTalentBoxPreview);
     </script>
 </body>
 </html>
