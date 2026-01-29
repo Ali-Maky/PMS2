@@ -4771,8 +4771,8 @@
          * This function reads an Excel file and assigns goals to multiple employees at once.
          */
         /**
-         * PROCESS BULK SCORECARD IMPORT (Chunked Version)
-         * Now supports optional Rating column
+         * PROCESS BULK SCORECARD IMPORT (OPTIMIZED - Single Batch)
+         * Uses bulkUpsert endpoint for maximum speed
          */
         async function processBulkImport(inp) {
             const file = inp.files[0];
@@ -4839,19 +4839,19 @@
                         return;
                     }
 
-                    if (!confirm(`Importing objectives for ${empIds.length} employees. Proceed?`)) return;
+                    if (!confirm(`Importing objectives for ${empIds.length} employees (${json.length} total rows). Proceed?`)) return;
 
                     // Show progress modal
                     const progressHtml = `
                         <div id="import-progress-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; display:flex; align-items:center; justify-content:center;">
                             <div style="background:white; padding:40px; border-radius:20px; text-align:center; min-width:350px;">
-                                <div style="font-size:3rem; margin-bottom:20px;">📊</div>
-                                <h3 style="margin:0 0 10px;">Importing Data...</h3>
-                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Preparing...</div>
+                                <div style="font-size:3rem; margin-bottom:20px;">🚀</div>
+                                <h3 style="margin:0 0 10px;">Bulk Importing...</h3>
+                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Uploading ${empIds.length} employees...</div>
                                 <div style="background:#e5e7eb; border-radius:10px; height:20px; overflow:hidden;">
                                     <div id="import-progress-bar" style="background:linear-gradient(90deg, #0d9488, #14b8a6); height:100%; width:0%; transition:width 0.3s;"></div>
                                 </div>
-                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">0 / ${empIds.length}</div>
+                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">Processing...</div>
                             </div>
                         </div>
                     `;
@@ -4861,39 +4861,52 @@
                     const progressBar = document.getElementById('import-progress-bar');
                     const progressCount = document.getElementById('import-progress-count');
 
-                    // --- SEQUENTIAL PROCESSING (More reliable) ---
-                    let success = 0;
-                    let fail = 0;
-                    
-                    for (let i = 0; i < empIds.length; i++) {
-                        const eid = empIds[i];
+                    // --- BATCH PROCESSING (Maximum Speed) ---
+                    // Convert grouped data to payload array
+                    const payload = empIds.map(eid => ({
+                        id: eid,
+                        goals: grouped[eid]
+                    }));
+
+                    const BATCH_SIZE = 500; // Process 500 employees per batch
+                    const batches = [];
+                    for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+                        batches.push(payload.slice(i, i + BATCH_SIZE));
+                    }
+
+                    let processed = 0;
+                    let errors = 0;
+
+                    for (let b = 0; b < batches.length; b++) {
+                        const batch = batches[b];
                         
-                        // Update progress UI
-                        const progress = Math.round(((i + 1) / empIds.length) * 100);
-                        if (progressText) progressText.innerText = `Processing ${eid}...`;
-                        if (progressBar) progressBar.style.width = `${progress}%`;
-                        if (progressCount) progressCount.innerText = `${i + 1} / ${empIds.length}`;
+                        // Update progress
+                        if (progressText) progressText.innerText = `Uploading batch ${b + 1} of ${batches.length}...`;
+                        if (progressBar) progressBar.style.width = `${Math.round(((b + 1) / batches.length) * 100)}%`;
+                        if (progressCount) progressCount.innerText = `${processed} / ${empIds.length} employees`;
 
                         try {
-                            const payload = {
-                                [COL.id]: eid,
-                                goals: grouped[eid]
-                            };
+                            // Use bulkUpsert endpoint for batch processing
+                            const res = await fetch(`${API_URL}?action=bulkUpsert`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token')}`
+                                },
+                                body: JSON.stringify({ payload: batch })
+                            });
+
+                            const result = await res.json();
                             
-                            const { error } = await db.from('active_list').upsert(payload);
-                            
-                            if (error) {
-                                console.warn(`Warning for ${eid}:`, error);
+                            if (res.ok && result.success) {
+                                processed += batch.length;
+                            } else {
+                                console.warn('Batch error:', result);
+                                errors += batch.length;
                             }
-                            success++;
                         } catch (err) {
-                            console.warn(`Error for ${eid}:`, err.message);
-                            success++; // Assume success since backend might have worked
-                        }
-                        
-                        // Small delay every 10 records to prevent overwhelming
-                        if (i > 0 && i % 10 === 0) {
-                            await new Promise(r => setTimeout(r, 50));
+                            console.error('Batch failed:', err);
+                            errors += batch.length;
                         }
                     }
                     
@@ -4906,14 +4919,20 @@
                     clearDataCache();
                     
                     // Show success message
-                    alert(`✅ Import Completed!\n\n📊 Processed: ${empIds.length} employees\n⏱️ Time: ${elapsed} seconds\n\nThe page will now refresh.`);
+                    const message = errors > 0 
+                        ? `⚠️ Import Completed with Warnings!\n\n✅ Success: ${processed} employees\n❌ Errors: ${errors} employees\n⏱️ Time: ${elapsed} seconds\n\nThe page will now refresh.`
+                        : `✅ Import Completed!\n\n📊 Processed: ${empIds.length} employees\n📝 Total Goals: ${json.length}\n⏱️ Time: ${elapsed} seconds\n\nThe page will now refresh.`;
+                    
+                    alert(message);
                     
                     // Force refresh to show new data
                     location.reload();
 
                 } catch (err) {
                     console.error("Import Error:", err);
-                    alert("Import may have partially completed.\n\nPlease check the data and try again if needed.\n\nError: " + err.message);
+                    const modal = document.getElementById('import-progress-modal');
+                    if (modal) modal.remove();
+                    alert("Import failed.\n\nError: " + err.message);
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -5090,7 +5109,8 @@
         }
 
         /**
-         * PROCESS BULK SCORED IMPORT - Import objectives WITH ratings and scores
+         * PROCESS BULK SCORED IMPORT - Import objectives WITH ratings and scores (OPTIMIZED)
+         * Uses bulkUpsert endpoint for maximum speed
          */
         async function processBulkScoredImport(inp) {
             const file = inp.files[0];
@@ -5099,6 +5119,7 @@
             const reader = new FileReader();
             reader.onload = async function (e) {
                 try {
+                    const startTime = Date.now();
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
@@ -5163,43 +5184,20 @@
                         return;
                     }
 
-                    // Validate employee IDs exist in system
-                    const validEmpIds = [];
-                    const invalidEmpIds = [];
-                    
-                    empIds.forEach(eid => {
-                        const exists = allCompanyData.some(u => u[COL.id] === eid);
-                        if (exists) {
-                            validEmpIds.push(eid);
-                        } else {
-                            invalidEmpIds.push(eid);
-                        }
-                    });
-
-                    if (validEmpIds.length === 0) {
-                        alert(`Import Error: None of the ${empIds.length} Employee IDs were found in the system.\n\nFirst few IDs tried: ${empIds.slice(0, 5).join(', ')}`);
-                        return;
-                    }
-
-                    // Count how many have ratings
+                    // Count stats
                     let ratedCount = 0;
                     let totalGoals = 0;
-                    validEmpIds.forEach(eid => {
+                    empIds.forEach(eid => {
                         grouped[eid].forEach(g => {
                             totalGoals++;
                             if (g.rating > 0) ratedCount++;
                         });
                     });
 
-                    let confirmMsg = `Importing ${totalGoals} objectives for ${validEmpIds.length} employees.\n\n` +
+                    let confirmMsg = `Importing ${totalGoals} objectives for ${empIds.length} employees.\n\n` +
                         `📊 Ratings found: ${ratedCount} / ${totalGoals}\n` +
-                        `📋 Status updates: ${Object.keys(statusMap).filter(id => validEmpIds.includes(id)).length} employees\n`;
-                    
-                    if (invalidEmpIds.length > 0) {
-                        confirmMsg += `\n⚠️ ${invalidEmpIds.length} Employee IDs not found (will be skipped):\n${invalidEmpIds.slice(0, 5).join(', ')}${invalidEmpIds.length > 5 ? '...' : ''}\n`;
-                    }
-                    
-                    confirmMsg += `\nProceed with import?`;
+                        `📋 Status updates: ${Object.keys(statusMap).length} employees\n` +
+                        `\nProceed with import?`;
 
                     if (!confirm(confirmMsg)) return;
 
@@ -5207,13 +5205,13 @@
                     const progressHtml = `
                         <div id="import-progress-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; display:flex; align-items:center; justify-content:center;">
                             <div style="background:white; padding:40px; border-radius:20px; text-align:center; min-width:350px;">
-                                <div style="font-size:3rem; margin-bottom:20px;">📊</div>
-                                <h3 style="margin:0 0 10px;">Importing Scored Data...</h3>
-                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Preparing...</div>
+                                <div style="font-size:3rem; margin-bottom:20px;">🚀</div>
+                                <h3 style="margin:0 0 10px;">Bulk Importing Scored Data...</h3>
+                                <div id="import-progress-text" style="color:#6b7280; margin-bottom:20px;">Uploading ${empIds.length} employees...</div>
                                 <div style="background:#e5e7eb; border-radius:10px; height:20px; overflow:hidden;">
                                     <div id="import-progress-bar" style="background:linear-gradient(90deg, #10b981, #34d399); height:100%; width:0%; transition:width 0.3s;"></div>
                                 </div>
-                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">0 / ${validEmpIds.length}</div>
+                                <div id="import-progress-count" style="margin-top:10px; font-size:0.9rem; color:#9ca3af;">Processing...</div>
                             </div>
                         </div>
                     `;
@@ -5222,47 +5220,60 @@
                     const progressText = document.getElementById('import-progress-text');
                     const progressBar = document.getElementById('import-progress-bar');
                     const progressCount = document.getElementById('import-progress-count');
-                    const startTime = Date.now();
 
-                    // --- SEQUENTIAL PROCESSING (More reliable) ---
-                    let success = 0;
-                    let fail = 0;
-                    const failedIds = [];
-                    
-                    for (let i = 0; i < validEmpIds.length; i++) {
-                        const eid = validEmpIds[i];
+                    // --- BATCH PROCESSING (Maximum Speed) ---
+                    // Convert grouped data to payload array
+                    const payload = empIds.map(eid => {
+                        const record = {
+                            id: eid,
+                            goals: grouped[eid]
+                        };
+                        // Add status if available
+                        if (statusMap[eid]) {
+                            record.status = statusMap[eid];
+                        }
+                        return record;
+                    });
+
+                    const BATCH_SIZE = 500; // Process 500 employees per batch
+                    const batches = [];
+                    for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+                        batches.push(payload.slice(i, i + BATCH_SIZE));
+                    }
+
+                    let processed = 0;
+                    let errors = 0;
+
+                    for (let b = 0; b < batches.length; b++) {
+                        const batch = batches[b];
                         
-                        // Update progress UI
-                        const progress = Math.round(((i + 1) / validEmpIds.length) * 100);
-                        if (progressText) progressText.innerText = `Processing ${eid}...`;
-                        if (progressBar) progressBar.style.width = `${progress}%`;
-                        if (progressCount) progressCount.innerText = `${i + 1} / ${validEmpIds.length}`;
+                        // Update progress
+                        if (progressText) progressText.innerText = `Uploading batch ${b + 1} of ${batches.length}...`;
+                        if (progressBar) progressBar.style.width = `${Math.round(((b + 1) / batches.length) * 100)}%`;
+                        if (progressCount) progressCount.innerText = `${processed} / ${empIds.length} employees`;
 
                         try {
-                            const payload = {
-                                [COL.id]: eid,
-                                goals: grouped[eid]
-                            };
+                            // Use bulkUpsert endpoint for batch processing
+                            const res = await fetch(`${API_URL}?action=bulkUpsert`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('zpms_token') || sessionStorage.getItem('zpms_token')}`
+                                },
+                                body: JSON.stringify({ payload: batch })
+                            });
+
+                            const result = await res.json();
                             
-                            // Add status if available
-                            if (statusMap[eid]) {
-                                payload[COL.stat] = statusMap[eid];
+                            if (res.ok && result.success) {
+                                processed += batch.length;
+                            } else {
+                                console.warn('Batch error:', result);
+                                errors += batch.length;
                             }
-                            
-                            const { error } = await db.from('active_list').upsert(payload);
-                            
-                            if (error) {
-                                console.warn(`Warning for ${eid}:`, error);
-                            }
-                            success++;
                         } catch (err) {
-                            console.warn(`Error for ${eid}:`, err.message);
-                            success++; // Assume success since backend might have worked
-                        }
-                        
-                        // Small delay every 10 records
-                        if (i > 0 && i % 10 === 0) {
-                            await new Promise(r => setTimeout(r, 50));
+                            console.error('Batch failed:', err);
+                            errors += batch.length;
                         }
                     }
                     
@@ -5274,10 +5285,14 @@
                     
                     clearDataCache();
                     
-                    let resultMsg = `✅ Import Completed!\n\n📊 Processed: ${validEmpIds.length} employees\n📈 Ratings: ${ratedCount} imported\n⏱️ Time: ${elapsed} seconds`;
+                    // Show success message
+                    let resultMsg = `✅ Import Completed!\n\n` +
+                        `📊 Processed: ${empIds.length} employees\n` +
+                        `📈 Ratings: ${ratedCount} imported\n` +
+                        `⏱️ Time: ${elapsed} seconds`;
                     
-                    if (invalidEmpIds.length > 0) {
-                        resultMsg += `\n\n⚠️ Skipped ${invalidEmpIds.length} unknown IDs`;
+                    if (errors > 0) {
+                        resultMsg += `\n\n⚠️ ${errors} employees had errors`;
                     }
                     
                     resultMsg += `\n\nThe page will now refresh.`;
@@ -5289,6 +5304,8 @@
 
                 } catch (err) {
                     console.error("Import Error:", err);
+                    const modal = document.getElementById('import-progress-modal');
+                    if (modal) modal.remove();
                     alert("Unexpected error during import: " + err.message);
                 }
             };
